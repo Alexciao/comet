@@ -65,3 +65,19 @@ target and the latency target is met.
 | Rebuild of the search data after a swap | 0.3–0.4 ms | "search data rebuilt in the background" log line (low-priority thread; the index is read in place from the pack) |
 | Installed-font check (DirectWrite), whole dataset | 21–40 ms for 1,923 emoji | "font check" log line / `EmojiFontCheckTests`; runs in the background after each dataset load |
 | Idle cost | none | one one-shot `DispatcherQueueTimer`, armed for the next due check (days away); no polling, no thread |
+
+## Soak (10,000 triggers, Release AOT build, Edge textarea, 17.4 min)
+
+Mix per 10 triggers: 1 auto-replacement, 2 emoji inserted with Enter, 7 popups opened, browsed and cancelled.
+
+| After | Private | Working set | Handles | GDI | USER |
+|---:|---:|---:|---:|---:|---:|
+| start (warm) | 216.2 MB | 137.1 MB | 906 | 9 | 34 |
+| 1,000 | 231.3 MB | 146.5 MB | 1,121 | 9 | 38 |
+| 5,000 | 233.8 MB | 150.0 MB | 1,082 | 9 | 36 |
+| 10,000 | 234.8 MB | 151.0 MB | 1,084 | 9 | 37 |
+
+Flat after the first 1,000 (caches and pools filling): +3.5 MB private over the next 9,000 triggers and levelling
+off, handles −37, GDI/USER objects unchanged; no errors logged. Latency over the run: keystroke → popup p50 6.1 ms,
+p95 9.6 ms, p99 10.8 ms (n = 4,096 most recent); hook cost per keystroke p50 67 µs idle / 161 µs with the popup
+open.

@@ -71,6 +71,23 @@ public sealed class Screenshots : IDisposable
         Keyboard.Press(Keyboard.VK_ESCAPE);
     }
 
+    /// <summary>A snippets file broken by a hand edit: Comet keeps a copy, starts with what it can, and says so.</summary>
+    [Fact]
+    public void Corrupt_file_notice()
+    {
+        Start("Light", withEntries: false);
+        _comet.Stop();
+        File.WriteAllText(Path.Combine(_comet.DataDirectory, "snippets.json"), "{ \"schemaVersion\": 1, \"snippets\": [ { \"name\": \"addr\", ");
+        _comet.Start();
+        _comet.OpenSettings();
+        var window = Automation.WaitForWindow(w => w.Name == "Comet Settings", TimeSpan.FromSeconds(10), "Settings");
+        Automation.Foreground(window);
+        Thread.Sleep(800);
+        Save(Native.FrameBounds(window), "settings-corrupt-file-light");
+        Assert.Single(Directory.GetFiles(_comet.DataDirectory, "snippets.corrupt-*.json"));
+        Assert.NotNull(window.FindFirstDescendant(c => c.ByControlType(ControlType.StatusBar).Or(c.ByClassName("InfoBar"))));
+    }
+
     /// <summary>The lists ship empty: this is what the Snippets and Auto-replace pages look like at first.</summary>
     [Theory]
     [InlineData("Light")]

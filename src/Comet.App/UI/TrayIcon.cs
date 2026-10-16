@@ -61,8 +61,13 @@ internal sealed unsafe class TrayIcon : IDisposable
     /// <summary>Re-adds the icon after an Explorer restart.</summary>
     public void Recreate()
     {
+        // Delete first: harmless when Explorer really restarted (the icon is gone), and needed when the broadcast
+        // came while the icon still exists, where NIM_ADD alone would fail.
+        var data = Data();
+        Shell32.Shell_NotifyIconW(Shell32.NIM_DELETE, ref data);
         _added = false;
         Show();
+        Platform.Log.Info($"taskbar recreated: tray icon {(_added ? "re-added" : "could not be added")}");
     }
 
     /// <summary>Taskbar theme or DPI changed: reload the glyph.</summary>

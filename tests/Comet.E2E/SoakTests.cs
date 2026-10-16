@@ -21,13 +21,13 @@ public sealed partial class SoakTests : IDisposable
         _comet.Dispose();
     }
 
-    private sealed record Sample(int Triggers, double PrivateMb, double WorkingSetMb, int Handles, uint Gdi, uint User);
+    private sealed record Sample(int Triggers, double PrivateMb, double WorkingSetMb, int Handles, int Gdi, int User);
 
     private Sample Measure(int triggers)
     {
         using var p = Process.GetProcessById(_comet.ProcessId);
         return new Sample(triggers, p.PrivateMemorySize64 / 1048576.0, p.WorkingSet64 / 1048576.0, p.HandleCount,
-            GetGuiResources(p.Handle, 0), GetGuiResources(p.Handle, 1));
+            (int)GetGuiResources(p.Handle, 0), (int)GetGuiResources(p.Handle, 1)); // signed: counts can go down
     }
 
     [Fact]
