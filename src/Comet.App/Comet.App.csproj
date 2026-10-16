@@ -20,6 +20,8 @@
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <!-- Native AOT for release builds; Debug uses the JIT so Rider can debug normally. -->
     <PublishAot>true</PublishAot>
+    <!-- XML docs are for the build (IDE0005 needs them), not for users. -->
+    <PublishDocumentationFiles>false</PublishDocumentationFiles>
     <IsAotCompatible>true</IsAotCompatible>
     <OptimizationPreference>Speed</OptimizationPreference>
     <InvariantGlobalization>false</InvariantGlobalization>
