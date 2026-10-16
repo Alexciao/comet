@@ -19,7 +19,7 @@ internal enum InsertionMethod : byte
 }
 
 /// <summary>One insertion: erase what was typed, insert text (or an expanded snippet), then re-send the boundary key.</summary>
-/// <param name="IsTerminal">The target is a console or terminal (command-line editing: no select-and-replace).</param>
+/// <param name="PacedEditor">An editor that needs paced input (see <see cref="TextInjector"/>.TypePaced), or 0.</param>
 internal sealed record InsertionJob(
     int DeleteCount,
     string? Text,
@@ -27,7 +27,7 @@ internal sealed record InsertionJob(
     Boundary? After,
     InsertionMethod Method,
     long KeyTimestamp,
-    bool IsTerminal = false)
+    nint PacedEditor = 0)
 {
     /// <summary>Keys the user typed while this job was in flight, replayed after it (set by the engine).</summary>
     public KBDLLHOOKSTRUCT[]? Replay { get; init; }
@@ -124,31 +124,103 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
         }
 
         // Multi-line text goes through the clipboard: typing Enter would send a chat message mid-snippet.
-        var method = job.Method == InsertionMethod.Clipboard || text.Contains('\n', StringComparison.Ordinal) ? InsertionMethod.Clipboard : InsertionMethod.Unicode;
+        // Paced editors (Notepad) also corrupt surrogate pairs typed as key events, even one step at a time
+        // (measured after a ZWJ): emoji are pasted there.
+        var surrogates = text.AsSpan().IndexOfAnyInRange('\uD800', '\uDFFF') >= 0;
         uint accepted;
-        if (method == InsertionMethod.Unicode)
-        {
-            _batch.Clear();
-            // Emoji (surrogate pairs) replace a selection instead of following backspaces; see InputBatch.SelectBack.
-            // Terminals edit a command line, where typing doesn't replace a selection: they always get backspaces.
-            if (!job.IsTerminal && HasSurrogates(text))
-                _batch.SelectBack(job.DeleteCount, (User32.GetAsyncKeyState(VirtualKey.VK_SHIFT) & 0x8000) != 0);
-            else
-                _batch.Backspaces(job.DeleteCount);
-            _batch.Text(text).Lefts(caretBack);
-            if (job.After is { } after)
-                _batch.Boundary(after);
-            accepted = _batch.Send();
-        }
+        if (job.Method == InsertionMethod.Clipboard || text.Contains('\n', StringComparison.Ordinal) || (job.PacedEditor != 0 && surrogates))
+            accepted = PasteViaClipboard(job, text, caretBack);
+        else if (job.PacedEditor != 0)
+            accepted = TypePaced(job, text, caretBack);
         else
-        {
-            accepted = PasteViaClipboard(job.DeleteCount, text, caretBack, job.After);
-        }
-
+            accepted = TypeBatch(job, text, caretBack);
         return accepted + Replay(job);
     }
 
-    private static bool HasSurrogates(string text) => text.AsSpan().IndexOfAnyInRange('\uD800', '\uDFFF') >= 0;
+    /// <summary>The normal path: one atomic SendInput batch.</summary>
+    private uint TypeBatch(InsertionJob job, string text, int caretBack)
+    {
+        _batch.Clear().ReleaseShift().Backspaces(job.DeleteCount).Text(text).Lefts(caretBack);
+        if (job.After is { } after)
+            _batch.Boundary(after);
+        return _batch.RestoreShift().Send();
+    }
+
+    /// <summary>
+    /// For editors that fall behind their input queue and then read the *current* keyboard state when they get
+    /// to a queued key (Windows 11 Notepad): measured, a batch loses Ctrl from Ctrl+V and the high surrogate of
+    /// emoji in about half the insertions. Each step waits until the editor's caret index (EM_GETSEL, answered
+    /// between input messages) shows the previous one was applied.
+    /// </summary>
+    private uint TypePaced(InsertionJob job, string text, int caretBack)
+    {
+        var hwnd = job.PacedEditor;
+        var accepted = DeletePaced(job, out var caret);
+        Span<char> unit = stackalloc char[2];
+        for (var i = 0; i < text.Length;)
+        {
+            var length = char.IsHighSurrogate(text[i]) && i + 1 < text.Length ? 2 : 1;
+            text.AsSpan(i, length).CopyTo(unit);
+            accepted += _batch.Clear().Text(unit[..length]).Send();
+            caret += length;
+            WaitForCaret(hwnd, caret);
+            i += length;
+        }
+
+        _batch.Clear().Lefts(caretBack);
+        if (job.After is { } after)
+            _batch.Boundary(after);
+        return accepted + _batch.RestoreShift().Send();
+    }
+
+    /// <summary>
+    /// Deletes the typed token in a paced editor. The editor may still be working through keys the user typed,
+    /// so a caret index read now could be stale. Selecting the token's last character first (Shift held until
+    /// the selection shows) proves everything typed so far was applied and gives an exact index; the first
+    /// backspace then removes the selection.
+    /// </summary>
+    private uint DeletePaced(InsertionJob job, out int caret)
+    {
+        var hwnd = job.PacedEditor;
+        var accepted = _batch.Clear().ReleaseShift().Send();
+        caret = Selection(hwnd)?.End ?? 0;
+        if (job.DeleteCount == 0)
+            return accepted;
+
+        accepted += _batch.Clear().ShiftLeftHeld().Send();
+        var deadline = Environment.TickCount64 + 500;
+        (int Start, int End)? selection;
+        while ((selection = Selection(hwnd)) is { } sel && ((sel.End - sel.Start) & 0xFFFF) != 1 && Environment.TickCount64 < deadline)
+            Thread.Yield();
+
+        accepted += _batch.Clear().ReleaseLeftShift().Backspaces(job.DeleteCount).Send();
+        if (selection is { } found && ((found.End - found.Start) & 0xFFFF) == 1)
+        {
+            caret = found.End - job.DeleteCount;
+            WaitForCaret(hwnd, caret);
+        }
+        else
+        {
+            Log.Warn("paced editor did not report the selection; continuing without pacing the deletion");
+            caret = Selection(hwnd)?.End ?? 0;
+        }
+
+        return accepted;
+    }
+
+    /// <summary>The selection (character indexes, 16-bit) of an Edit/RichEdit control, or null when it doesn't answer.</summary>
+    private static (int Start, int End)? Selection(nint hwnd) =>
+        User32.SendMessageTimeoutW(hwnd, User32.EM_GETSEL, 0, 0, User32.SMTO_ABORTIFHUNG, 100, out var result) != 0
+            ? ((int)(result & 0xFFFF), (int)((result >> 16) & 0xFFFF))
+            : null;
+
+    private static void WaitForCaret(nint hwnd, int expected)
+    {
+        // Each EM_GETSEL is answered between the editor's input messages, so this loop advances with the editor.
+        var deadline = Environment.TickCount64 + 500;
+        while (Selection(hwnd) is { } now && now.End != (expected & 0xFFFF) && Environment.TickCount64 < deadline)
+            Thread.Yield();
+    }
 
     private uint Replay(InsertionJob job)
     {
@@ -162,7 +234,7 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
 
     // ---------------- clipboard fallback ----------------
 
-    private uint PasteViaClipboard(int deleteCount, string text, int caretBack, Boundary? after)
+    private uint PasteViaClipboard(InsertionJob job, string text, int caretBack)
     {
         var saved = SaveClipboard();
         if (saved is null || !OpenClipboardRetry())
@@ -183,16 +255,23 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
             User32.CloseClipboard();
         }
 
-        _batch.Clear().Backspaces(deleteCount).Paste().Lefts(caretBack);
-        if (after is { } b)
-            _batch.Boundary(b);
-        var accepted = _batch.Send();
+        var accepted = job.PacedEditor != 0
+            ? DeletePaced(job, out _) + _batch.Clear().PressCtrlV().Send()
+            : _batch.Clear().ReleaseShift().Backspaces(job.DeleteCount).PressCtrlV().Send();
 
+        // Ctrl stays down until the app has read the clipboard: an app that handles the V key late must still see it.
         var sw = Stopwatch.StartNew();
         PumpUntil(() => _rendered, TimeSpan.FromMilliseconds(1000));
         if (!_rendered)
             Log.Warn($"clipboard paste was not picked up within {sw.ElapsedMilliseconds} ms");
         _pendingRender = null;
+
+        // Caret moves and the boundary key only now: apps may paste asynchronously.
+        _batch.Clear().ReleaseCtrl().Lefts(caretBack);
+        if (job.After is { } b)
+            _batch.Boundary(b);
+        accepted += _batch.RestoreShift().Send();
+
         RestoreClipboard(saved);
         return accepted;
     }

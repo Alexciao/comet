@@ -7,10 +7,15 @@ namespace Comet.Platform.Input;
 /// <summary>
 /// Builds the <c>INPUT</c> array for one insertion so it reaches the app as a single <c>SendInput</c> batch:
 /// backspaces for the typed token, the text, caret moves for <c>{cursor}</c>, then the boundary key.
+/// Virtual keys carry their scan codes (some apps read those rather than the virtual key).
 /// </summary>
 internal sealed class InputBatch
 {
+    private const uint MAPVK_VK_TO_VSC = 0;
+
     private readonly List<INPUT> _inputs = new(64);
+    private bool _leftShiftReleased;
+    private bool _rightShiftReleased;
 
     public int Count => _inputs.Count;
 
@@ -19,8 +24,51 @@ internal sealed class InputBatch
     public InputBatch Key(ushort vk, nuint signature = InputSignature.Comet, bool extended = false)
     {
         var flags = extended ? User32.KEYEVENTF_EXTENDEDKEY : 0;
-        Add(vk, 0, flags, signature);
-        Add(vk, 0, flags | User32.KEYEVENTF_KEYUP, signature);
+        var scan = (ushort)User32.MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC, 0);
+        Add(vk, scan, flags, signature);
+        Add(vk, scan, flags | User32.KEYEVENTF_KEYUP, signature);
+        return this;
+    }
+
+    /// <summary>
+    /// The user is usually still holding Shift from typing the closing ":" (Shift+period on many layouts) when an
+    /// insertion starts, and their key-up is held until it finishes. Shift would turn caret moves into
+    /// selections and Ctrl+V into Ctrl+Shift+V, so it is released for the batch and pressed again at the end.
+    /// </summary>
+    public InputBatch ReleaseShift()
+    {
+        _leftShiftReleased = (User32.GetAsyncKeyState(VirtualKey.VK_LSHIFT) & 0x8000) != 0;
+        _rightShiftReleased = (User32.GetAsyncKeyState(VirtualKey.VK_RSHIFT) & 0x8000) != 0;
+        if (_leftShiftReleased)
+            Add(VirtualKey.VK_LSHIFT, 0x2A, User32.KEYEVENTF_KEYUP, InputSignature.Comet);
+        if (_rightShiftReleased)
+            Add(VirtualKey.VK_RSHIFT, 0x36, User32.KEYEVENTF_KEYUP, InputSignature.Comet);
+        return this;
+    }
+
+    /// <summary>Puts back a Shift released by <see cref="ReleaseShift"/> (the user's own key-up arrives later).</summary>
+    public InputBatch RestoreShift()
+    {
+        if (_leftShiftReleased)
+            Add(VirtualKey.VK_LSHIFT, 0x2A, 0, InputSignature.Comet);
+        if (_rightShiftReleased)
+            Add(VirtualKey.VK_RSHIFT, 0x36, 0, InputSignature.Comet);
+        _leftShiftReleased = _rightShiftReleased = false;
+        return this;
+    }
+
+    /// <summary>Left Shift down, Left: selects one character back. Shift stays down until <see cref="ReleaseLeftShift"/>.</summary>
+    public InputBatch ShiftLeftHeld()
+    {
+        Add(VirtualKey.VK_LSHIFT, 0x2A, 0, InputSignature.Comet);
+        Add(VirtualKey.VK_LEFT, 0x4B, User32.KEYEVENTF_EXTENDEDKEY, InputSignature.Comet);
+        Add(VirtualKey.VK_LEFT, 0x4B, User32.KEYEVENTF_EXTENDEDKEY | User32.KEYEVENTF_KEYUP, InputSignature.Comet);
+        return this;
+    }
+
+    public InputBatch ReleaseLeftShift()
+    {
+        Add(VirtualKey.VK_LSHIFT, 0x2A, User32.KEYEVENTF_KEYUP, InputSignature.Comet);
         return this;
     }
 
@@ -28,29 +76,6 @@ internal sealed class InputBatch
     {
         for (var i = 0; i < count; i++)
             Key(VirtualKey.VK_BACK);
-        return this;
-    }
-
-    /// <summary>
-    /// Selects the last <paramref name="count"/> characters (Shift+Left) so the following text replaces them.
-    /// Used instead of backspaces before emoji: some apps (Windows 11 Notepad) lose the high surrogate of a
-    /// VK_PACKET pair that arrives while they are still applying preceding deletions; a selection is not an
-    /// edit, so the pair arrives intact. If the user is physically holding Shift, it is left alone.
-    /// </summary>
-    public InputBatch SelectBack(int count, bool shiftAlreadyDown)
-    {
-        if (count == 0)
-            return this;
-        if (!shiftAlreadyDown)
-            Add(VirtualKey.VK_LSHIFT, 0x2A, 0, InputSignature.Comet);
-        for (var i = 0; i < count; i++)
-        {
-            Add(VirtualKey.VK_LEFT, 0x4B, User32.KEYEVENTF_EXTENDEDKEY, InputSignature.Comet);
-            Add(VirtualKey.VK_LEFT, 0x4B, User32.KEYEVENTF_EXTENDEDKEY | User32.KEYEVENTF_KEYUP, InputSignature.Comet);
-        }
-
-        if (!shiftAlreadyDown)
-            Add(VirtualKey.VK_LSHIFT, 0x2A, User32.KEYEVENTF_KEYUP, InputSignature.Comet);
         return this;
     }
 
@@ -63,7 +88,7 @@ internal sealed class InputBatch
 
     /// <summary>
     /// Types text as UTF-16 units with <c>KEYEVENTF_UNICODE</c>. Surrogate pairs go as two consecutive units
-    /// (Windows reassembles them into one WM_CHAR pair), so skin tones, flags and ZWJ families arrive intact.
+    /// (Windows reassembles them into one WM_CHAR pair), so skin tones and ZWJ families arrive intact.
     /// Newlines and tabs are sent as real Enter/Tab keys, which every app understands.
     /// </summary>
     public InputBatch Text(ReadOnlySpan<char> text)
@@ -94,24 +119,30 @@ internal sealed class InputBatch
         return this;
     }
 
-    public InputBatch Boundary(Boundary boundary)
+    public InputBatch Boundary(Boundary boundary) => boundary.Kind switch
     {
-        return boundary.Kind switch
-        {
-            BoundaryKind.Enter => Key(VirtualKey.VK_RETURN),
-            BoundaryKind.Tab => Key(VirtualKey.VK_TAB),
-            _ => Text([boundary.Char]),
-        };
-    }
+        BoundaryKind.Enter => Key(VirtualKey.VK_RETURN),
+        BoundaryKind.Tab => Key(VirtualKey.VK_TAB),
+        _ => Text([boundary.Char]),
+    };
 
-    public InputBatch Paste()
+    /// <summary>Ctrl down, V down, V up. Ctrl stays down until <see cref="ReleaseCtrl"/>.</summary>
+    public InputBatch PressCtrlV()
     {
-        Add(VirtualKey.VK_CONTROL, 0, 0, InputSignature.Comet);
-        Add(VirtualKey.VK_V, 0, 0, InputSignature.Comet);
-        Add(VirtualKey.VK_V, 0, User32.KEYEVENTF_KEYUP, InputSignature.Comet);
-        Add(VirtualKey.VK_CONTROL, 0, User32.KEYEVENTF_KEYUP, InputSignature.Comet);
+        var vScan = (ushort)User32.MapVirtualKeyExW(VirtualKey.VK_V, MAPVK_VK_TO_VSC, 0);
+        Add(VirtualKey.VK_LCONTROL, LeftCtrlScan, 0, InputSignature.Comet);
+        Add(VirtualKey.VK_V, vScan, 0, InputSignature.Comet);
+        Add(VirtualKey.VK_V, vScan, User32.KEYEVENTF_KEYUP, InputSignature.Comet);
         return this;
     }
+
+    public InputBatch ReleaseCtrl()
+    {
+        Add(VirtualKey.VK_LCONTROL, LeftCtrlScan, User32.KEYEVENTF_KEYUP, InputSignature.Comet);
+        return this;
+    }
+
+    private const ushort LeftCtrlScan = 0x1D;
 
     /// <summary>Re-sends a key the user typed while an insertion was in flight.</summary>
     public InputBatch Replay(in KBDLLHOOKSTRUCT k, bool keyUp)

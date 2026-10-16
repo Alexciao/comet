@@ -11,21 +11,10 @@ public enum Tristate : byte
 
 /// <summary>What has keyboard focus right now. Immutable; replaced on every focus change.</summary>
 /// <param name="Generation">Increments on every focus change, so late async answers for an old focus are ignored.</param>
-/// <param name="IsTerminal">A console or terminal: text is edited as a command line (no select-and-replace).</param>
-internal sealed record FocusContext(int Generation, nint Foreground, nint Focus, uint ThreadId, uint ProcessId, string ProcessName, bool Elevated, Tristate Password, bool IsTerminal = false)
+/// <param name="PacedEditor">The focused control when it needs paced input (Windows 11 Notepad's editor), else 0.</param>
+internal sealed record FocusContext(int Generation, nint Foreground, nint Focus, uint ThreadId, uint ProcessId, string ProcessName, bool Elevated, Tristate Password, nint PacedEditor = 0)
 {
     public static FocusContext None { get; } = new(0, 0, 0, 0, 0, "", false, Tristate.Unknown);
-
-    private static readonly HashSet<string> s_terminalProcesses = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "windowsterminal.exe", "openconsole.exe", "conhost.exe", "cmd.exe", "powershell.exe", "pwsh.exe",
-        "wezterm-gui.exe", "alacritty.exe", "mintty.exe", "wt.exe",
-    };
-
-    private static readonly HashSet<string> s_terminalClasses = new(StringComparer.Ordinal)
-    {
-        "ConsoleWindowClass", "CASCADIA_HOSTING_WINDOW_CLASS", "PseudoConsoleWindow",
-    };
 
     /// <summary>Comet's own windows (Settings) — never act there.</summary>
     public bool IsSelf => ProcessId == Kernel32.GetCurrentProcessId();
@@ -54,8 +43,8 @@ internal sealed record FocusContext(int Generation, nint Foreground, nint Focus,
         var name = ProcessInfo.Name(pid);
         var elevated = ProcessInfo.IsMoreElevatedThanUs(pid);
         var password = Win32Password(focus);
-        var terminal = s_terminalProcesses.Contains(name) || s_terminalClasses.Contains(WindowClass(foreground));
-        return new FocusContext(generation, foreground, focus, threadId, pid, name, elevated, password, terminal);
+        var paced = WindowClass(focus) == "RichEditD2DPT" ? focus : 0;
+        return new FocusContext(generation, foreground, focus, threadId, pid, name, elevated, password, paced);
     }
 
     /// <summary>Classic Edit controls expose ES_PASSWORD; for those we know the answer without UI Automation.</summary>

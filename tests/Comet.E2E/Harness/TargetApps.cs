@@ -52,7 +52,12 @@ internal static class Automation
     }
 }
 
-/// <summary>Windows 11 Notepad editing a temp file (so the test never touches the user's own tabs).</summary>
+/// <summary>
+/// Windows 11 Notepad editing a temp file. Notepad restores the user's previous session, so the test file opens
+/// as a tab next to the user's own (possibly unsaved) tabs: every keystroke is guarded to land only while the
+/// test tab is the active one, and the test tab is closed only when it is saved and clean. Nothing is ever
+/// discarded and Notepad is never killed.
+/// </summary>
 internal sealed class NotepadTarget : ITextTarget
 {
     private readonly string _file;
@@ -74,28 +79,52 @@ internal sealed class NotepadTarget : ITextTarget
 
     public System.Drawing.Rectangle Bounds => _document.BoundingRectangle;
 
+    private string Stem => Path.GetFileNameWithoutExtension(_file);
+
+    /// <summary>The window title shows the active tab: ours?</summary>
+    private bool OurTabActive() => _window.Name.Contains(Stem, StringComparison.OrdinalIgnoreCase);
+
     public void Focus()
     {
         Automation.Foreground(_window);
+        if (!OurTabActive())
+            throw new InvalidOperationException("The test tab is not the active Notepad tab.");
+        Keyboard.TargetGuard = OurTabActive;
         _document.Focus();
         Keyboard.SelectAllAndDelete();
     }
 
     public string ReadText() => _document.Patterns.Text.Pattern.DocumentRange.GetText(-1).Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
 
+    /// <summary>
+    /// Empties and saves the test file, then closes its tab — only if that tab is active and clean, so closing
+    /// can never prompt or touch another tab. On any doubt the tab is left open (harmless) rather than risked.
+    /// </summary>
     public void Dispose()
     {
         try
         {
-            // Leave the tab clean and saved so closing it doesn't prompt, then close only this tab.
             Automation.Foreground(_window);
-            Keyboard.SelectAllAndDelete();
-            Keyboard.Press(0x53, ctrl: true); // Ctrl+S
-            Keyboard.Press(0x57, ctrl: true); // Ctrl+W
+            if (OurTabActive())
+            {
+                _document.Focus();
+                Keyboard.SelectAllAndDelete();
+                Keyboard.Press(0x53, ctrl: true); // Ctrl+S
+                Wait.Until(() => !_window.Name.StartsWith('*'), TimeSpan.FromSeconds(3), "Notepad to save");
+                if (OurTabActive() && !_window.Name.StartsWith('*'))
+                {
+                    Keyboard.Press(0x57, ctrl: true); // Ctrl+W
+                    Wait.Until(() => !IsOpen(Stem), TimeSpan.FromSeconds(5), "Notepad tab to close");
+                }
+            }
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
-            // Best effort.
+            Console.WriteLine($"Notepad cleanup skipped: {ex.Message}");
+        }
+        finally
+        {
+            Keyboard.TargetGuard = null;
         }
 
         try
@@ -106,6 +135,9 @@ internal sealed class NotepadTarget : ITextTarget
         {
         }
     }
+
+    private static bool IsOpen(string stem) =>
+        Automation.Instance.GetDesktop().FindAllChildren().Any(w => w.Name.Contains(stem, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>Microsoft Edge with a throwaway profile showing TestPage.html (textarea, contenteditable, password).</summary>

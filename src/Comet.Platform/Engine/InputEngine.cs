@@ -47,7 +47,9 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     private readonly bool[] _swallowedDown = new bool[256];
     private readonly List<(KBDLLHOOKSTRUCT Key, bool Up)> _held = new(16);
     private readonly ConcurrentQueue<ContextResult> _contextResults = new();
+    private readonly ConcurrentQueue<InsertionJob> _completedJobs = new();
     private InsertionJob? _queuedJob;
+    private InsertionJob? _currentJob;
 
     private EngineConfig _config = new();
     private EngineConfig? _pendingConfig;
@@ -64,7 +66,6 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     private int _selected;
     private bool _popupVisible;
     private bool _swallowNextMouseUp;
-    private bool _injecting;
     private long _injectingSince;
     private long _keyTimestamp;
     private bool _mouseHookWanted;
@@ -80,7 +81,11 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             _contextResults.Enqueue(r);
             _hook.Post(WmContextResult);
         });
-        _injector = new TextInjector((job, accepted) => _hook.Post(WmInjected, accepted));
+        _injector = new TextInjector((job, accepted) =>
+        {
+            _completedJobs.Enqueue(job);
+            _hook.Post(WmInjected, accepted);
+        });
     }
 
     /// <summary>Raised on the hook thread when the user picks something (frecency key, e.g. the emoji or "snippet:id").</summary>
@@ -141,7 +146,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
                 return true;
             }
 
-            if (!isReplay && _injecting && !InjectionTimedOut())
+            if (MustHold(isReplay))
             {
                 _held.Add((k, true));
                 return true;
@@ -150,8 +155,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             return false;
         }
 
-        // Replayed keys are the held ones being delivered in order: never hold them again.
-        if (!isReplay && _injecting && !InjectionTimedOut())
+        if (MustHold(isReplay))
         {
             // Hold keys typed during an insertion so they land after it, in order.
             _held.Add((k, false));
@@ -177,6 +181,14 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         (wasActive || _picker.IsActive ? ActiveKeyLatency : IdleKeyLatency).Add(micros);
         return swallow;
     }
+
+    /// <summary>
+    /// Keys typed while an insertion is in flight are held and replayed after it, so they land in order. Keys
+    /// being replayed pass straight through, unless one of them started a newer insertion: the replayed keys
+    /// after it must then wait for that one too.
+    /// </summary>
+    private bool MustHold(bool isReplay) =>
+        _currentJob is { } job && !(isReplay && job.Replay is not null) && !InjectionTimedOut();
 
     private bool InjectionTimedOut()
     {
@@ -249,7 +261,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         {
             case AutoReplaceAction.Expand:
             case AutoReplaceAction.Undo:
-                StartInjection(new InsertionJob(a.DeleteCount, a.Text, null, a.Boundary, MethodFor(_context.ProcessName), _keyTimestamp, _context.IsTerminal));
+                StartInjection(new InsertionJob(a.DeleteCount, a.Text, null, a.Boundary, MethodFor(_context.ProcessName), _keyTimestamp, _context.PacedEditor));
                 return true;
         }
 
@@ -362,7 +374,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         // Hide first, with no animation: the text lands in the same frame the popup disappears.
         EndSession();
         _picker.NotifyInserted();
-        StartInjection(new InsertionJob(deleteCount, text, template, after, MethodFor(_context.ProcessName), _keyTimestamp, _context.IsTerminal));
+        StartInjection(new InsertionJob(deleteCount, text, template, after, MethodFor(_context.ProcessName), _keyTimestamp, _context.PacedEditor));
         data.Search.BumpFrecency(result.Kind, result.Index);
         Picked?.Invoke(key);
     }
@@ -375,10 +387,10 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     private void StartInjection(InsertionJob job)
     {
         Log.Debug($"inject: delete {job.DeleteCount}, text {job.Text?.Length ?? -1}, snippet {job.SnippetTemplate is not null}, replay {job.Replay?.Length ?? 0}, method {job.Method}");
-        _injecting = true;
+        _currentJob = job;
         _injectingSince = Environment.TickCount64;
-        // Hand the job over only after the current hook callback has returned: injecting while the system is
-        // still waiting on our callback for the key that triggered it corrupts VK_PACKET surrogate pairs.
+        // Hand the job over only after the current hook callback has returned, so SendInput never runs while
+        // the system is still waiting on our callback for the key that triggered it.
         _queuedJob = job;
         _hook.Post(WmDispatchInjection);
     }
@@ -386,7 +398,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     private void FinishInjection()
     {
         Log.Debug($"inject done after {Environment.TickCount64 - _injectingSince} ms, {_held.Count} keys held");
-        _injecting = false;
+        _currentJob = null;
         if (_held.Count == 0)
             return;
         var keys = new KBDLLHOOKSTRUCT[_held.Count];
@@ -549,7 +561,14 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
                     OnContextResult(r);
                 break;
             case WmInjected:
-                FinishInjection();
+                // Only the completion of the job we are waiting for releases held keys (an earlier replay job
+                // may finish after a key it replayed started a newer insertion).
+                while (_completedJobs.TryDequeue(out var done))
+                {
+                    if (ReferenceEquals(done, _currentJob))
+                        FinishInjection();
+                }
+
                 break;
             case WmDispatchInjection:
                 if (_queuedJob is { } job)

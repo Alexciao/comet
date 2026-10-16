@@ -32,17 +32,18 @@ internal static class Keyboard
     /// </summary>
     public static nint Target { get; set; }
 
+    /// <summary>Optional extra check run before every key (e.g. "the active Notepad tab is the test file").</summary>
+    public static Func<bool>? TargetGuard { get; set; }
+
     private static void EnsureTarget()
     {
         if (Target == 0)
             throw new InvalidOperationException("Keyboard.Target is not set.");
         var fg = GetForegroundWindow();
-        if (fg == Target)
-            return;
-        GetWindowThreadProcessId(fg, out var fgPid);
-        GetWindowThreadProcessId(Target, out var targetPid);
-        if (fgPid != targetPid)
-            throw new InvalidOperationException($"Refusing to type: the foreground window (pid {fgPid}) is not the test target (pid {targetPid}).");
+        if (fg != Target)
+            throw new InvalidOperationException($"Refusing to type: the foreground window ({fg}) is not the test window ({Target}).");
+        if (TargetGuard is { } guard && !guard())
+            throw new InvalidOperationException("Refusing to type: the test target is not active (guard failed).");
     }
 
     private static nint Layout()

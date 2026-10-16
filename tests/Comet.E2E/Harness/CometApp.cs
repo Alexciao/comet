@@ -59,17 +59,57 @@ internal sealed class CometApp : IDisposable
 
     public void Start()
     {
+        StopLeftovers();
         Write("settings.json", Settings);
         var info = new ProcessStartInfo(ExePath, "--background --accept-injected-input") { UseShellExecute = false };
         info.Environment["COMET_DATA_DIR"] = DataDirectory;
         _process = Process.Start(info) ?? throw new InvalidOperationException("Comet did not start.");
         // Ready when the message window exists and the log says the hook decision was made.
-        Wait.Until(() => File.Exists(LogPath) && File.ReadAllText(LogPath).Contains("started:", StringComparison.Ordinal), TimeSpan.FromSeconds(20), "Comet startup");
+        Wait.Until(() => Log.Contains("started:", StringComparison.Ordinal), TimeSpan.FromSeconds(20), "Comet startup");
+    }
+
+    /// <summary>A test instance left behind by an aborted run (same executable as ours) would block single-instance start.</summary>
+    private static void StopLeftovers()
+    {
+        foreach (var p in Process.GetProcessesByName("Comet"))
+        {
+            try
+            {
+                if (string.Equals(p.MainModule?.FileName, ExePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    p.Kill();
+                    p.WaitForExit(5000);
+                }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+            }
+            finally
+            {
+                p.Dispose();
+            }
+        }
     }
 
     public string LogPath => Path.Combine(DataDirectory, "logs", "comet.log");
 
-    public string Log => File.Exists(LogPath) ? File.ReadAllText(LogPath) : "";
+    /// <summary>Comet's log so far (read with sharing: Comet may be appending to it).</summary>
+    public string Log
+    {
+        get
+        {
+            try
+            {
+                using var stream = new FileStream(LogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(stream);
+                return reader.ReadToEnd();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return "";
+            }
+        }
+    }
 
     /// <summary>Asks Comet to quit cleanly (as the tray's Quit does) and waits for it.</summary>
     public void Stop()

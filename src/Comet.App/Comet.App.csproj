@@ -34,5 +34,6 @@
   <ItemGroup>
     <EmbeddedResource Include="Assets\Tray*.ico" LogicalName="%(Filename)%(Extension)" />
     <Content Include="Assets\Comet.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Comet.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

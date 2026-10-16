@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="Comet.App.UI.Pages.GeneralPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Comet.App.UI.Controls">
+    <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+        <TextBlock Text="General" Style="{StaticResource SettingsPageTitleStyle}" />
+
+        <InfoBar x:Name="ProblemsBar" Severity="Warning" IsOpen="False" IsClosable="True" Margin="0,0,0,8" />
+
+        <TextBlock Text="Features" Style="{StaticResource SettingsSectionHeaderStyle}" />
+        <controls:SettingsCard Header="Emoji" Description="Type : and a few letters to pick an emoji" Glyph="&#xE76E;">
+            <ToggleSwitch x:Name="EmojiToggle" OnContent="On" OffContent="Off" Toggled="OnFeatureToggled" />
+        </controls:SettingsCard>
+        <controls:SettingsCard Header="Snippets" Description="Your saved text, in the same : list" Glyph="&#xE8C8;">
+            <ToggleSwitch x:Name="SnippetsToggle" OnContent="On" OffContent="Off" Toggled="OnFeatureToggled" />
+        </controls:SettingsCard>
+        <controls:SettingsCard Header="Auto-replace" Description="Abbreviations that expand as you type" Glyph="&#xE8AC;">
+            <ToggleSwitch x:Name="AutoReplaceToggle" OnContent="On" OffContent="Off" Toggled="OnFeatureToggled" />
+        </controls:SettingsCard>
+
+        <TextBlock Text="Behavior" Style="{StaticResource SettingsSectionHeaderStyle}" />
+        <controls:SettingsCard Header="Start at login" Description="Run Comet in the background when you sign in" Glyph="&#xE7E8;">
+            <ToggleSwitch x:Name="StartAtLoginToggle" OnContent="On" OffContent="Off" Toggled="OnStartAtLoginToggled" />
+        </controls:SettingsCard>
+        <controls:SettingsCard Header="Trigger character" Description="The character that opens the list" Glyph="&#xE765;">
+            <TextBox x:Name="TriggerBox" Width="56" MaxLength="1" TextAlignment="Center" LostFocus="OnTriggerChanged" />
+        </controls:SettingsCard>
+        <controls:SettingsCard Header="Minimum characters" Description="How many letters to type after the trigger before the list appears" Glyph="&#xE8E9;">
+            <ComboBox x:Name="MinCharsBox" MinWidth="80" SelectionChanged="OnMinCharsChanged">
+                <x:String>1</x:String>
+                <x:String>2</x:String>
+                <x:String>3</x:String>
+                <x:String>4</x:String>
+                <x:String>5</x:String>
+            </ComboBox>
+        </controls:SettingsCard>
+        <controls:SettingsCard Header="Default skin tone" Description="Applied to emoji that support skin tones" Glyph="&#xE790;">
+            <ComboBox x:Name="SkinToneBox" MinWidth="160" SelectionChanged="OnSkinToneChanged" />
+        </controls:SettingsCard>
+        <controls:SettingsCard Header="Recent and frequent emoji" Description="Emoji you pick often rank higher in the list" Glyph="&#xE81C;">
+            <Button x:Name="ResetFrecencyButton" Content="Reset" Click="OnResetFrecency" />
+        </controls:SettingsCard>
+
+        <TextBlock Text="Emoji data" Style="{StaticResource SettingsSectionHeaderStyle}" />
+        <controls:SettingsCard x:Name="UpdatesCard" Header="Update emoji automatically" Glyph="&#xE895;">
+            <ToggleSwitch x:Name="UpdatesToggle" OnContent="On" OffContent="Off" Toggled="OnUpdatesToggled" />
+        </controls:SettingsCard>
+    </StackPanel>
+</UserControl>

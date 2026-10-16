@@ -7,7 +7,70 @@
     <Window.SystemBackdrop>
         <MicaBackdrop />
     </Window.SystemBackdrop>
+
     <Grid>
-        <TextBlock Text="Settings" Margin="24" Style="{ThemeResource TitleTextBlockStyle}" />
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Title bar drawn by the app, as in Windows 11 inbox apps. -->
+        <Grid x:Name="AppTitleBar" Height="48" ColumnSpacing="12" Padding="16,0,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Image Source="ms-appx:///Assets/Comet.png" Width="16" Height="16" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="Comet Settings" Style="{ThemeResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+        </Grid>
+
+        <NavigationView
+            x:Name="Nav"
+            Grid.Row="1"
+            PaneDisplayMode="Left"
+            IsBackButtonVisible="Collapsed"
+            IsSettingsVisible="False"
+            IsPaneToggleButtonVisible="False"
+            OpenPaneLength="260"
+            SelectionChanged="OnNavigationChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="General" Tag="general" IsSelected="True">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Snippets" Tag="snippets">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8C8;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Auto-replace" Tag="autoreplace">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8AC;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Excluded apps" Tag="excluded">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8F8;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+            <NavigationView.PaneFooter>
+                <TextBlock
+                    x:Name="VersionText"
+                    Margin="16,8,16,16"
+                    Style="{ThemeResource CaptionTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+            </NavigationView.PaneFooter>
+
+            <ScrollViewer x:Name="PageScroller" VerticalScrollBarVisibility="Auto">
+                <ContentControl
+                    x:Name="PageHost"
+                    MaxWidth="{StaticResource SettingsContentMaxWidth}"
+                    Padding="{StaticResource SettingsPagePadding}"
+                    HorizontalContentAlignment="Stretch"
+                    IsTabStop="False" />
+            </ScrollViewer>
+        </NavigationView>
     </Grid>
 </Window>

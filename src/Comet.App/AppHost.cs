@@ -1,5 +1,7 @@
 using Comet.App.Services;
 using Comet.App.UI;
+using Comet.Core.Emoji;
+using Comet.Core.Search;
 using Comet.Platform;
 using Comet.Platform.Engine;
 using Comet.Platform.Native;
@@ -27,6 +29,7 @@ internal sealed class AppHost : IDisposable
     private bool _paused;
     private int _rebuildVersion;
     private bool _shutDown;
+    private SearchEngine? _shortcodeChecker;
 
     public AppHost(Application app, LaunchOptions options)
     {
@@ -116,6 +119,26 @@ internal sealed class AppHost : IDisposable
     }
 
     internal void TogglePause() => SetPaused(!_paused);
+
+    /// <summary>True when <paramref name="name"/> is also an emoji shortcode (warned about in the snippet dialog).</summary>
+    internal bool IsEmojiShortcode(string name)
+    {
+        _shortcodeChecker ??= new SearchEngine(_dataFactory.CurrentEmoji ?? EmojiData.LoadEmbedded(), null);
+        return _shortcodeChecker.FindExact(name) is not null;
+    }
+
+    internal void ResetFrecency()
+    {
+        _settings.ResetFrecency();
+        RebuildData();
+    }
+
+    /// <summary>"Emoji data: version X, last checked (date)" for the General page.</summary>
+    internal string EmojiDataDescription()
+    {
+        var data = _dataFactory.CurrentEmoji ?? EmojiData.LoadEmbedded();
+        return $"Emoji data: version {data.DataVersion}, last checked {UI.Pages.GeneralPage.FormatDate(null)}";
+    }
 
     internal void OpenSettings()
     {

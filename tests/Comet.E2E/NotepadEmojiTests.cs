@@ -13,8 +13,17 @@ public sealed class NotepadEmojiTests : IDisposable
 
     public NotepadEmojiTests()
     {
-        _comet.Start();
-        _notepad = new NotepadTarget();
+        try
+        {
+            _comet.Start();
+            _notepad = new NotepadTarget();
+        }
+        catch
+        {
+            // xunit doesn't call Dispose when the constructor throws: don't leave Comet running.
+            _comet.Dispose();
+            throw;
+        }
     }
 
     public void Dispose()
@@ -38,7 +47,7 @@ public sealed class NotepadEmojiTests : IDisposable
     public void Popup_appears_next_to_the_caret_and_enter_inserts_the_first_result()
     {
         _notepad.Focus();
-        Keyboard.Type("hey :smi");
+        Keyboard.Type("hey :thumbsu");
         var popup = _comet.WaitForPopup();
         var field = _notepad.Bounds;
         Assert.InRange(popup.Left, field.Left, field.Right);
@@ -46,7 +55,7 @@ public sealed class NotepadEmojiTests : IDisposable
 
         Keyboard.Press(Keyboard.VK_RETURN);
         _comet.WaitForPopupClosed();
-        Assert.Equal("hey 😄", WaitForText("hey 😄"));
+        Assert.Equal("hey 👍", WaitForText("hey 👍"));
     }
 
     [Fact]

@@ -292,6 +292,12 @@ internal static partial class User32
     [LibraryImport("user32.dll")]
     public static partial nint SendMessageW(nint hWnd, uint msg, nuint wParam, nint lParam);
 
+    public const uint EM_GETSEL = 0x00B0;
+    public const uint SMTO_ABORTIFHUNG = 0x0002;
+
+    [LibraryImport("user32.dll")]
+    public static partial nint SendMessageTimeoutW(nint hWnd, uint msg, nuint wParam, nint lParam, uint fuFlags, uint uTimeout, out nuint lpdwResult);
+
     [LibraryImport("user32.dll")]
     public static partial void PostQuitMessage(int nExitCode);
 

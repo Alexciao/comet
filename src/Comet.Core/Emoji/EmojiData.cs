@@ -22,7 +22,21 @@ public sealed unsafe class EmojiData : IDisposable
         _base = basePtr;
         _ownsMemory = ownsMemory;
         _keepAlive = keepAlive;
+        try
+        {
+            ReadHeader(length);
+        }
+        catch
+        {
+            // The caller still owns the memory when construction fails; the finalizer must not free it too.
+            GC.SuppressFinalize(this);
+            throw;
+        }
+    }
 
+    private void ReadHeader(long length)
+    {
+        var basePtr = _base;
         const int headerSize = EmojiBlob.HeaderFixedSize + ((int)EmojiBlob.Section.Count * 8);
         if (length < headerSize || *(uint*)basePtr != EmojiBlob.Magic)
             throw new InvalidDataException("Emoji data has an unexpected header.");
@@ -96,10 +110,10 @@ public sealed unsafe class EmojiData : IDisposable
     }
 
     /// <summary>Layout version of the blob (see <see cref="EmojiBlob.FormatVersion"/>).</summary>
-    public int FormatVersion { get; }
+    public int FormatVersion { get; private set; }
 
     /// <summary>Version of the data itself (yyyymmddNN); higher is newer.</summary>
-    public int DataVersion { get; }
+    public int DataVersion { get; private set; }
 
     /// <summary>The blob format this build reads; packs with another format are ignored.</summary>
     public static int SupportedFormatVersion => EmojiBlob.FormatVersion;
@@ -116,7 +130,7 @@ public sealed unsafe class EmojiData : IDisposable
     }
 
     /// <summary>Number of emoji in the dataset.</summary>
-    public int Count { get; }
+    public int Count { get; private set; }
 
     /// <summary>Loads the dataset compiled into this assembly.</summary>
     public static EmojiData LoadEmbedded()
