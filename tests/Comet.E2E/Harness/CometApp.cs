@@ -76,13 +76,15 @@ internal sealed class CometApp : IDisposable
         Native.KeepDisplayOn();
         StopLeftovers();
         Write("settings.json", Settings);
+        var startedBefore = StartedCount();
         var info = new ProcessStartInfo(ExePath, "--background --accept-injected-input") { UseShellExecute = false };
         info.Environment["COMET_DATA_DIR"] = DataDirectory;
         foreach (var (name, value) in Environment)
             info.Environment[name] = value;
         _process = Process.Start(info) ?? throw new InvalidOperationException("Comet did not start.");
         // Ready when the message window exists and the log says the hook decision was made.
-        Wait.Until(() => Log.Contains("started:", StringComparison.Ordinal), TimeSpan.FromSeconds(20), "Comet startup");
+        // A restarted instance appends to the same log: wait for a new "started:" line.
+        Wait.Until(() => StartedCount() > startedBefore, TimeSpan.FromSeconds(20), "Comet startup");
     }
 
     /// <summary>A test instance left behind by an aborted run (same executable as ours) would block single-instance start.</summary>
@@ -107,6 +109,8 @@ internal sealed class CometApp : IDisposable
             }
         }
     }
+
+    private int StartedCount() => File.Exists(LogPath) ? Log.Split("started:").Length - 1 : 0;
 
     public string LogPath => Path.Combine(DataDirectory, "logs", "comet.log");
 
