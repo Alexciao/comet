@@ -56,3 +56,12 @@ scheduler noise.
 Memory note: the emoji bitmap cache is the one sizeable cost under Comet's control. Packing pre-rendered emoji
 into a few atlas bitmaps would cut ~80 MB of commit; it is listed as a future idea because there is no memory
 target and the latency target is met.
+
+## Silent emoji data updates
+
+| Metric | Value | How |
+|---|---:|---|
+| Update check answered 304 Not Modified | 67 ms | E2E `EmojiUpdateTests`, local HTTP server (first request of the process, so it includes connection setup); a GitHub round trip adds network latency on top |
+| Rebuild of the search data after a swap | 0.3–0.4 ms | "search data rebuilt in the background" log line (low-priority thread; the index is read in place from the pack) |
+| Installed-font check (DirectWrite), whole dataset | 21–40 ms for 1,923 emoji | "font check" log line / `EmojiFontCheckTests`; runs in the background after each dataset load |
+| Idle cost | none | one one-shot `DispatcherQueueTimer`, armed for the next due check (days away); no polling, no thread |

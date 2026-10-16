@@ -30,6 +30,7 @@ internal sealed class AppHost : IDisposable
     private int _rebuildVersion;
     private bool _shutDown;
     private SearchEngine? _shortcodeChecker;
+    private EmojiUpdateService _updates = null!;
 
     public AppHost(Application app, LaunchOptions options)
     {
@@ -49,6 +50,7 @@ internal sealed class AppHost : IDisposable
     public void Start()
     {
         _settings = new SettingsService(_dispatcher);
+        _updates = new EmojiUpdateService(_dispatcher, _dataFactory, () => _settings.Settings, () => _paused, OnEmojiDataReplaced);
 
         _popup = new PopupWindow();
         _messages = new MessageWindow(Program.MessageWindowClass, OnMessage);
@@ -70,6 +72,7 @@ internal sealed class AppHost : IDisposable
         WtsApi32.WTSRegisterSessionNotification(_messages.Handle, WtsApi32.NOTIFY_FOR_THIS_SESSION);
         StartupRegistration.Apply(_settings.Settings.StartAtLogin);
 
+        _updates.Schedule();
         Log.Info($"started: hook {(_engine.HookInstalled ? "installed" : "not needed")}, emoji {(_dataFactory.CurrentEmoji is null ? "not loaded" : "loaded")}");
         if (!_options.Background)
             OpenSettings();
@@ -86,6 +89,15 @@ internal sealed class AppHost : IDisposable
         if (parts.HasFlag(SettingsParts.Settings))
             StartupRegistration.Apply(_settings.Settings.StartAtLogin);
         RebuildData(prefetch: parts.HasFlag(SettingsParts.Settings)); // emoji may have been turned on, or the skin tone changed
+        if (parts.HasFlag(SettingsParts.Settings))
+            _updates.Schedule();
+    }
+
+    /// <summary>A new emoji pack or font check result: rebuild the search data in the background, at low priority.</summary>
+    private void OnEmojiDataReplaced()
+    {
+        _shortcodeChecker = null;
+        RebuildData(prefetch: true, lowPriority: true);
     }
 
     /// <summary>
@@ -112,7 +124,7 @@ internal sealed class AppHost : IDisposable
     private const int PrefetchPopularRank = 500;
 
     /// <summary>Rebuilds search data off the UI thread; only the newest build is handed to the engine.</summary>
-    internal void RebuildData(bool prefetch = false)
+    internal void RebuildData(bool prefetch = false, bool lowPriority = false)
     {
         var version = ++_rebuildVersion;
         var settings = _settings.Settings;
@@ -122,7 +134,24 @@ internal sealed class AppHost : IDisposable
         var emojiWasLoaded = _dataFactory.CurrentEmoji is not null;
         _ = Task.Run(() =>
         {
-            var data = _dataFactory.Build(settings, snippets, autoReplace, frecency);
+            var thread = Thread.CurrentThread;
+            var priority = thread.Priority;
+            if (lowPriority)
+                thread.Priority = ThreadPriority.Lowest;
+            EngineData data;
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            try
+            {
+                data = _dataFactory.Build(settings, snippets, autoReplace, frecency);
+            }
+            finally
+            {
+                thread.Priority = priority;
+            }
+
+            if (lowPriority)
+                Log.Info($"search data rebuilt in the background in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F1} ms");
+
             if (version != Volatile.Read(ref _rebuildVersion))
                 return;
             _engine.SetData(data);
@@ -141,6 +170,7 @@ internal sealed class AppHost : IDisposable
         _paused = paused;
         _tray.Paused = paused;
         _engine.SetConfig(Config());
+        _updates.Schedule();
         Log.Info(paused ? "paused" : "resumed");
     }
 
@@ -163,7 +193,7 @@ internal sealed class AppHost : IDisposable
     internal string EmojiDataDescription()
     {
         var data = _dataFactory.CurrentEmoji ?? EmojiData.LoadEmbedded();
-        return $"Emoji data: version {data.DataVersion}, last checked {UI.Pages.GeneralPage.FormatDate(null)}";
+        return $"Emoji data: version {data.DataVersion}, last checked {UI.Pages.GeneralPage.FormatDate(_updates.LastChecked)}";
     }
 
     internal void OpenSettings()
@@ -218,6 +248,7 @@ internal sealed class AppHost : IDisposable
         _engine.Cancel();
         _engine.KickWatchdog(force: true);
         _tray.Update();
+        _updates.Schedule(); // timers don't count time asleep the same way: recompute from the wall clock
     }
 
     /// <summary>Clean shutdown: unhook first so no key can be swallowed, then remove the tray icon and save.</summary>
@@ -236,6 +267,7 @@ internal sealed class AppHost : IDisposable
     public void Dispose()
     {
         _engine?.Dispose();
+        _updates?.Dispose();
         _tray?.Dispose();
         _settingsWindow?.Close();
         _settings?.Dispose();

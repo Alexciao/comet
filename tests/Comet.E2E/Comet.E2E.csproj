@@ -17,6 +17,10 @@
     <PackageReference Include="FlaUI.UIA3" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Builds emoji data packs for the update test. -->
+    <ProjectReference Include="..\..\src\Comet.Core\Comet.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <Using Include="Xunit" />
     <None Include="TestPage.html" CopyToOutputDirectory="PreserveNewest" />
     <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />

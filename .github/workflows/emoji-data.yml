@@ -1,0 +1,111 @@
+# Rebuilds the emoji data from the latest upstream datasets with the same builder as the app, runs the golden
+# search tests against it, and publishes it to the fixed `emoji-data` release only when the tests pass and the
+# data actually changed. Installed copies of Comet pick it up silently (at most one check a week).
+name: Emoji data
+
+on:
+  schedule:
+    - cron: "23 4 * * 1" # Mondays 04:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: emoji-data
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  # Oldest app that reads this pack format. Raise it together with the blob format version.
+  MIN_APP_VERSION: "1.0.0"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Fetch the latest upstream datasets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $work = Join-Path $env:RUNNER_TEMP 'upstream'
+          New-Item -ItemType Directory $work | Out-Null
+          Push-Location $work
+          npm pack emojibase-data@latest emojilib@latest --silent | Out-Null
+          Get-ChildItem *.tgz | ForEach-Object { $d = $_.BaseName; New-Item -ItemType Directory $d | Out-Null; tar -xzf $_.FullName -C $d }
+          Pop-Location
+          $sources = 'data/sources'
+          $emojibase = (Get-ChildItem $work -Directory -Filter 'emojibase-data-*').FullName
+          $emojilib = (Get-ChildItem $work -Directory -Filter 'emojilib-*').FullName
+          Copy-Item "$emojibase/package/en/data.json" "$sources/emojibase-data.json"
+          foreach ($s in 'github', 'iamcal', 'emojibase', 'cldr', 'joypixels') {
+            Copy-Item "$emojibase/package/en/shortcodes/$s.json" "$sources/emojibase-shortcodes-$s.json"
+          }
+          Copy-Item "$emojilib/package/dist/emoji-en-US.json" "$sources/emojilib-en-US.json"
+          Invoke-WebRequest 'https://raw.githubusercontent.com/github/gemoji/master/db/emoji.json' -OutFile "$sources/gemoji.json"
+          Get-ChildItem $work -Directory | ForEach-Object { "{0}: {1}" -f $_.Name, (Get-Content "$($_.FullName)/package/package.json" | ConvertFrom-Json).version }
+
+      - name: Build the pack
+        shell: pwsh
+        run: |
+          $version = (Get-Date).ToUniversalTime().ToString('yyyyMMdd') + '00'
+          New-Item -ItemType Directory artifacts/emoji-data -Force | Out-Null
+          # Same builder and font check as the app's embedded data; written where the golden test reads it.
+          dotnet run --project tools/Comet.DataBuilder -c Release -- `
+            --data-version $version `
+            --out src/Comet.Core/Data/emoji.bin `
+            --manifest artifacts/emoji-data/manifest.json `
+            --min-app-version $env:MIN_APP_VERSION
+          Copy-Item src/Comet.Core/Data/emoji.bin artifacts/emoji-data/emoji-data.bin
+
+      - name: Golden search tests on the new data
+        run: dotnet test tests/Comet.Core.Tests -c Release
+
+      - name: Compare with the published pack
+        id: compare
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $new = Get-Content artifacts/emoji-data/manifest.json | ConvertFrom-Json
+          $previous = Join-Path $env:RUNNER_TEMP 'previous'
+          gh release download emoji-data --pattern manifest.json --dir $previous 2>$null
+          $changed = 'true'
+          if (Test-Path "$previous/manifest.json") {
+            $old = Get-Content "$previous/manifest.json" | ConvertFrom-Json
+            if ($old.contentHash -eq $new.contentHash) { $changed = 'false' }
+            "published: data $($old.dataVersion), content $($old.contentHash)"
+          }
+          "built:     data $($new.dataVersion), content $($new.contentHash), $($new.emojiCount) emoji"
+          "changed=$changed" >> $env:GITHUB_OUTPUT
+
+      - name: Publish
+        if: steps.compare.outputs.changed == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view emoji-data 2>$null | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create emoji-data --prerelease --latest=false --title "Emoji data" `
+              --notes "Emoji data for Comet's silent updates. Rebuilt weekly from upstream; the app checks at most once a week."
+          }
+          # The pack first, then the manifest that announces it: a client never sees a manifest for a missing pack.
+          gh release upload emoji-data artifacts/emoji-data/emoji-data.bin --clobber
+          gh release upload emoji-data artifacts/emoji-data/manifest.json --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: emoji-data
+          path: artifacts/emoji-data/

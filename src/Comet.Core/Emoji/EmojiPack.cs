@@ -13,7 +13,9 @@ namespace Comet.Core.Emoji;
 /// <param name="Size">Pack size in bytes.</param>
 /// <param name="Sha256">Lowercase hex SHA-256 of the pack.</param>
 /// <param name="EmojiCount">Number of emoji in the pack (informational; the pack itself is checked).</param>
-public sealed record EmojiPackManifest(int FormatVersion, int DataVersion, string MinAppVersion, long Size, string Sha256, int EmojiCount)
+/// <param name="ContentHash">SHA-256 of the pack with its data version zeroed: equal hashes mean the same data, so
+/// the publishing workflow skips rebuilds that changed nothing but the date.</param>
+public sealed record EmojiPackManifest(int FormatVersion, int DataVersion, string MinAppVersion, long Size, string Sha256, int EmojiCount, string? ContentHash = null)
 {
     /// <summary>Parses a manifest; null when it is not valid JSON or misses required fields.</summary>
     public static EmojiPackManifest? Parse(ReadOnlySpan<byte> json)
@@ -35,7 +37,9 @@ public sealed record EmojiPackManifest(int FormatVersion, int DataVersion, strin
     public static EmojiPackManifest Describe(ReadOnlySpan<byte> pack, string minAppVersion)
     {
         using var data = EmojiData.FromBytes(pack);
-        return new EmojiPackManifest(data.FormatVersion, data.DataVersion, minAppVersion, pack.Length, EmojiPack.Hash(pack), data.Count);
+        var unversioned = pack.ToArray();
+        BitConverter.TryWriteBytes(unversioned.AsSpan(8), 0);
+        return new EmojiPackManifest(data.FormatVersion, data.DataVersion, minAppVersion, pack.Length, EmojiPack.Hash(pack), data.Count, EmojiPack.Hash(unversioned));
     }
 }
 

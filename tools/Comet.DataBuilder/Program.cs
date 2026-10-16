@@ -18,6 +18,7 @@ using Buffer = HarfBuzzSharp.Buffer;
 // app re-checks against the installed font at load time (so a Windows font update reveals them).
 //
 // Options: --font <ttf>  --data-version <yyyymmddNN>  --out <path>  --sources <dir>
+//          --manifest <path> --min-app-version <x.y.z>   also write the update manifest for the pack (CI)
 
 var root = FindRepoRoot();
 var options = ParseOptions(args);
@@ -140,6 +141,12 @@ foreach (var missing in curated.Keys.Except(curatedUsed))
 entries.Sort((a, b) => a.Order.CompareTo(b.Order));
 var blob = EmojiBlobWriter.Write(entries, dataVersion);
 File.WriteAllBytes(outPath, blob);
+if (options.TryGetValue("manifest", out var manifestPath))
+{
+    var manifest = EmojiPackManifest.Describe(blob, options.GetValueOrDefault("min-app-version") ?? "1.0.0");
+    File.WriteAllBytes(manifestPath, manifest.ToJson());
+    Console.WriteLine($"manifest: data {manifest.DataVersion}, {manifest.Size} bytes, sha256 {manifest.Sha256}, content {manifest.ContentHash}");
+}
 
 // Human-readable dump for code review and for tuning the golden set.
 var dump = new StringBuilder();
