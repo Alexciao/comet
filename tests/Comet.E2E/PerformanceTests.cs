@@ -61,6 +61,10 @@ public sealed partial class PerformanceTests : IDisposable
         // The target is for the warm app: emoji the popup has drawn before (or pre-rendered at startup).
         var line = lines.Last(l => l.Contains("keystroke to popup rendered:", StringComparison.Ordinal));
         var p95 = double.Parse(P95().Match(line).Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+        // The target is for the shipped (Release, Native AOT) build: run with COMET_EXE pointing at the publish
+        // output. A Debug build is measured and reported, but its numbers aren't held to the target.
+        if (!CometApp.IsReleaseBuild)
+            Assert.Skip($"Debug build measured, not asserted ({line.Trim()}); set COMET_EXE to the published Comet.exe.");
         Assert.True(p95 < 16_000, line);
     }
 

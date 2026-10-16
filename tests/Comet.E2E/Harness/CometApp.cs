@@ -29,6 +29,9 @@ internal sealed class CometApp : IDisposable
         Environment.GetEnvironmentVariable("COMET_EXE") is { Length: > 0 } exe ? exe
         : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "Comet.App", "bin", "Debug", "net10.0-windows10.0.26100.0", "win-x64", "Comet.exe"));
 
+    /// <summary>True unless the app under test is the default Debug build (COMET_EXE set to a published build).</summary>
+    public static bool IsReleaseBuild => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("COMET_EXE"));
+
     public int ProcessId => _process?.Id ?? 0;
 
     public bool IsRunning => _process is { HasExited: false };

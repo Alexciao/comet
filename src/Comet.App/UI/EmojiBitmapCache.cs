@@ -26,6 +26,7 @@ internal sealed class EmojiBitmapCache
     private bool _working;
     private long _clock;
     private long _batchStarted;
+    private bool _warmedUp;
 
     public EmojiBitmapCache(Panel stage, DispatcherQueue dispatcher)
     {
@@ -84,7 +85,13 @@ internal sealed class EmojiBitmapCache
         if (!_pending.TryDequeue(out var emoji))
         {
             _working = false;
-            Comet.Platform.Log.Info($"emoji bitmaps ready: {_bitmaps.Count} in {Environment.TickCount64 - _batchStarted} ms");
+            // The startup warm-up once at Info (tests and PERF.md wait for it); later top-ups only in Debug builds.
+            var message = $"emoji bitmaps ready: {_bitmaps.Count} in {Environment.TickCount64 - _batchStarted} ms";
+            if (_warmedUp)
+                Comet.Platform.Log.Debug(message);
+            else
+                Comet.Platform.Log.Info(message);
+            _warmedUp = true;
             return;
         }
 
