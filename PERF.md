@@ -39,3 +39,20 @@ Target p95 < 16 ms for the shipped build: met (12.5 ms, two runs). "First-time e
 the popup has never drawn (color glyph rasterization costs 10–25 ms each); the warm-up makes these rare. The idle
 hook cost (the path for every keystroke typed anywhere) is translation + a foreground check; the p95 includes
 scheduler noise.
+
+## Startup, memory, idle CPU, size (Release, Native AOT, `artifacts\publish`)
+
+| Metric | Value | How |
+|---|---:|---|
+| Process created → hook installed, emoji loaded | 113–148 ms (3 runs) | process start time vs. the "started" log line |
+| Emoji warm-up (top 500 pre-rendered, idle priority) | 12.5–14.5 s after start | "emoji bitmaps ready" log line; input is served from the first millisecond |
+| Working set / private bytes, 1 s after start | 99 MB / 112 MB | WinUI 3 + DirectComposition + the acrylic popup window |
+| Working set / private bytes, after warm-up | 124–132 MB / 197–212 MB | each pre-rendered emoji is its own `RenderTargetBitmap` surface (~170 KB commit each) |
+| Handles / threads (idle) | 874 / 36–41 | |
+| Idle CPU (60 s, popup closed, no typing) | 47–63 ms per minute (≈0.08% of one core; Task Manager shows 0%) | per-thread cycle counts: Comet's own threads (hook, engine, context worker, UI) **0 cycles**; the rest is the GPU driver's worker threads (`nvwgf2umx.dll`, created with the composition device) and the .NET finalizer |
+| `Comet.exe` | 9.3 MB | Native AOT, single native image |
+| Publish folder | 105 MB, of which 38.5 MB is `Comet.pdb` | the shipped package leaves the PDB out (symbols are a separate artifact): **66 MB** installed, Windows App SDK runtime included |
+
+Memory note: the emoji bitmap cache is the one sizeable cost under Comet's control. Packing pre-rendered emoji
+into a few atlas bitmaps would cut ~80 MB of commit; it is listed as a future idea because there is no memory
+target and the latency target is met.
