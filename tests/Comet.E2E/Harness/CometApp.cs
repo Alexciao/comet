@@ -73,6 +73,7 @@ internal sealed class CometApp : IDisposable
 
     public void Start()
     {
+        Native.KeepDisplayOn();
         StopLeftovers();
         Write("settings.json", Settings);
         var info = new ProcessStartInfo(ExePath, "--background --accept-injected-input") { UseShellExecute = false };

@@ -174,5 +174,31 @@ internal static unsafe partial class Native
             : window.BoundingRectangle;
     }
 
+    [LibraryImport("kernel32.dll")]
+    private static partial uint SetThreadExecutionState(uint flags);
+
+    private static int s_displayKept;
+
+    /// <summary>
+    /// Keeps the display on while the tests run: with the screen off DWM doesn't compose, so nothing renders and
+    /// popups never appear. A background thread holds the request for the life of the test process only.
+    /// </summary>
+    public static void KeepDisplayOn()
+    {
+        if (Interlocked.Exchange(ref s_displayKept, 1) == 1)
+            return;
+        new Thread(() =>
+        {
+            const uint Continuous = 0x80000000, SystemRequired = 0x1, DisplayRequired = 0x2;
+            _ = SetThreadExecutionState(Continuous | SystemRequired | DisplayRequired);
+            Thread.Sleep(Timeout.Infinite);
+        }) { IsBackground = true, Name = "keep display on" }.Start();
+
+        // The request keeps a lit display on but doesn't light a sleeping one; input does. A zero-distance mouse
+        // move wakes the monitors without moving the cursor or touching any window.
+        SendInputs([new INPUT { type = INPUT_MOUSE, u = new INPUTUNION { mi = new MOUSEINPUT { dwFlags = MOUSEEVENTF_MOVE } } }]);
+        Thread.Sleep(3000); // let the monitors come back before anything waits on rendering
+    }
+
     public static bool IsCloaked(nint hwnd) => DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out var v, sizeof(int)) == 0 && v != 0;
 }
