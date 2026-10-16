@@ -7,10 +7,8 @@ using Microsoft.UI;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Windows.UI.ViewManagement;
 
 namespace Comet.App.UI;
 
@@ -43,10 +41,8 @@ public sealed partial class PopupWindow : Window, IPopupSink
     private readonly PopupRow[] _rows = new PopupRow[VisibleRows];
     private readonly SearchResult[] _results = new SearchResult[PopupFrame.MaxResults];
     private readonly char[] _query = new char[32];
-    private readonly UISettings _uiSettings = new();
     private readonly SystemBackdropConfiguration _backdropConfig;
     private readonly DesktopAcrylicController _acrylic;
-    private readonly Visual _rootVisual;
     private readonly EmojiBitmapCache _emojiBitmaps;
     private MessageWindow? _messages;
     private PopupFrame? _frame;
@@ -61,7 +57,6 @@ public sealed partial class PopupWindow : Window, IPopupSink
     private bool _visible;
     private bool _uncloaked;
     private bool _awaitingFrame;
-    private bool _animate;
     private int _hideCount;
     private int _renderHideCount;
     private long _awaitingKeyTimestamp;
@@ -102,7 +97,6 @@ public sealed partial class PopupWindow : Window, IPopupSink
         Root.ActualThemeChanged += (_, _) => ApplyTheme();
         ApplyTheme();
 
-        _rootVisual = ElementCompositionPreview.GetElementVisual(Root);
         _emojiBitmaps = new EmojiBitmapCache(Stage, DispatcherQueue);
         Closed += (_, _) => _acrylic.Dispose();
     }
@@ -226,16 +220,7 @@ public sealed partial class PopupWindow : Window, IPopupSink
         Position(anchor, Math.Min(_count, VisibleRows));
         PublishGeometry();
 
-        if (!_visible)
-        {
-            _visible = true;
-            _animate = _uiSettings.AnimationsEnabled;
-            if (_animate)
-            {
-                _rootVisual.Opacity = 0;
-                _rootVisual.Offset = new System.Numerics.Vector3(0, -6, 0);
-            }
-        }
+        _visible = true;
 
         _debugWorkMs = Stopwatch.GetElapsedTime(workStart).TotalMilliseconds;
         _debugWorkEnd = Stopwatch.GetTimestamp();
@@ -335,13 +320,10 @@ public sealed partial class PopupWindow : Window, IPopupSink
         // Skip if the hook thread hid the popup after this content was produced.
         if (!_visible || Volatile.Read(ref _hideCount) != _renderHideCount)
             return;
+        // No enter animation: the acrylic backdrop belongs to the window and can't fade with the content, so a fade
+        // showed an empty panel for a frame (seen in frame captures). The popup appears complete in one frame.
         if (!_uncloaked)
-        {
             Cloak(false);
-            if (_animate)
-                PlayEnterAnimation();
-            _animate = false;
-        }
 
         if (_awaitingKeyTimestamp != 0)
         {
@@ -391,29 +373,12 @@ public sealed partial class PopupWindow : Window, IPopupSink
     private void PublishGeometry() =>
         _geometry = new PopupGeometry(_windowRect, (int)Math.Round(PaddingEpx * _scale), (int)Math.Round(PopupRow.RowHeight * _scale), _first, VisibleRows);
 
-    // ------------------------------------------------------------------ cloak + motion
+    // ------------------------------------------------------------------ cloak
 
     private void Cloak(bool cloak)
     {
         _uncloaked = !cloak;
         Dwm.SetInt(_hwnd, Dwm.DWMWA_CLOAK, cloak ? 1 : 0);
-    }
-
-    /// <summary>A quick fade and slide (~120 ms), like Windows 11 flyouts. Selection changes never animate.</summary>
-    private void PlayEnterAnimation()
-    {
-        var compositor = _rootVisual.Compositor;
-        var ease = compositor.CreateCubicBezierEasingFunction(new System.Numerics.Vector2(0f, 0f), new System.Numerics.Vector2(0f, 1f));
-        var duration = TimeSpan.FromMilliseconds(120);
-
-        var fade = compositor.CreateScalarKeyFrameAnimation();
-        fade.InsertKeyFrame(1f, 1f, ease);
-        fade.Duration = duration;
-        var slide = compositor.CreateVector3KeyFrameAnimation();
-        slide.InsertKeyFrame(1f, System.Numerics.Vector3.Zero, ease);
-        slide.Duration = duration;
-        _rootVisual.StartAnimation("Opacity", fade);
-        _rootVisual.StartAnimation("Offset", slide);
     }
 
     /// <summary>Logs latency percentiles (on exit).</summary>

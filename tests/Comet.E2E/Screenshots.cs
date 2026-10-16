@@ -134,6 +134,97 @@ public sealed class Screenshots : IDisposable
         Keyboard.Press(Keyboard.VK_ESCAPE);
     }
 
+    /// <summary>
+    /// Flicker check: the popup's area is captured as fast as GDI allows while the popup opens, updates and closes;
+    /// every distinct frame goes on a contact sheet. A frame with an empty, unstyled or half-drawn popup would show.
+    /// </summary>
+    [Theory]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    public void Popup_frames(string theme)
+    {
+        Start(theme);
+        Wait.Until(() => _comet.Log.Contains("emoji bitmaps ready", StringComparison.Ordinal), TimeSpan.FromSeconds(60), "emoji warm-up");
+        _edge = new EdgePage();
+        var field = _edge.Textarea;
+        field.Focus();
+        Keyboard.Type(":hea");
+        var area = Around(_comet.WaitForPopup(), field.Bounds);
+        Keyboard.Press(Keyboard.VK_ESCAPE);
+        _comet.WaitForPopupClosed();
+        Keyboard.Type(" ");
+
+        var frames = new List<(long Ms, System.Drawing.Bitmap Image)>();
+        var stop = false;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var capture = new Thread(() =>
+        {
+            while (!Volatile.Read(ref stop))
+                frames.Add((clock.ElapsedMilliseconds, Capture.Rectangle(area).Bitmap));
+        });
+        capture.Start();
+        Thread.Sleep(100);
+        Keyboard.Type(":he");
+        _comet.WaitForPopup();
+        Keyboard.Type("a");
+        Thread.Sleep(150);
+        Keyboard.Press(Keyboard.VK_DOWN);
+        Thread.Sleep(150);
+        Keyboard.Press(Keyboard.VK_ESCAPE);
+        _comet.WaitForPopupClosed();
+        Thread.Sleep(150);
+        Volatile.Write(ref stop, true);
+        capture.Join();
+
+        var distinct = new List<(long Ms, System.Drawing.Bitmap Image)>();
+        foreach (var f in frames)
+        {
+            if (distinct.Count == 0 || !SameImage(distinct[^1].Image, f.Image))
+                distinct.Add(f);
+        }
+
+        Console.WriteLine($"{frames.Count} frames captured in {clock.ElapsedMilliseconds} ms, {distinct.Count} distinct");
+        SaveSheet(distinct, $"frames-{theme.ToLowerInvariant()}");
+    }
+
+    private static bool SameImage(System.Drawing.Bitmap a, System.Drawing.Bitmap b)
+    {
+        var rect = new System.Drawing.Rectangle(0, 0, a.Width, a.Height);
+        var da = a.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var db = b.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        try
+        {
+            unsafe
+            {
+                return new ReadOnlySpan<byte>((void*)da.Scan0, da.Stride * a.Height).SequenceEqual(new ReadOnlySpan<byte>((void*)db.Scan0, db.Stride * b.Height));
+            }
+        }
+        finally
+        {
+            a.UnlockBits(da);
+            b.UnlockBits(db);
+        }
+    }
+
+    private static void SaveSheet(List<(long Ms, System.Drawing.Bitmap Image)> frames, string name)
+    {
+        const int Columns = 4;
+        var w = frames[0].Image.Width;
+        var h = frames[0].Image.Height + 20;
+        using var sheet = new System.Drawing.Bitmap(w * Columns, h * ((frames.Count + Columns - 1) / Columns));
+        using var g = System.Drawing.Graphics.FromImage(sheet);
+        g.Clear(System.Drawing.Color.Gray);
+        using var font = new System.Drawing.Font("Segoe UI", 10);
+        for (var i = 0; i < frames.Count; i++)
+        {
+            var (x, y) = (i % Columns * w, i / Columns * h);
+            g.DrawString($"#{i}  t={frames[i].Ms} ms", font, System.Drawing.Brushes.White, x + 4, y + 2);
+            g.DrawImage(frames[i].Image, x, y + 20);
+        }
+
+        sheet.Save(Path.Combine(s_folder!, name + ".png"), System.Drawing.Imaging.ImageFormat.Png);
+    }
+
     /// <summary>The popup with some of the text field around it.</summary>
     private static Rectangle Around(Native.RECT popup, Rectangle field)
     {
