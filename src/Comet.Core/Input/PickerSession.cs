@@ -42,6 +42,7 @@ public sealed class PickerSession
 
     private readonly char[] _token = new char[MaxTokenLength];
     private int _length;
+    private int _committedLength;
     private char _previous = Unknown;
 
     // Sentinels for "what came before the caret": unknown (after a reset) and an inserted emoji/snippet.
@@ -59,6 +60,9 @@ public sealed class PickerSession
     public bool IsActive { get; private set; }
 
     public ReadOnlySpan<char> Token => _token.AsSpan(0, _length);
+
+    /// <summary>The token of the session that just ended with a commit (for resolving <c>:code:</c>).</summary>
+    public ReadOnlySpan<char> CommittedToken => _token.AsSpan(0, _committedLength);
 
     /// <summary>True once the token is long enough for the popup.</summary>
     public bool HasQuery => IsActive && _length >= MinChars;
@@ -183,6 +187,7 @@ public sealed class PickerSession
 
     private PickerDecision End(PickerAction action, bool swallow, char previous, int delete = 0)
     {
+        _committedLength = action is PickerAction.CommitSelected or PickerAction.CommitExact or PickerAction.CommitExactThenSpace ? _length : 0;
         IsActive = false;
         _length = 0;
         _previous = previous;

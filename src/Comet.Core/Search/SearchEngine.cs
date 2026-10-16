@@ -101,6 +101,15 @@ public sealed class SearchEngine
     /// <summary>Sets the frecency score (≥ 0; ~1 per recent pick, decaying) used to boost an emoji within its tier.</summary>
     public void SetEmojiFrecency(int index, float score) => _emojiFrecency[index] = score;
 
+    /// <summary>Adds a pick to the live scores right away (the persisted, decayed scores arrive with the next rebuild).</summary>
+    public void BumpFrecency(ResultKind kind, int index)
+    {
+        if (kind == ResultKind.Emoji && (uint)index < (uint)_emojiFrecency.Length)
+            _emojiFrecency[index] += 1;
+        else if (kind == ResultKind.Snippet && (uint)index < (uint)_snippetFrecency.Length)
+            _snippetFrecency[index] += 1;
+    }
+
     public void SetSnippetFrecency(int index, float score)
     {
         if ((uint)index < (uint)_snippetFrecency.Length)

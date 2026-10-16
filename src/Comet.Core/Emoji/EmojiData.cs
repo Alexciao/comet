@@ -212,7 +212,19 @@ public sealed unsafe class EmojiData : IDisposable
         return -1;
     }
 
+    /// <summary>
+    /// Frees the data. Optional: an instance swapped out of a live engine is simply dropped, and the finalizer
+    /// frees its memory once no search can still be using it.
+    /// </summary>
     public void Dispose()
+    {
+        Release();
+        GC.SuppressFinalize(this);
+    }
+
+    ~EmojiData() => Release();
+
+    private void Release()
     {
         if (_disposed)
             return;

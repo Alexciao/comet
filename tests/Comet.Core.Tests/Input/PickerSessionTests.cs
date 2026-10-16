@@ -95,6 +95,7 @@ public sealed class PickerSessionTests
         Assert.True(d.Swallow);
         Assert.Equal(PickerAction.CommitExact, d.Action);
         Assert.Equal(6, d.DeleteCount); // ":smile"
+        Assert.Equal("smile", s.CommittedToken.ToString());
         Assert.False(s.IsActive);
     }
 

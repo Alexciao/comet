@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Comet.App.UI.PopupWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Comet">
+    <!-- Rows are created once in code and updated in place; see PopupWindow.xaml.cs. -->
+    <Grid x:Name="Root">
+        <ScrollViewer
+            x:Name="Scroller"
+            HorizontalScrollMode="Disabled"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollMode="Enabled"
+            VerticalScrollBarVisibility="Auto"
+            IsTabStop="False">
+            <StackPanel x:Name="RowsPanel" Padding="4" />
+        </ScrollViewer>
+    </Grid>
+</Window>
