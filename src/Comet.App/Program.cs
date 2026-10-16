@@ -25,6 +25,8 @@ public static partial class Program
     private static int Main(string[] args)
     {
         var options = LaunchOptions.Parse(args);
+        if (options.Quit)
+            return QuitRunningInstance();
         CrashHandler.Install();
 
         // Local\ = per logon session, so each signed-in user gets their own Comet.
@@ -58,16 +60,43 @@ public static partial class Program
     }
 }
 
+public static partial class Program
+{
+    /// <summary>
+    /// <c>Comet.exe --quit</c> (used by the installer before replacing files): asks the running instance to quit
+    /// cleanly and waits up to 5 s for it to exit. Exit code 0 when no instance is left running.
+    /// </summary>
+    private static int QuitRunningInstance()
+    {
+        var existing = User32.FindWindowW(MessageWindowClass, null);
+        if (existing == 0)
+            return 0;
+        User32.GetWindowThreadProcessId(existing, out var pid);
+        User32.PostMessageW(existing, WmQuit, 0, 0);
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById((int)pid);
+            return process.WaitForExit(5000) ? 0 : 1;
+        }
+        catch (ArgumentException)
+        {
+            return 0; // already gone
+        }
+    }
+}
+
 /// <summary>Command-line options.</summary>
 /// <param name="Background">Start in the tray without opening Settings (used by the start-at-login entry).</param>
 /// <param name="AcceptInjectedInput">End-to-end tests: treat other programs' synthetic keystrokes as typing.</param>
-internal sealed record LaunchOptions(bool Background, bool AcceptInjectedInput)
+/// <param name="Quit">Ask the running instance to quit, then exit (installer).</param>
+internal sealed record LaunchOptions(bool Background, bool AcceptInjectedInput, bool Quit = false)
 {
     public static LaunchOptions Parse(string[] args)
     {
         bool Has(string flag) => args.Any(a => string.Equals(a, flag, StringComparison.OrdinalIgnoreCase));
         return new LaunchOptions(
             Background: Has("--background"),
-            AcceptInjectedInput: Has("--accept-injected-input") || Environment.GetEnvironmentVariable("COMET_ACCEPT_INJECTED_INPUT") == "1");
+            AcceptInjectedInput: Has("--accept-injected-input") || Environment.GetEnvironmentVariable("COMET_ACCEPT_INJECTED_INPUT") == "1",
+            Quit: Has("--quit"));
     }
 }
