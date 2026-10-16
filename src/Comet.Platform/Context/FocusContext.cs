@@ -25,13 +25,11 @@ internal sealed record FocusContext(int Generation, nint Foreground, nint Focus,
     /// <summary>Reads the cheap facts about the focused window (a few microseconds; no cross-process calls that can hang).</summary>
     public static FocusContext Capture(int generation)
     {
-        var foreground = User32.GetForegroundWindow();
+        var (foreground, focus) = KeyboardFocus();
         if (foreground == 0)
             return None with { Generation = generation };
 
         var threadId = User32.GetWindowThreadProcessId(foreground, out var pid);
-        var info = new GUITHREADINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<GUITHREADINFO>() };
-        var focus = User32.GetGUIThreadInfo(threadId, ref info) && info.hwndFocus != 0 ? info.hwndFocus : foreground;
         if (focus != foreground)
         {
             // UWP/WinUI apps hosted by ApplicationFrameHost: the focused window belongs to the real app.
@@ -45,6 +43,17 @@ internal sealed record FocusContext(int Generation, nint Foreground, nint Focus,
         var password = Win32Password(focus);
         var paced = WindowClass(focus) == "RichEditD2DPT" ? focus : 0;
         return new FocusContext(generation, foreground, focus, threadId, pid, name, elevated, password, paced);
+    }
+
+    /// <summary>The foreground window and the window holding keyboard focus in it (no cross-process calls).</summary>
+    public static (nint Foreground, nint Focus) KeyboardFocus()
+    {
+        var foreground = User32.GetForegroundWindow();
+        if (foreground == 0)
+            return (0, 0);
+        var threadId = User32.GetWindowThreadProcessId(foreground, out _);
+        var info = new GUITHREADINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<GUITHREADINFO>() };
+        return (foreground, User32.GetGUIThreadInfo(threadId, ref info) && info.hwndFocus != 0 ? info.hwndFocus : foreground);
     }
 
     /// <summary>Classic Edit controls expose ES_PASSWORD; for those we know the answer without UI Automation.</summary>

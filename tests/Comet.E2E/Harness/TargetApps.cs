@@ -183,13 +183,13 @@ internal sealed class EdgePage : IDisposable
 
     internal AutomationElement Window => _window;
 
-    /// <summary>A field's exact value, from the mirror element the page keeps up to date (JSON-encoded).</summary>
-    internal string Mirror(string id)
+    /// <summary>
+    /// A field's exact value, from the read-only mirror input the page keeps up to date (JSON-encoded). Found by
+    /// its label: Edge doesn't reliably expose the id of plain elements to UI Automation.
+    /// </summary>
+    internal string Mirror(string label)
     {
-        var mirror = _window.FindFirstDescendant(c => c.ByAutomationId(id));
-        var json = mirror?.Name ?? "";
-        if (json.Length == 0)
-            json = mirror?.FindFirstChild()?.Name ?? "";
+        var json = Field(label)?.Patterns.Value.PatternOrDefault?.Value.ValueOrDefault ?? "";
         return json.Length == 0 ? "" : System.Text.Json.JsonSerializer.Deserialize<string>(json) ?? "";
     }
 

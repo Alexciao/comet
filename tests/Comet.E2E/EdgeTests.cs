@@ -58,6 +58,6 @@ public sealed class EdgeTests : IDisposable
         Keyboard.Type(":smile: :smi");
         Thread.Sleep(300); // give a (wrong) popup the time it would need to appear; asserting an absence
         Assert.Equal(0, _comet.VisiblePopup());
-        Assert.Equal(":smile: :smi", field.ReadText());
+        Assert.Equal(":smile: :smi", WaitForText(field, ":smile: :smi"));
     }
 }

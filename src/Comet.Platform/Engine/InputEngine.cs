@@ -479,7 +479,9 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
 
     public void OnWinEvent(uint winEvent, nint hwnd, int idObject)
     {
-        if (winEvent == User32.EVENT_SYSTEM_FOREGROUND || hwnd != _context.Focus)
+        // Chromium and Electron raise focus events from accessibility child windows while keyboard focus stays put
+        // (e.g. VS Code on every edit): what counts is the window that actually holds keyboard focus.
+        if (winEvent == User32.EVENT_SYSTEM_FOREGROUND || (hwnd != _context.Focus && FocusContext.KeyboardFocus() != (_context.Foreground, _context.Focus)))
         {
             ResetForNewFocus();
             KickWatchdog();

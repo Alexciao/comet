@@ -8,17 +8,17 @@
   <div id="rich" contenteditable="true" aria-label="Rich editor" role="textbox" aria-multiline="true"></div>
   <input id="secret" type="password" aria-label="Password">
   <!-- Mirrors for reading values back through UI Automation. -->
-  <p id="areaOut"></p>
-  <p id="richOut"></p>
-  <p id="secretOut"></p>
+  <input id="areaOut" aria-label="areaOut" readonly>
+  <input id="richOut" aria-label="richOut" readonly>
+  <input id="secretOut" aria-label="secretOut" readonly>
   <script>
     const area = document.getElementById('area'), rich = document.getElementById('rich'), secret = document.getElementById('secret');
     const sync = () => {
-      document.getElementById('areaOut').textContent = JSON.stringify(area.value);
-      document.getElementById('richOut').textContent = JSON.stringify(rich.innerText);
-      document.getElementById('secretOut').textContent = JSON.stringify(secret.value);
+      document.getElementById('areaOut').value = JSON.stringify(area.value);
+      document.getElementById('richOut').value = JSON.stringify(rich.innerText);
+      document.getElementById('secretOut').value = JSON.stringify(secret.value);
     };
-    // Each mirror holds its field's exact value as JSON, readable through UI Automation by element id.
+    // Each mirror holds its field's exact value as JSON, readable through UI Automation by its label.
     ['input','keyup'].forEach(e => { area.addEventListener(e, sync); rich.addEventListener(e, sync); secret.addEventListener(e, sync); });
     sync();
   </script>
