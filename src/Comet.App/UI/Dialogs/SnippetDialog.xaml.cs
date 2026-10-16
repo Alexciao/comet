@@ -62,6 +62,7 @@ public sealed partial class SnippetDialog : ContentDialog
 
     private void UpdatePreview()
     {
+        PreviewHint.Visibility = SnippetText.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
         var expansion = SnippetTemplate.Expand(SnippetText, new PreviewEnvironment());
         PreviewText.Text = expansion.CursorIndex < 0
             ? expansion.Text

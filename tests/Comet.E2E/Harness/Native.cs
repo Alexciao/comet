@@ -162,5 +162,17 @@ internal static unsafe partial class Native
         return new string(buffer, 0, Math.Max(n, 0));
     }
 
+    [LibraryImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+    private static partial int DwmGetWindowRect(nint hwnd, int attr, out RECT value, int size);
+
+    /// <summary>The window as drawn (DWM frame bounds: no invisible resize borders).</summary>
+    public static System.Drawing.Rectangle FrameBounds(FlaUI.Core.AutomationElements.AutomationElement window)
+    {
+        var hwnd = window.Properties.NativeWindowHandle.ValueOrDefault;
+        return DwmGetWindowRect(hwnd, 9, out var r, sizeof(RECT)) == 0
+            ? System.Drawing.Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom)
+            : window.BoundingRectangle;
+    }
+
     public static bool IsCloaked(nint hwnd) => DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out var v, sizeof(int)) == 0 && v != 0;
 }

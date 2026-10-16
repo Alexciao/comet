@@ -11,6 +11,9 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        // Screenshots of both themes without changing the system setting (COMET_THEME=Light|Dark).
+        if (Enum.TryParse<ApplicationTheme>(Environment.GetEnvironmentVariable("COMET_THEME"), ignoreCase: true, out var theme))
+            RequestedTheme = theme;
         UnhandledException += (_, e) => e.Handled = CrashHandler.OnUiException(e.Exception);
     }
 

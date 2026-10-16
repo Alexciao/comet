@@ -24,6 +24,13 @@ public sealed partial class SettingsWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
+        // Caption buttons follow the content's theme (it can differ from the system's app mode).
+        if (Content is FrameworkElement root)
+        {
+            root.ActualThemeChanged += (_, _) => ApplyCaptionTheme(root);
+            ApplyCaptionTheme(root);
+        }
+
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "Comet.ico"));
         VersionText.Text = $"Comet {AppPaths.Version}";
 
@@ -36,6 +43,9 @@ public sealed partial class SettingsWindow : Window
         SizeAndCenter();
         Show("general");
     }
+
+    private void ApplyCaptionTheme(FrameworkElement root) =>
+        AppWindow.TitleBar.PreferredTheme = root.ActualTheme == ElementTheme.Light ? TitleBarTheme.Light : TitleBarTheme.Dark;
 
     private void SizeAndCenter()
     {

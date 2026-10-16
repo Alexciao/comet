@@ -31,7 +31,7 @@
         </StackPanel>
         <StackPanel x:Name="Messages" Spacing="4" />
         <StackPanel Spacing="4">
-            <TextBlock Text="Preview" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <TextBlock Text="Preview" Style="{ThemeResource BodyTextBlockStyle}" />
             <Border
                 Padding="12,8"
                 MinHeight="40"
@@ -39,7 +39,14 @@
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="{ThemeResource ControlCornerRadius}">
-                <TextBlock x:Name="PreviewText" TextWrapping="Wrap" IsTextSelectionEnabled="True" MaxLines="8" TextTrimming="CharacterEllipsis" />
+                <Grid>
+                    <TextBlock x:Name="PreviewText" TextWrapping="Wrap" IsTextSelectionEnabled="True" MaxLines="8" TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        x:Name="PreviewHint"
+                        Text="What gets inserted, with placeholders filled in, appears here."
+                        TextWrapping="Wrap"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </Grid>
             </Border>
         </StackPanel>
     </StackPanel>

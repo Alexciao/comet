@@ -26,11 +26,11 @@ internal sealed class CometApp : IDisposable
     public JsonObject Settings { get; }
 
     public static string ExePath =>
-        Environment.GetEnvironmentVariable("COMET_EXE") is { Length: > 0 } exe ? exe
+        System.Environment.GetEnvironmentVariable("COMET_EXE") is { Length: > 0 } exe ? exe
         : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "src", "Comet.App", "bin", "Debug", "net10.0-windows10.0.26100.0", "win-x64", "Comet.exe"));
 
     /// <summary>True unless the app under test is the default Debug build (COMET_EXE set to a published build).</summary>
-    public static bool IsReleaseBuild => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("COMET_EXE"));
+    public static bool IsReleaseBuild => !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("COMET_EXE"));
 
     public int ProcessId => _process?.Id ?? 0;
 
@@ -60,12 +60,25 @@ internal sealed class CometApp : IDisposable
         return this;
     }
 
+    /// <summary>Extra environment variables for the Comet process (e.g. COMET_THEME for screenshots).</summary>
+    public Dictionary<string, string> Environment { get; } = [];
+
+    /// <summary>Opens Settings the way a second launch does.</summary>
+    public void OpenSettings()
+    {
+        var window = Native.FindWindowW("Comet.MessageWindow", null);
+        if (window != 0)
+            Native.PostMessageW(window, Native.WM_APP + 100, 0, 0);
+    }
+
     public void Start()
     {
         StopLeftovers();
         Write("settings.json", Settings);
         var info = new ProcessStartInfo(ExePath, "--background --accept-injected-input") { UseShellExecute = false };
         info.Environment["COMET_DATA_DIR"] = DataDirectory;
+        foreach (var (name, value) in Environment)
+            info.Environment[name] = value;
         _process = Process.Start(info) ?? throw new InvalidOperationException("Comet did not start.");
         // Ready when the message window exists and the log says the hook decision was made.
         Wait.Until(() => Log.Contains("started:", StringComparison.Ordinal), TimeSpan.FromSeconds(20), "Comet startup");

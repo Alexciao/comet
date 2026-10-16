@@ -7,6 +7,7 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <UseWindowsForms>true</UseWindowsForms>
     <NoWarn>$(NoWarn);CA1707;CA2000;CA1001;CA1515</NoWarn>
   </PropertyGroup>
   <ItemGroup>
