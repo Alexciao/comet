@@ -612,6 +612,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             return;
         Volatile.Write(ref _data, data);
         _autoReplace.SetRules(data.Rules);
+        Log.Info($"search data updated: emoji {(data.Emoji is null ? "off" : "on")}, {data.Snippets.Length} snippets, {data.Rules.Length} replacements");
     }
 
     // ------------------------------------------------------------------ watchdog

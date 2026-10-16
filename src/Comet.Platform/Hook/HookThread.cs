@@ -154,6 +154,8 @@ internal sealed unsafe class HookThread : IDisposable
         Volatile.Write(ref _keyboardHook, User32.SetWindowsHookExW(User32.WH_KEYBOARD_LL, &KeyboardProc, module, 0));
         if (_keyboardHook == 0)
             Log.Warn($"SetWindowsHookEx(WH_KEYBOARD_LL) failed: {Marshal.GetLastWin32Error()}");
+        else
+            Log.Info("keyboard hook installed");
         var flags = User32.WINEVENT_OUTOFCONTEXT | User32.WINEVENT_SKIPOWNPROCESS;
         _foregroundEvents = User32.SetWinEventHook(User32.EVENT_SYSTEM_FOREGROUND, User32.EVENT_SYSTEM_FOREGROUND, 0, &WinEventProc, 0, 0, flags);
         _focusEvents = User32.SetWinEventHook(User32.EVENT_OBJECT_FOCUS, User32.EVENT_OBJECT_FOCUS, 0, &WinEventProc, 0, 0, flags);
@@ -163,7 +165,11 @@ internal sealed unsafe class HookThread : IDisposable
     {
         SetMouse(false);
         if (_keyboardHook != 0)
+        {
             User32.UnhookWindowsHookEx(_keyboardHook);
+            Log.Info("keyboard hook removed");
+        }
+
         Volatile.Write(ref _keyboardHook, 0);
         if (_foregroundEvents != 0)
             User32.UnhookWinEvent(_foregroundEvents);
