@@ -6,28 +6,32 @@ using Comet.Platform.Native;
 using Microsoft.UI;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Composition.SystemBackdrops;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Hosting;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI.ViewManagement;
 
 namespace Comet.App.UI;
 
 /// <summary>
-/// The suggestion popup. Created once at startup, rendered once while cloaked (so fonts, the emoji font and the
-/// acrylic backdrop are warm), then reused: never created on the hot path.
+/// The suggestion popup. Created once at startup and reused: no window or row is ever created while typing.
 /// <para>
-/// Flicker-free showing: the window stays DWM-cloaked while it is positioned, sized and its new content is
-/// rendered; it is uncloaked only after <see cref="CompositionTarget.Rendered"/> reports that frame. Hiding
-/// cloaks immediately — callable from the hook thread, so the popup vanishes even if the UI thread is busy.
+/// No flash, ever: between sessions the window stays shown but DWM-cloaked. To show it, it is positioned and
+/// sized while cloaked, its rows are filled, and it is uncloaked only after <see cref="CompositionTarget.Rendered"/>
+/// reports the frame with that content. Hiding cloaks immediately and can be done from the hook thread, so the
+/// popup vanishes even if the UI thread is busy.
+/// </para>
+/// <para>
+/// Fast updates: eight row elements form a virtualized window over the results, are refilled in place, and draw
+/// emoji from pre-rendered bitmaps (see <see cref="EmojiBitmapCache"/>).
 /// </para>
 /// It never activates: WS_EX_NOACTIVATE, and clicks are handled by the mouse hook before they reach it.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "The backdrop controller is disposed when the window closes.")]
 public sealed partial class PopupWindow : Window, IPopupSink
 {
-    private const int MaxVisibleRows = 8;
+    private const int VisibleRows = 8;
     private const double WidthEpx = 320;
     private const double PaddingEpx = 4;
     private const double CaretGapEpx = 4;
@@ -36,28 +40,33 @@ public sealed partial class PopupWindow : Window, IPopupSink
     internal const uint WmHide = User32.WM_APP + 2;
 
     private readonly nint _hwnd;
-    private readonly PopupRow[] _rows = new PopupRow[PopupFrame.MaxResults];
+    private readonly PopupRow[] _rows = new PopupRow[VisibleRows];
     private readonly SearchResult[] _results = new SearchResult[PopupFrame.MaxResults];
     private readonly char[] _query = new char[32];
     private readonly UISettings _uiSettings = new();
     private readonly SystemBackdropConfiguration _backdropConfig;
     private readonly DesktopAcrylicController _acrylic;
     private readonly Visual _rootVisual;
+    private readonly EmojiBitmapCache _emojiBitmaps;
     private MessageWindow? _messages;
     private PopupFrame? _frame;
+    private EngineData _data = EngineData.Empty;
+    private int _skinTone;
+    private int _queryLength;
     private int _updatePending;
     private int _shownVersion = -1;
     private int _count;
     private int _selected;
+    private int _first;
     private bool _visible;
+    private bool _uncloaked;
     private bool _awaitingFrame;
-    private bool _animateOnUncloak;
+    private bool _animate;
     private int _hideCount;
     private int _renderHideCount;
     private long _awaitingKeyTimestamp;
     private RECT _windowRect;
     private double _scale = 1;
-    private volatile bool _cloaked;
     private PopupGeometry? _geometry;
 
     public PopupWindow()
@@ -72,9 +81,14 @@ public sealed partial class PopupWindow : Window, IPopupSink
         }
 
         // A borderless popup: WS_POPUP keeps exact sizing; DWM supplies Windows 11 corners, border and shadow.
+        // Styles are adjusted, not replaced: WinUI's own (e.g. WS_EX_NOREDIRECTIONBITMAP) must stay.
         AppWindow.IsShownInSwitchers = false;
-        User32.SetWindowLongPtr(_hwnd, User32.GWL_STYLE, User32.WS_POPUP);
-        User32.SetWindowLongPtr(_hwnd, User32.GWL_EXSTYLE, User32.WS_EX_NOACTIVATE | User32.WS_EX_TOOLWINDOW | User32.WS_EX_TOPMOST);
+        const int frame = User32.WS_CAPTION | User32.WS_THICKFRAME | User32.WS_SYSMENU | User32.WS_MINIMIZEBOX | User32.WS_MAXIMIZEBOX;
+        var style = User32.GetWindowLongPtr(_hwnd, User32.GWL_STYLE);
+        User32.SetWindowLongPtr(_hwnd, User32.GWL_STYLE, (style & ~frame) | User32.WS_POPUP);
+        var exStyle = User32.GetWindowLongPtr(_hwnd, User32.GWL_EXSTYLE);
+        User32.SetWindowLongPtr(_hwnd, User32.GWL_EXSTYLE, (exStyle & ~User32.WS_EX_APPWINDOW) | User32.WS_EX_NOACTIVATE | User32.WS_EX_TOOLWINDOW | User32.WS_EX_TOPMOST);
+        User32.SetWindowPos(_hwnd, 0, 0, 0, 0, 0, User32.SWP_FRAMECHANGED | User32.SWP_NOMOVE | User32.SWP_NOSIZE | User32.SWP_NOZORDER | User32.SWP_NOACTIVATE);
         Dwm.SetInt(_hwnd, Dwm.DWMWA_WINDOW_CORNER_PREFERENCE, Dwm.DWMWCP_ROUND);
         Dwm.SetInt(_hwnd, Dwm.DWMWA_TRANSITIONS_FORCEDISABLED, 1);
         Cloak(true);
@@ -89,13 +103,15 @@ public sealed partial class PopupWindow : Window, IPopupSink
         ApplyTheme();
 
         _rootVisual = ElementCompositionPreview.GetElementVisual(Root);
+        _emojiBitmaps = new EmojiBitmapCache(Stage, DispatcherQueue);
         Closed += (_, _) => _acrylic.Dispose();
     }
 
-    internal nint Handle => _hwnd;
-
-    /// <summary>Keystroke → popup rendered, measured per update.</summary>
+    /// <summary>Keystroke → popup rendered, for updates whose emoji were all pre-rendered (the normal, warm case).</summary>
     internal LatencyStats RenderLatency { get; } = new("keystroke to popup rendered");
+
+    /// <summary>Same, for updates that showed an emoji for the first time (its glyph had to be rasterized).</summary>
+    internal LatencyStats ColdRenderLatency { get; } = new("keystroke to popup rendered, first-time emoji");
 
     /// <summary>Connects the window that receives cross-thread update/hide messages.</summary>
     internal void Attach(MessageWindow messages) => _messages = messages;
@@ -107,30 +123,26 @@ public sealed partial class PopupWindow : Window, IPopupSink
     }
 
     /// <summary>
-    /// Renders sample rows once while cloaked so the first real show doesn't pay for font loading
-    /// (including Segoe UI Emoji's color glyphs) or backdrop creation.
+    /// Shows the window once, cloaked, so the window, its backdrop and the text stack are created and rendered
+    /// before the first real use. It then stays shown but cloaked between sessions.
     /// </summary>
     internal void WarmUp()
     {
-        string[] samples = ["😀", "😂", "❤️", "👍", "🎉", "🔥", "🙏", "✅"];
-        for (var i = 0; i < samples.Length; i++)
-        {
-            _rows[i].ShowEmoji(samples[i], "warm_up", (0, 4));
-            _rows[i].Visibility = Visibility.Visible;
-        }
-
-        var size = PhysicalSize(samples.Length, 1);
-        User32.SetWindowPos(_hwnd, User32.HWND_TOPMOST, -32000, -32000, size.Width, size.Height, User32.SWP_NOACTIVATE | User32.SWP_SHOWWINDOW);
+        _rows[0].ShowEmoji("😀", null, "warm_up", (0, 4));
+        _rows[0].Visibility = Visibility.Visible;
+        var (w, h) = PhysicalSize(1, 1);
+        User32.SetWindowPos(_hwnd, User32.HWND_TOPMOST, 0, 0, w, h, User32.SWP_NOACTIVATE | User32.SWP_SHOWWINDOW);
         void Done(object? sender, object e)
         {
             CompositionTarget.Rendered -= Done;
-            User32.ShowWindow(_hwnd, User32.SW_HIDE);
-            foreach (var row in _rows)
-                row.Visibility = Visibility.Collapsed;
+            _rows[0].Visibility = Visibility.Collapsed;
         }
 
         CompositionTarget.Rendered += Done;
     }
+
+    /// <summary>Renders these emoji into the bitmap cache when the UI thread is idle (startup warm-up).</summary>
+    internal void Prefetch(IEnumerable<string> emoji) => _emojiBitmaps.Prefetch(emoji);
 
     // ------------------------------------------------------------------ IPopupSink (hook thread)
 
@@ -164,20 +176,14 @@ public sealed partial class PopupWindow : Window, IPopupSink
                 Render();
                 return true;
             case WmHide:
-                HideNow();
+                _visible = false;
+                _awaitingFrame = false;
+                CompositionTarget.Rendered -= OnFrameRendered;
+                Cloak(true);
                 return true;
             default:
                 return false;
         }
-    }
-
-    private void HideNow()
-    {
-        _visible = false;
-        _awaitingFrame = false;
-        CompositionTarget.Rendered -= OnFrameRendered;
-        Cloak(true);
-        User32.ShowWindow(_hwnd, User32.SW_HIDE);
     }
 
     private void Render()
@@ -187,9 +193,6 @@ public sealed partial class PopupWindow : Window, IPopupSink
             return;
 
         RECT anchor;
-        int skinTone;
-        EngineData data;
-        int queryLength;
         long keyTimestamp;
         lock (frame.Gate)
         {
@@ -200,42 +203,42 @@ public sealed partial class PopupWindow : Window, IPopupSink
             Array.Copy(frame.Results, _results, _count);
             _selected = frame.Selected;
             anchor = frame.Anchor;
-            skinTone = frame.SkinTone;
-            data = frame.Data;
-            queryLength = frame.QueryLength;
-            frame.Query.AsSpan(0, queryLength).CopyTo(_query);
+            _skinTone = frame.SkinTone;
+            _data = frame.Data;
+            _queryLength = frame.QueryLength;
+            frame.Query.AsSpan(0, _queryLength).CopyTo(_query);
             keyTimestamp = frame.KeyTimestamp;
         }
 
-        var query = _query.AsSpan(0, queryLength);
-        for (var i = 0; i < _rows.Length; i++)
-        {
-            var row = _rows[i];
-            if (i >= _count)
-            {
-                if (row.Visibility == Visibility.Visible)
-                    row.Visibility = Visibility.Collapsed;
-                continue;
-            }
+        var workStart = Stopwatch.GetTimestamp();
+        _debugQueueMs = Stopwatch.GetElapsedTime(keyTimestamp, workStart).TotalMilliseconds;
 
-            Fill(row, _results[i], data, skinTone, query);
-            row.IsSelected = i == _selected;
-            if (row.Visibility != Visibility.Visible)
-                row.Visibility = Visibility.Visible;
-        }
+        // Keep the selection in the visible window; a new list starts at the top.
+        if (!_visible || _selected == 0)
+            _first = 0;
+        if (_selected < _first)
+            _first = _selected;
+        else if (_selected >= _first + VisibleRows)
+            _first = _selected - VisibleRows + 1;
+        _first = Math.Clamp(_first, 0, Math.Max(0, _count - VisibleRows));
 
-        Position(anchor, Math.Min(_count, MaxVisibleRows));
-        KeepSelectionVisible();
+        FillRows();
+        Position(anchor, Math.Min(_count, VisibleRows));
         PublishGeometry();
 
         if (!_visible)
         {
             _visible = true;
-            _animateOnUncloak = _uiSettings.AnimationsEnabled;
-            if (_animateOnUncloak)
-                PrepareEnterAnimation();
-            User32.ShowWindow(_hwnd, User32.SW_SHOWNOACTIVATE); // still cloaked
+            _animate = _uiSettings.AnimationsEnabled;
+            if (_animate)
+            {
+                _rootVisual.Opacity = 0;
+                _rootVisual.Offset = new System.Numerics.Vector3(0, -6, 0);
+            }
         }
+
+        _debugWorkMs = Stopwatch.GetElapsedTime(workStart).TotalMilliseconds;
+        _debugWorkEnd = Stopwatch.GetTimestamp();
 
         // Uncloak (or just measure) once this content has actually been rendered.
         _awaitingKeyTimestamp = keyTimestamp;
@@ -247,38 +250,43 @@ public sealed partial class PopupWindow : Window, IPopupSink
         }
     }
 
-    private void OnFrameRendered(object? sender, object e)
+    private void FillRows()
     {
-        CompositionTarget.Rendered -= OnFrameRendered;
-        _awaitingFrame = false;
-        // Skip if the hook thread hid the popup after this content was produced.
-        if (!_visible || Volatile.Read(ref _hideCount) != _renderHideCount)
-            return;
-        if (_cloaked)
+        var query = _query.AsSpan(0, _queryLength);
+        for (var i = 0; i < _rows.Length; i++)
         {
-            Cloak(false);
-            if (_animateOnUncloak)
-                PlayEnterAnimation();
-            _animateOnUncloak = false;
+            var row = _rows[i];
+            var index = _first + i;
+            if (index >= _count)
+            {
+                if (row.Visibility == Visibility.Visible)
+                    row.Visibility = Visibility.Collapsed;
+                continue;
+            }
+
+            Fill(row, _results[index], query);
+            row.IsSelected = index == _selected;
+            if (row.Visibility != Visibility.Visible)
+                row.Visibility = Visibility.Visible;
         }
 
-        if (_awaitingKeyTimestamp != 0)
-        {
-            RenderLatency.Add(Stopwatch.GetElapsedTime(_awaitingKeyTimestamp).TotalMicroseconds);
-            _awaitingKeyTimestamp = 0;
-        }
+        UpdateScrollThumb();
     }
 
-    private static void Fill(PopupRow row, SearchResult r, EngineData data, int skinTone, ReadOnlySpan<char> query)
+    private void Fill(PopupRow row, SearchResult r, ReadOnlySpan<char> query)
     {
-        if (r.Kind == ResultKind.Emoji && data.Emoji is { } emoji)
+        if (r.Kind == ResultKind.Emoji && _data.Emoji is { } emoji)
         {
             var shortcode = emoji.Shortcode(r.Index, r.Slot).ToString();
-            row.ShowEmoji(emoji.Emoji(r.Index, skinTone).ToString(), shortcode, Highlighter.Find(shortcode, query));
+            var text = emoji.Emoji(r.Index, _skinTone).ToString();
+            var bitmap = _emojiBitmaps.Get(text, Root.XamlRoot?.RasterizationScale ?? _scale);
+            if (bitmap is null)
+                _misses++;
+            row.ShowEmoji(text, bitmap, shortcode, Highlighter.Find(shortcode, query));
         }
-        else if (r.Kind == ResultKind.Snippet && r.Index < data.Snippets.Length)
+        else if (r.Kind == ResultKind.Snippet && r.Index < _data.Snippets.Length)
         {
-            var s = data.Snippets[r.Index];
+            var s = _data.Snippets[r.Index];
             row.ShowSnippet(s.Name, Preview(s.Text), Highlighter.Find(s.Name, query));
         }
     }
@@ -292,9 +300,67 @@ public sealed partial class PopupWindow : Window, IPopupSink
         return newline < 0 ? first.ToString() : first.ToString() + " …";
     }
 
+    private void UpdateScrollThumb()
+    {
+        if (_count <= VisibleRows)
+        {
+            ScrollThumb.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var track = VisibleRows * PopupRow.RowHeight;
+        ScrollThumb.Height = Math.Max(16, track * VisibleRows / _count);
+        ScrollThumb.Margin = new Thickness(0, PaddingEpx + ((track - ScrollThumb.Height) * _first / (_count - VisibleRows)), 2, 0);
+        ScrollThumb.Visibility = Visibility.Visible;
+    }
+
+    private void OnPointerWheel(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_visible || _count <= VisibleRows)
+            return;
+        var delta = e.GetCurrentPoint(Root).Properties.MouseWheelDelta;
+        var first = Math.Clamp(_first - Math.Sign(delta), 0, _count - VisibleRows);
+        if (first == _first)
+            return;
+        _first = first;
+        FillRows();
+        PublishGeometry();
+        e.Handled = true;
+    }
+
+    private void OnFrameRendered(object? sender, object e)
+    {
+        CompositionTarget.Rendered -= OnFrameRendered;
+        _awaitingFrame = false;
+        // Skip if the hook thread hid the popup after this content was produced.
+        if (!_visible || Volatile.Read(ref _hideCount) != _renderHideCount)
+            return;
+        if (!_uncloaked)
+        {
+            Cloak(false);
+            if (_animate)
+                PlayEnterAnimation();
+            _animate = false;
+        }
+
+        if (_awaitingKeyTimestamp != 0)
+        {
+            (_misses == 0 ? RenderLatency : ColdRenderLatency).Add(Stopwatch.GetElapsedTime(_awaitingKeyTimestamp).TotalMicroseconds);
+            Log.Debug(FormattableString.Invariant($"render: queue {_debugQueueMs:F1} ms, work {_debugWorkMs:F1} ms, to frame {Stopwatch.GetElapsedTime(_debugWorkEnd).TotalMilliseconds:F1} ms, new emoji {_misses}"));
+            _misses = 0;
+            _awaitingKeyTimestamp = 0;
+        }
+    }
+
+    // Debug-build diagnostics for the render path (Log.Debug is compiled out of release builds).
+    private double _debugQueueMs;
+    private double _debugWorkMs;
+    private long _debugWorkEnd;
+    private int _misses;
+
     // ------------------------------------------------------------------ geometry
 
-    private (int Width, int Height) PhysicalSize(int rows, double scale) =>
+    private static (int Width, int Height) PhysicalSize(int rows, double scale) =>
         ((int)Math.Round(WidthEpx * scale), (int)Math.Round(((rows * PopupRow.RowHeight) + (2 * PaddingEpx)) * scale));
 
     /// <summary>Below the caret; above it near the bottom of the screen; always inside the monitor's work area.</summary>
@@ -316,42 +382,21 @@ public sealed partial class PopupWindow : Window, IPopupSink
         y = Math.Clamp(y, work.Top, Math.Max(work.Top, work.Bottom - h));
 
         var rect = new RECT { Left = x, Top = y, Right = x + w, Bottom = y + h };
-        if (rect.Left == _windowRect.Left && rect.Top == _windowRect.Top && rect.Width == _windowRect.Width && rect.Height == _windowRect.Height && _visible)
+        if (rect.Left == _windowRect.Left && rect.Top == _windowRect.Top && rect.Width == _windowRect.Width && rect.Height == _windowRect.Height)
             return;
         _windowRect = rect;
         User32.SetWindowPos(_hwnd, User32.HWND_TOPMOST, x, y, w, h, User32.SWP_NOACTIVATE | User32.SWP_NOOWNERZORDER);
     }
 
-    private void KeepSelectionVisible()
-    {
-        var first = (int)Math.Round(Scroller.VerticalOffset / PopupRow.RowHeight);
-        if (_selected < first)
-            first = _selected;
-        else if (_selected >= first + MaxVisibleRows)
-            first = _selected - MaxVisibleRows + 1;
-        if (_selected == 0)
-            first = 0;
-        Scroller.ChangeView(null, first * PopupRow.RowHeight, null, disableAnimation: true);
-    }
-
-    private void PublishGeometry()
-    {
-        var first = (int)Math.Round(Scroller.VerticalOffset / PopupRow.RowHeight);
-        _geometry = new PopupGeometry(_windowRect, (int)Math.Round(PaddingEpx * _scale), (int)Math.Round(PopupRow.RowHeight * _scale), first, MaxVisibleRows);
-    }
+    private void PublishGeometry() =>
+        _geometry = new PopupGeometry(_windowRect, (int)Math.Round(PaddingEpx * _scale), (int)Math.Round(PopupRow.RowHeight * _scale), _first, VisibleRows);
 
     // ------------------------------------------------------------------ cloak + motion
 
     private void Cloak(bool cloak)
     {
-        _cloaked = cloak;
+        _uncloaked = !cloak;
         Dwm.SetInt(_hwnd, Dwm.DWMWA_CLOAK, cloak ? 1 : 0);
-    }
-
-    private void PrepareEnterAnimation()
-    {
-        _rootVisual.Opacity = 0;
-        _rootVisual.Offset = new System.Numerics.Vector3(0, -6, 0);
     }
 
     /// <summary>A quick fade and slide (~120 ms), like Windows 11 flyouts. Selection changes never animate.</summary>
@@ -371,6 +416,10 @@ public sealed partial class PopupWindow : Window, IPopupSink
         _rootVisual.StartAnimation("Offset", slide);
     }
 
-    /// <summary>Logs latency percentiles (debug builds call this on exit).</summary>
-    internal void LogLatency() => Log.Info(RenderLatency.Describe());
+    /// <summary>Logs latency percentiles (on exit).</summary>
+    internal void LogLatency()
+    {
+        Log.Info(RenderLatency.Describe());
+        Log.Info(ColdRenderLatency.Describe());
+    }
 }

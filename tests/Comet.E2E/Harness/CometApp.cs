@@ -130,7 +130,8 @@ internal sealed class CometApp : IDisposable
             return 0;
         foreach (var hwnd in Native.WindowsOf(_process.Id))
         {
-            if (Native.WindowText(hwnd) == "Comet" && Native.IsWindowVisible(hwnd) && !Native.IsCloaked(hwnd) && Native.GetWindowRect(hwnd, out var r) && r.Right - r.Left > 100)
+            // Shown = visible, not cloaked, and on screen (the idle popup is parked far offscreen).
+            if (Native.WindowText(hwnd) == "Comet" && Native.IsWindowVisible(hwnd) && !Native.IsCloaked(hwnd) && Native.GetWindowRect(hwnd, out var r) && r.Right - r.Left > 100 && r.Left > -10000)
                 return hwnd;
         }
 

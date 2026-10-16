@@ -518,6 +518,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
 
     private void OnContextResult(ContextResult r)
     {
+        Log.Debug($"context {r.Kind}: {Environment.TickCount64 - r.Started} ms ({(r.Kind == ContextRequestKind.Caret ? r.Method.ToString() : r.Password.ToString())})");
         if (r.Generation != _context.Generation)
             return; // answer for a focus that no longer exists
 

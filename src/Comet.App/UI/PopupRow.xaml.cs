@@ -8,6 +8,10 @@ public sealed partial class PopupRow : UserControl
 {
     public const double RowHeight = 36;
 
+    /// <summary>Size of the emoji glyph and of the square it is drawn in (shared with <see cref="EmojiBitmapCache"/>).</summary>
+    public const double EmojiFontSize = 20;
+    public const double EmojiBox = 28;
+
     private bool _selected;
     private bool _hover;
 
@@ -18,11 +22,25 @@ public sealed partial class PopupRow : UserControl
         PointerExited += (_, _) => SetHover(false);
     }
 
-    /// <summary>An emoji row: the emoji, then ":shortcode:" with the matched part emphasized.</summary>
-    public void ShowEmoji(string emoji, string shortcode, (int Start, int Length) match)
+    /// <summary>
+    /// An emoji row: the emoji, then ":shortcode:" with the matched part emphasized. The emoji is drawn from a
+    /// pre-rendered <paramref name="bitmap"/> when available (cheap), otherwise as text.
+    /// </summary>
+    public void ShowEmoji(string emoji, Microsoft.UI.Xaml.Media.ImageSource? bitmap, string shortcode, (int Start, int Length) match)
     {
-        EmojiText.Text = emoji;
-        EmojiText.Visibility = Visibility.Visible;
+        if (bitmap is not null)
+        {
+            EmojiImage.Source = bitmap;
+            EmojiImage.Visibility = Visibility.Visible;
+            EmojiText.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            EmojiText.Text = emoji;
+            EmojiText.Visibility = Visibility.Visible;
+            EmojiImage.Visibility = Visibility.Collapsed;
+        }
+
         SnippetIcon.Visibility = Visibility.Collapsed;
         var (start, length) = match;
         BeforeRun.Text = ":" + shortcode[..start];
@@ -35,6 +53,7 @@ public sealed partial class PopupRow : UserControl
     public void ShowSnippet(string name, string preview, (int Start, int Length) match)
     {
         EmojiText.Visibility = Visibility.Collapsed;
+        EmojiImage.Visibility = Visibility.Collapsed;
         SnippetIcon.Visibility = Visibility.Visible;
         var (start, length) = match;
         BeforeRun.Text = name[..start];

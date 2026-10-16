@@ -59,6 +59,7 @@ internal sealed class AppHost : IDisposable
         _engine.Picked += _settings.RecordPick;
         _engine.Start(Config(), BuildData());
         _settings.Changed += OnSettingsChanged;
+        PrefetchEmoji();
 
         _tray = new TrayIcon(_messages.Handle);
         _tray.OpenSettings += OpenSettings;
@@ -84,11 +85,34 @@ internal sealed class AppHost : IDisposable
         _engine.SetConfig(Config());
         if (parts.HasFlag(SettingsParts.Settings))
             StartupRegistration.Apply(_settings.Settings.StartAtLogin);
-        RebuildData();
+        RebuildData(prefetch: parts.HasFlag(SettingsParts.Settings)); // emoji may have been turned on, or the skin tone changed
     }
 
+    /// <summary>
+    /// Warms the popup's emoji bitmaps at idle priority: the user's frecent emoji first, then the most popular
+    /// ones, so the emoji people actually see are ready before their first popup.
+    /// </summary>
+    private void PrefetchEmoji()
+    {
+        if (!_settings.Settings.Features.Emoji)
+            return;
+        if (_dataFactory.CurrentEmoji is not { } data)
+            return;
+        var tone = _settings.Settings.SkinTone;
+        var frecent = _settings.FrecencyScores()
+            .OrderByDescending(f => f.Score)
+            .Select(f => _dataFactory.EmojiIndexOf(f.Key))
+            .Where(i => i >= 0);
+        var popular = Enumerable.Range(0, data.Count)
+            .Where(i => data.Popularity(i) <= PrefetchPopularRank && data.RenderedOnReferenceFont(i))
+            .OrderBy(data.Popularity);
+        _popup.Prefetch(frecent.Concat(popular).Distinct().Select(i => data.Emoji(i, tone).ToString()));
+    }
+
+    private const int PrefetchPopularRank = 500;
+
     /// <summary>Rebuilds search data off the UI thread; only the newest build is handed to the engine.</summary>
-    internal void RebuildData()
+    internal void RebuildData(bool prefetch = false)
     {
         var version = ++_rebuildVersion;
         var settings = _settings.Settings;
@@ -102,6 +126,8 @@ internal sealed class AppHost : IDisposable
             if (version != Volatile.Read(ref _rebuildVersion))
                 return;
             _engine.SetData(data);
+            if (prefetch && data.Emoji is not null)
+                _dispatcher.TryEnqueue(PrefetchEmoji);
             if (emojiWasLoaded && data.Emoji is null)
             {
                 // Emoji was just turned off: let the dataset and its index go now rather than whenever.

@@ -46,6 +46,7 @@
                 <ColumnDefinition Width="28" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
+            <Image x:Name="EmojiImage" Width="28" Height="28" Stretch="None" VerticalAlignment="Center" HorizontalAlignment="Center" />
             <TextBlock
                 x:Name="EmojiText"
                 FontFamily="Segoe UI Emoji"
