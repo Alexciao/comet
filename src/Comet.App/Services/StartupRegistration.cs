@@ -18,6 +18,9 @@ internal static class StartupRegistration
     /// <summary>Writes or removes the Run entry so it matches the setting (and the current executable path).</summary>
     public static void Apply(bool enabled)
     {
+        if (AppPaths.IsScratch)
+            return; // a test or measurement run must not register itself to start at login
+
         try
         {
             using var key = Registry.CurrentUser.CreateSubKey(RunKey);
