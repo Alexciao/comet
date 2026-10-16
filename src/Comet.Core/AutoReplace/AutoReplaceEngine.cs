@@ -47,6 +47,10 @@ public sealed class AutoReplaceEngine
     private int _length;
     private bool _valid = true;
 
+    // The word before the last boundary, restored when Backspace erases that boundary; -1 = unknown.
+    private readonly char[] _previous = new char[MaxWord];
+    private int _previousLength = -1;
+
     private Dictionary<string, AutoReplaceRule> _ignoreCase = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, AutoReplaceRule> _exactCase = new(StringComparer.Ordinal);
     private Dictionary<string, AutoReplaceRule>.AlternateLookup<ReadOnlySpan<char>> _ignoreCaseLookup;
@@ -97,6 +101,7 @@ public sealed class AutoReplaceEngine
     {
         _length = 0;
         _valid = true;
+        _previousLength = -1;
         _undoWord = null;
         _undoText = null;
         _suppressed = null;
@@ -117,8 +122,11 @@ public sealed class AutoReplaceEngine
             _undoWord = _undoText = null;
             if (key.Kind == KeyKind.Backspace && allowed)
             {
+                // The original word and boundary are typed back; erasing that boundary again brings the word back.
                 _suppressed = word;
                 ClearWord();
+                word.CopyTo(_previous);
+                _previousLength = word.Length;
                 return new AutoReplaceDecision(true, AutoReplaceAction.Undo, SearchText.GraphemeCount(text) + 1, word, boundary);
             }
         }
@@ -130,7 +138,7 @@ public sealed class AutoReplaceEngine
             case KeyKind.Char when TextClass.IsClosingPunctuation(key.Char) && _length > 0:
                 return OnBoundary(new Boundary(BoundaryKind.Char, key.Char), allowed);
             case KeyKind.Char when TextClass.IsOpeningPunctuation(key.Char) || TextClass.IsClosingPunctuation(key.Char):
-                ClearWord();
+                EndWord();
                 return default;
             case KeyKind.Char:
                 Append(key.Char);
@@ -141,9 +149,18 @@ public sealed class AutoReplaceEngine
                 return OnBoundary(new Boundary(BoundaryKind.Tab), allowed);
             case KeyKind.Backspace:
                 if (_length > 0)
+                {
                     _length--;
-                else
-                    _valid = false; // erasing into text we never saw
+                }
+                else if (_previousLength >= 0)
+                {
+                    // Erased the boundary: the caret is at the end of the previous word again.
+                    _previous.AsSpan(0, _previousLength).CopyTo(_word);
+                    _length = _previousLength;
+                    _previousLength = -1;
+                }
+
+                // Otherwise the text before the caret is unknown, as after a click: the next word counts as fresh.
                 return default;
             case KeyKind.Ignored:
             case KeyKind.DeadKey: // the composed character arrives with the next key
@@ -173,6 +190,22 @@ public sealed class AutoReplaceEngine
         _valid = true;
     }
 
+    /// <summary>A boundary ended the word: remember it (for Backspace over the boundary) and start a new one.</summary>
+    private void EndWord()
+    {
+        if (_valid)
+        {
+            CurrentWord.CopyTo(_previous);
+            _previousLength = _length;
+        }
+        else
+        {
+            _previousLength = -1;
+        }
+
+        ClearWord();
+    }
+
     private AutoReplaceDecision OnBoundary(Boundary boundary, bool allowed)
     {
         var word = CurrentWord;
@@ -186,7 +219,7 @@ public sealed class AutoReplaceEngine
         }
 
         _suppressed = null;
-        ClearWord();
+        EndWord();
         return result;
     }
 

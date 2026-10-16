@@ -144,12 +144,26 @@ public sealed class AutoReplaceEngineTests
     }
 
     [Fact]
-    public void Erasing_into_unseen_text_disables_the_current_word()
+    public void Erasing_unseen_text_keeps_the_next_word_eligible()
+    {
+        // As after a click: the text before the caret is unknown, so the next word counts as a fresh word
+        // (Ctrl+A, Backspace and then an abbreviation is the common case).
+        var e = Engine();
+        e.OnKey(KeyInput.Of(KeyKind.Backspace));
+        Assert.Equal(AutoReplaceAction.Expand, Type(e, "cmq ").Action);
+    }
+
+    [Fact]
+    public void Backspace_over_a_boundary_restores_the_previous_word()
     {
         var e = Engine();
-        e.OnKey(KeyInput.Of(KeyKind.Backspace)); // deletes a char we never saw
+        Type(e, "cm ");
+        e.OnKey(KeyInput.Of(KeyKind.Backspace)); // erase the space: the caret is after "cm" again
+        Assert.Equal(AutoReplaceAction.Expand, Type(e, "q ").Action);
+
+        Type(e, "hello ");
+        e.OnKey(KeyInput.Of(KeyKind.Backspace)); // back into "hello": "cmq" would be inside a word
         Assert.Equal(AutoReplaceAction.None, Type(e, "cmq ").Action);
-        Assert.Equal(AutoReplaceAction.Expand, Type(e, "cmq ").Action);
     }
 
     [Fact]

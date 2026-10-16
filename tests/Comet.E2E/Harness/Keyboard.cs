@@ -129,10 +129,13 @@ internal static class Keyboard
     }
 
     /// <summary>
-    /// Typing speed: about 120 words per minute. Faster than any person, but it leaves the target app time to
-    /// handle each key the way it does with a real keyboard (some apps coalesce floods of input).
+    /// Typing speed: 60 ms per key (~200 words per minute), faster than nearly anyone types. Windows 11 Notepad
+    /// applies queued keys against the live keyboard state when it falls behind, so at 15–30 ms per key it
+    /// mistyped keys that followed an insertion (measured, about 1 run in 3); override with COMET_E2E_PACE_MS.
     /// </summary>
-    private static void Pace() => Thread.Sleep(15);
+    private static void Pace() => Thread.Sleep(PaceMs);
+
+    private static readonly int PaceMs = int.TryParse(Environment.GetEnvironmentVariable("COMET_E2E_PACE_MS"), out var ms) ? ms : 60;
 
     private static INPUT Key(ushort vk, bool up, nint layout, bool extended = false) => new()
     {

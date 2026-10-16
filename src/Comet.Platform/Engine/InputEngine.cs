@@ -167,6 +167,11 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         var wasActive = _picker.IsActive;
 
         Span<KeyInput> inputs = stackalloc KeyInput[2];
+        // Focus-change events arrive asynchronously, after hook callbacks for keys already typed in the new window:
+        // check the foreground window per key (a cheap call) so no key is judged against the previous window.
+        if (User32.GetForegroundWindow() != _context.Foreground)
+            ResetForNewFocus();
+
         var layout = User32.GetKeyboardLayout(_context.ThreadId);
         var n = _translator.Translate(vk, k.scanCode, ModifierState.Read(k.flags), layout, inputs);
         var swallow = false;
@@ -407,7 +412,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             (keys[i], ups[i]) = _held[i];
         _held.Clear();
         // Replayed keys come back through the hook tagged as real typing, in their original order.
-        StartInjection(new InsertionJob(0, null, null, null, InsertionMethod.Unicode, 0) { Replay = keys, ReplayKeyUp = ups });
+        StartInjection(new InsertionJob(0, null, null, null, InsertionMethod.Unicode, 0, _context.PacedEditor) { Replay = keys, ReplayKeyUp = ups });
     }
 
     // ------------------------------------------------------------------ IExactMatcher

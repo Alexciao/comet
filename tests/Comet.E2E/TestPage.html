@@ -8,9 +8,9 @@
   <div id="rich" contenteditable="true" aria-label="Rich editor" role="textbox" aria-multiline="true"></div>
   <input id="secret" type="password" aria-label="Password">
   <!-- Mirrors for reading values back through UI Automation. -->
-  <p>Area: <span id="areaOut" aria-label="areaOut"></span></p>
-  <p>Rich: <span id="richOut" aria-label="richOut"></span></p>
-  <p>Secret length: <span id="secretOut" aria-label="secretOut">0</span></p>
+  <p id="areaOut"></p>
+  <p id="richOut"></p>
+  <p id="secretOut"></p>
   <script>
     const area = document.getElementById('area'), rich = document.getElementById('rich'), secret = document.getElementById('secret');
     const sync = () => {
@@ -18,6 +18,7 @@
       document.getElementById('richOut').textContent = JSON.stringify(rich.innerText);
       document.getElementById('secretOut').textContent = JSON.stringify(secret.value);
     };
+    // Each mirror holds its field's exact value as JSON, readable through UI Automation by element id.
     ['input','keyup'].forEach(e => { area.addEventListener(e, sync); rich.addEventListener(e, sync); secret.addEventListener(e, sync); });
     sync();
   </script>

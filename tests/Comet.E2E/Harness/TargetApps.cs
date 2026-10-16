@@ -45,11 +45,24 @@ internal static class Automation
     public static void Foreground(AutomationElement window)
     {
         var hwnd = window.Properties.NativeWindowHandle.ValueOrDefault;
-        window.SetForeground();
-        Native.SetForegroundWindow(hwnd);
+        if (Native.GetForegroundWindow() != hwnd)
+        {
+            // Windows only lets a process take the foreground right after input; a lone Alt press satisfies that
+            // (the standard workaround) without typing anything.
+            Native.SendInputs([AltKey(false), AltKey(true)]);
+            window.SetForeground();
+            Native.SetForegroundWindow(hwnd);
+        }
+
         Wait.Until(() => Native.GetForegroundWindow() == hwnd, TimeSpan.FromSeconds(5), "target window to be in the foreground");
         Keyboard.Target = hwnd;
     }
+
+    private static Native.INPUT AltKey(bool up) => new()
+    {
+        type = Native.INPUT_KEYBOARD,
+        u = new Native.INPUTUNION { ki = new Native.KEYBDINPUT { wVk = 0x12, dwFlags = up ? Native.KEYEVENTF_KEYUP : 0 } },
+    };
 }
 
 /// <summary>
@@ -170,13 +183,14 @@ internal sealed class EdgePage : IDisposable
 
     internal AutomationElement Window => _window;
 
-    /// <summary>Reads a mirror span (the page copies field values into labelled spans as JSON strings).</summary>
+    /// <summary>A field's exact value, from the mirror element the page keeps up to date (JSON-encoded).</summary>
     internal string Mirror(string id)
     {
-        var span = _window.FindFirstDescendant(new PropertyCondition(Automation.Instance.PropertyLibrary.Element.Name, id));
-        var text = span?.FindFirstChild()?.Name ?? span?.Name ?? "";
-        // Find the text node sibling: the span's accessible name is its label, the content is its child text.
-        return text;
+        var mirror = _window.FindFirstDescendant(c => c.ByAutomationId(id));
+        var json = mirror?.Name ?? "";
+        if (json.Length == 0)
+            json = mirror?.FindFirstChild()?.Name ?? "";
+        return json.Length == 0 ? "" : System.Text.Json.JsonSerializer.Deserialize<string>(json) ?? "";
     }
 
     public void Dispose()
@@ -230,14 +244,17 @@ internal sealed class EdgePage : IDisposable
             Keyboard.SelectAllAndDelete();
         }
 
+        /// <summary>The field's text through UI Automation; password fields hide their value, so the page mirrors it.</summary>
         public string ReadText()
         {
             var e = Element;
-            if (e.Patterns.Value.IsSupported)
-                return e.Patterns.Value.Pattern.Value.Value.Replace("\r\n", "\n", StringComparison.Ordinal);
-            if (e.Patterns.Text.IsSupported)
-                return e.Patterns.Text.Pattern.DocumentRange.GetText(-1).Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n');
-            return page.Mirror(mirror);
+            if (label == "Password")
+                return page.Mirror(mirror);
+            var text = e.Patterns.Value.IsSupported
+                ? e.Patterns.Value.Pattern.Value.Value
+                : e.Patterns.Text.Pattern.DocumentRange.GetText(-1).TrimEnd('\n');
+            // contenteditable keeps a trailing space as a no-break space so it stays visible.
+            return text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace(' ', ' ');
         }
 
         public void Dispose()

@@ -89,7 +89,8 @@ internal sealed class InputBatch
     /// <summary>
     /// Types text as UTF-16 units with <c>KEYEVENTF_UNICODE</c>. Surrogate pairs go as two consecutive units
     /// (Windows reassembles them into one WM_CHAR pair), so skin tones and ZWJ families arrive intact.
-    /// Newlines and tabs are sent as real Enter/Tab keys, which every app understands.
+    /// Newlines are typed as Shift+Enter — a line break in editors, text areas and terminals, and "new line"
+    /// rather than "send" in chat apps — and tabs as the Tab key.
     /// </summary>
     public InputBatch Text(ReadOnlySpan<char> text)
     {
@@ -101,10 +102,10 @@ internal sealed class InputBatch
                 case '\r':
                     if (i + 1 < text.Length && text[i + 1] == '\n')
                         continue;
-                    Key(VirtualKey.VK_RETURN);
+                    LineBreak();
                     break;
                 case '\n':
-                    Key(VirtualKey.VK_RETURN);
+                    LineBreak();
                     break;
                 case '\t':
                     Key(VirtualKey.VK_TAB);
@@ -117,6 +118,13 @@ internal sealed class InputBatch
         }
 
         return this;
+    }
+
+    private void LineBreak()
+    {
+        Add(VirtualKey.VK_LSHIFT, 0x2A, 0, InputSignature.Comet);
+        Key(VirtualKey.VK_RETURN);
+        Add(VirtualKey.VK_LSHIFT, 0x2A, User32.KEYEVENTF_KEYUP, InputSignature.Comet);
     }
 
     public InputBatch Boundary(Boundary boundary) => boundary.Kind switch

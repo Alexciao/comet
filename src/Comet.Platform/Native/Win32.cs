@@ -293,6 +293,8 @@ internal static partial class User32
     public static partial nint SendMessageW(nint hWnd, uint msg, nuint wParam, nint lParam);
 
     public const uint EM_GETSEL = 0x00B0;
+    public const uint EM_SETSEL = 0x00B1;
+    public const uint EM_REPLACESEL = 0x00C2;
     public const uint SMTO_ABORTIFHUNG = 0x0002;
 
     [LibraryImport("user32.dll")]

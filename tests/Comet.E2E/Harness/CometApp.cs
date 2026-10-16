@@ -165,7 +165,11 @@ internal sealed class CometApp : IDisposable
         {
             // Keep the last run's log for diagnosis (it records events and timings, never typed text).
             if (File.Exists(LogPath))
+            {
                 File.Copy(LogPath, Path.Combine(Path.GetTempPath(), "comet-e2e-last.log"), overwrite: true);
+                var logs = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "comet-e2e-logs"));
+                File.Copy(LogPath, Path.Combine(logs.FullName, $"{DateTime.Now:HHmmss}-{Path.GetFileName(DataDirectory)}.log"), overwrite: true);
+            }
         }
         catch (IOException)
         {
