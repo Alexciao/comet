@@ -36,11 +36,12 @@ public readonly record struct SearchResult(ResultKind Kind, int Index, MatchTier
 /// </summary>
 public sealed class SearchEngine
 {
-    /// <summary>Exact keywords of emoji this common rank with shortcode prefixes, so ":love" puts ❤️ first.</summary>
-    internal const int PopularKeywordRank = 120;
+    /// <summary>Cost per position in a curated word's list: enough to keep the curated order over popularity.</summary>
+    private const int CuratedStep = 50;
 
     private const int TierStride = 1 << 22;
     private const int MaxResults = 64;
+    private const int MaxCost = 300;
 
     private readonly EmojiData? _emoji;
     private SnippetIndex _snippets;
@@ -248,6 +249,10 @@ public sealed class SearchEngine
                     case TermKind.Shortcode:
                         Offer(e, exact ? MatchTier.Exact : MatchTier.ShortcodePrefix, extra, Posting.Slot(p));
                         break;
+                    case TermKind.Curated:
+                        // Curated everyday words behave like aliases, in their curated order.
+                        Offer(e, exact ? MatchTier.Exact : MatchTier.ShortcodePrefix, extra + (Posting.Slot(p) * CuratedStep), 0);
+                        break;
                     case TermKind.ShortcodeWord:
                         Offer(e, MatchTier.NameWordPrefix, extra, Posting.Slot(p));
                         break;
@@ -255,10 +260,7 @@ public sealed class SearchEngine
                         Offer(e, MatchTier.NameWordPrefix, extra, 0);
                         break;
                     default:
-                        if (exact && data.Popularity(e) <= PopularKeywordRank)
-                            Offer(e, MatchTier.ShortcodePrefix, extra, 0);
-                        else
-                            Offer(e, exact ? MatchTier.KeywordExact : MatchTier.KeywordPrefix, extra, 0);
+                        Offer(e, exact ? MatchTier.KeywordExact : MatchTier.KeywordPrefix, extra, 0);
                         break;
                 }
             }
@@ -291,12 +293,17 @@ public sealed class SearchEngine
         {
             if (Matched(e) || !_visible[e])
                 continue;
-            foreach (var r in data.FoldedStrings(e))
+            var count = data.ShortcodeCount(e);
+            for (var slot = 0; slot < count; slot++)
             {
-                var s = data.Text(r);
-                if (s.Length > q.Length && s[0] == q[0] && EditDistance.IsSubsequence(q, s, out var span))
-                    Offer(e, MatchTier.Subsequence, ((span - q.Length) * 4) + (s.Length - q.Length), 0);
+                var s = data.Shortcode(e, slot);
+                if (Abbreviation.TryMatch(q, s, out var skipped))
+                    Offer(e, MatchTier.Subsequence, (skipped * 2) + s.Length, slot);
             }
+
+            var name = data.Name(e);
+            if (Abbreviation.TryMatch(q, name, out var nameSkipped))
+                Offer(e, MatchTier.Subsequence, (nameSkipped * 2) + name.Length, 0);
         }
     }
 
@@ -320,21 +327,31 @@ public sealed class SearchEngine
             if (t0 != q0 && t0 != q1 && (text.Length < 2 || (text[1] != q0 && text[1] != q1)))
                 continue;
 
+            // A scramble that keeps the first letter ("hreat") reads as one slip, so it costs like one edit.
             int distance;
             if (EditDistance.IsScrambledPrefix(q, text))
-                distance = 2;
+                distance = 1;
             else if ((distance = EditDistance.PrefixDistance(q, text, max)) > max)
                 continue;
 
-            var cost = (distance * 16) + Math.Max(0, text.Length - q.Length);
+            // Fewer edits first, then whole words over long prefixes; a changed first letter is a rarer slip.
+            var cost = (distance * 24) + (Math.Max(0, text.Length - q.Length) * 3) + (t0 != q0 ? 12 : 0);
             foreach (var p in postings.Slice(terms[t].PostingStart, terms[t].PostingCount))
             {
                 var e = Posting.Emoji(p);
                 if (!Matched(e) || _tier[e] == MatchTier.Typo)
-                    Offer(e, MatchTier.Typo, cost + ((int)Posting.Kind(p) * 2), Posting.Kind(p) == TermKind.Shortcode ? Posting.Slot(p) : 0);
+                    Offer(e, MatchTier.Typo, cost + TypoKindCost(Posting.Kind(p)), Posting.Kind(p) == TermKind.Shortcode ? Posting.Slot(p) : 0);
             }
         }
     }
+
+    private static int TypoKindCost(TermKind kind) => kind switch
+    {
+        TermKind.Shortcode => 0,
+        TermKind.Curated => 2,
+        TermKind.ShortcodeWord or TermKind.NameWord => 8,
+        _ => 24, // keywords are looser than names: a typo on one costs like an extra edit
+    };
 
     // ---- snippets: same tiers, brute force over the (small) user list ----
 
@@ -361,10 +378,10 @@ public sealed class SearchEngine
                 tier = len == q.Length ? MatchTier.KeywordExact : MatchTier.KeywordPrefix;
                 cost = len - q.Length;
             }
-            else if (q.Length >= 3 && s.FoldedName.Length > q.Length && s.FoldedName[0] == q[0] && EditDistance.IsSubsequence(q, s.FoldedName, out var span))
+            else if (q.Length >= 3 && Abbreviation.TryMatch(q, s.Name, out var skipped))
             {
                 tier = MatchTier.Subsequence;
-                cost = ((span - q.Length) * 4) + (s.FoldedName.Length - q.Length);
+                cost = (skipped * 2) + s.Name.Length;
             }
             else if (q.Length >= 4)
             {
@@ -411,7 +428,7 @@ public sealed class SearchEngine
         var score = (int)tier * TierStride;
         score += 1_000_000;
         score -= FrecencyBoost(_emojiFrecency[e]);
-        score += Math.Min(_cost[e], 60) * 3_000;
+        score += Math.Min(_cost[e], MaxCost) * 3_000;
         score += PopularityPenalty(data.Popularity(e));
         if (data.IsVariant(e))
             score += 40_000;
@@ -425,7 +442,7 @@ public sealed class SearchEngine
         // Snippets the user named go above emoji at the same name-match tier.
         score += tier <= MatchTier.NameWordPrefix ? 0 : 1_000_000;
         score -= FrecencyBoost(_snippetFrecency[i]);
-        score += Math.Min(_snippetCost[i], 60) * 3_000;
+        score += Math.Min(_snippetCost[i], MaxCost) * 3_000;
         return score;
     }
 

@@ -12,7 +12,7 @@ using Buffer = HarfBuzzSharp.Buffer;
 //   gemoji.json                    GitHub aliases and tags
 //   emojilib-en-US.json            everyday keywords
 //   unicode-emoji-frequency.txt    popularity ranking (Unicode Consortium)
-//   ../keywords-extra.tsv          curated keywords for words people actually type
+//   ../everyday-words.tsv          curated everyday words and slang, ranked like aliases
 //
 // Every emoji is kept; the ones this machine's Segoe UI Emoji cannot draw as one glyph are flagged, and the
 // app re-checks against the installed font at load time (so a Windows font update reveals them).
@@ -35,7 +35,8 @@ var shortcodeSets = ShortcodeSources
 var gemoji = LoadGemoji(Path.Combine(src, "gemoji.json"));
 var emojilib = LoadEmojilib(Path.Combine(src, "emojilib-en-US.json"));
 var popularity = LoadPopularity(Path.Combine(src, "unicode-emoji-frequency.txt"));
-var extra = LoadExtraKeywords(Path.Combine(root, "data", "keywords-extra.tsv"));
+var curated = LoadEverydayWords(Path.Combine(root, "data", "everyday-words.tsv"));
+var curatedUsed = new HashSet<string>();
 using var font = new FontChecker(fontPath);
 
 var entries = new List<EmojiSourceEntry>();
@@ -98,7 +99,6 @@ foreach (var e in emojibase.RootElement.EnumerateArray())
         AddKeywords(tags.EnumerateArray().Select(t => t.GetString()!));
     AddKeywords((gemoji.TryGetValue(key, out var gt) ? gt.Tags : null));
     AddKeywords(emojilib.GetValueOrDefault(key));
-    AddKeywords(extra.GetValueOrDefault(key));
 
     List<string>? tones = null;
     if (e.TryGetProperty("skins", out var skins))
@@ -117,6 +117,7 @@ foreach (var e in emojibase.RootElement.EnumerateArray())
         Name: label,
         Shortcodes: shortcodes,
         Keywords: keywords,
+        Curated: CuratedFor(key),
         SkinTones: tones,
         Popularity: popularity.GetValueOrDefault(key, ushort.MaxValue),
         Order: e.TryGetProperty("order", out var order) ? order.GetInt32() : 0,
@@ -124,6 +125,17 @@ foreach (var e in emojibase.RootElement.EnumerateArray())
         IsVariant: IsVariant(hex),
         RenderedOnReferenceFont: rendered));
 }
+
+IReadOnlyList<(string Word, int Position)> CuratedFor(string key)
+{
+    if (!curated.TryGetValue(key, out var words))
+        return [];
+    curatedUsed.Add(key);
+    return words;
+}
+
+foreach (var missing in curated.Keys.Except(curatedUsed))
+    Console.WriteLine($"warning: everyday-words.tsv references unknown emoji {missing}");
 
 entries.Sort((a, b) => a.Order.CompareTo(b.Order));
 var blob = EmojiBlobWriter.Write(entries, dataVersion);
@@ -229,19 +241,35 @@ static Dictionary<string, int> LoadPopularity(string path)
     return map;
 }
 
-static Dictionary<string, string[]> LoadExtraKeywords(string path)
+// Returns emoji -> [(word, position)] from lines "word<TAB>emoji emoji ...". Repeated words append.
+static Dictionary<string, List<(string Word, int Position)>> LoadEverydayWords(string path)
 {
-    var map = new Dictionary<string, string[]>();
-    if (!File.Exists(path))
-        return map;
+    var byWord = new Dictionary<string, List<string>>(StringComparer.Ordinal);
     foreach (var line in File.ReadLines(path))
     {
         if (line.StartsWith('#') || string.IsNullOrWhiteSpace(line))
             continue;
         var parts = line.Split('\t');
-        var key = StripVs(parts[0].Trim());
-        var words = parts[1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        map[key] = map.TryGetValue(key, out var existing) ? [.. existing, .. words] : words;
+        var word = parts[0].Trim().ToLowerInvariant();
+        if (!byWord.TryGetValue(word, out var list))
+            byWord[word] = list = [];
+        foreach (var emoji in parts[1].Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var key = StripVs(emoji);
+            if (!list.Contains(key))
+                list.Add(key);
+        }
+    }
+
+    var map = new Dictionary<string, List<(string, int)>>();
+    foreach (var (word, emojis) in byWord)
+    {
+        for (var i = 0; i < emojis.Count; i++)
+        {
+            if (!map.TryGetValue(emojis[i], out var list))
+                map[emojis[i]] = list = [];
+            list.Add((word, i));
+        }
     }
 
     return map;

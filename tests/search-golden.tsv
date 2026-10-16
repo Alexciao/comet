@@ -1,0 +1,393 @@
+# Search golden set: query<TAB>emoji<TAB>must be within top N (1 or 3)<TAB>note
+# Written before tuning; expectations reflect what a person typing the query is thinking of.
+# --- examples from the spec
+lol	😂	3	slang
+yay	🎉	3	slang
+love	❤️	3	everyday word
+love	😍	3	everyday word
+love	🥰	3	everyday word
+sad	😢	3	everyday word
+sad	😞	3	everyday word
+ok	👌	3	ambiguous short word
+ok	✅	3	ambiguous short word
+ok	🆗	3	ambiguous short word
+fire	🔥	1	shortcode
+lit	🔥	3	slang
+thu	👍	1	shortcode prefix
+tup	👍	3	abbreviation
+hrt	❤️	3	abbreviation
+hreat	❤️	3	typo (scramble)
+smiel	😄	3	typo (transposition)
+thnumbs	👍	3	typo (insertion)
+thumbsup	👍	1	separator-insensitive
+thumbs_up	👍	1	separator-insensitive
+thumbs-up	👍	1	separator-insensitive
+# --- Slack / GitHub shortcodes people type from memory
+smile	😄	1	shortcode
+joy	😂	1	shortcode
+heart	❤️	1	shortcode
++1	👍	1	shortcode
+-1	👎	1	shortcode
+tada	🎉	1	shortcode
+pray	🙏	1	shortcode
+eyes	👀	1	shortcode
+rocket	🚀	1	shortcode
+100	💯	1	shortcode
+clap	👏	1	shortcode
+wave	👋	1	shortcode
+muscle	💪	1	shortcode
+thinking	🤔	1	shortcode
+sob	😭	1	shortcode
+wink	😉	1	shortcode
+grin	😁	1	shortcode
+sweat_smile	😅	1	shortcode
+rofl	🤣	1	shortcode
+sunglasses	😎	1	shortcode
+facepalm	🤦	1	shortcode, base before gendered variants
+shrug	🤷	1	shortcode, base before gendered variants
+raised_hands	🙌	1	shortcode
+white_check_mark	✅	1	shortcode
+x	❌	1	shortcode (1 char)
+warning	⚠️	1	shortcode
+star	⭐	1	shortcode
+sparkles	✨	1	shortcode
+heart_eyes	😍	1	shortcode
+kissing_heart	😘	1	shortcode
+blush	😊	1	shortcode
+slightly_smiling_face	🙂	1	shortcode
+upside_down_face	🙃	1	shortcode
+scream	😱	1	shortcode
+rage	😡	1	shortcode
+skull	💀	1	shortcode
+poop	💩	1	shortcode
+see_no_evil	🙈	1	shortcode
+partying_face	🥳	1	shortcode
+pleading_face	🥺	1	shortcode
+melting_face	🫠	1	shortcode
+saluting_face	🫡	1	shortcode
+heart_on_fire	❤️‍🔥	1	shortcode
+boom	💥	1	shortcode
+dizzy	💫	1	shortcode
+sweat_drops	💦	1	shortcode
+dash	💨	1	shortcode
+bomb	💣	1	shortcode
+zzz	💤	1	shortcode
+anger	💢	1	shortcode
+metal	🤘	1	shortcode
+point_up	☝️	1	shortcode
+middle_finger	🖕	1	shortcode
+handshake	🤝	1	shortcode
+crossed_fingers	🤞	1	shortcode
+punch	👊	1	shortcode
+blue_heart	💙	1	shortcode
+purple_heart	💜	1	shortcode
+broken_heart	💔	1	shortcode
+black_heart	🖤	1	shortcode
+green_heart	💚	1	shortcode
+yellow_heart	💛	1	shortcode
+orange_heart	🧡	1	shortcode
+sparkling_heart	💖	1	shortcode
+checkered_flag	🏁	1	shortcode
+four_leaf_clover	🍀	1	shortcode
+money_mouth_face	🤑	1	shortcode
+cowboy	🤠	3	shortcode prefix
+# --- everyday things
+coffee	☕	1	object
+beer	🍺	1	object
+beers	🍻	1	object
+pizza	🍕	1	object
+birthday	🎂	1	object
+cake	🍰	3	object
+dog	🐶	1	animal
+cat	🐱	1	animal
+unicorn	🦄	1	animal
+monkey	🐒	3	animal
+fox	🦊	1	animal
+panda	🐼	1	animal
+bear	🐻	1	animal
+lion	🦁	1	animal
+tiger	🐯	3	animal
+pig	🐷	3	animal
+cow	🐮	3	animal
+chicken	🐔	1	animal
+penguin	🐧	1	animal
+frog	🐸	1	animal
+turtle	🐢	1	animal
+snake	🐍	1	animal
+octopus	🐙	1	animal
+butterfly	🦋	1	animal
+bee	🐝	3	animal
+sloth	🦥	1	animal
+otter	🦦	1	animal
+dolphin	🐬	1	animal
+whale	🐳	3	animal
+sun	☀️	3	nature
+moon	🌙	3	nature
+rainbow	🌈	1	nature
+snowflake	❄️	1	nature
+zap	⚡	1	nature
+lightning	⚡	3	synonym
+rose	🌹	1	nature
+sunflower	🌻	1	nature
+tree	🌳	3	nature
+earth	🌍	3	nature
+bulb	💡	1	object
+idea	💡	3	synonym
+lock	🔒	1	object
+key	🔑	1	object
+bug	🐛	1	object
+computer	💻	1	object
+phone	📱	3	object
+email	📧	3	object
+calendar	📅	3	object
+memo	📝	1	object
+pushpin	📌	1	object
+link	🔗	1	object
+bell	🔔	1	object
+gift	🎁	1	object
+trophy	🏆	1	object
+soccer	⚽	1	object
+money	💰	3	object
+chart	📈	3	object
+airplane	✈️	1	object
+house	🏠	1	object
+guitar	🎸	1	object
+microphone	🎤	1	object
+headphones	🎧	1	object
+camera	📷	1	object
+books	📚	1	object
+paperclip	📎	1	object
+scissors	✂️	1	object
+hammer	🔨	1	object
+wrench	🔧	1	object
+gear	⚙️	1	object
+package	📦	1	object
+envelope	✉️	1	object
+apple	🍎	1	food
+banana	🍌	1	food
+avocado	🥑	1	food
+taco	🌮	1	food
+wine	🍷	3	food
+champagne	🍾	1	food
+popcorn	🍿	1	food
+doughnut	🍩	1	food
+cookie	🍪	1	food
+music	🎵	3	synonym
+# --- feelings and synonyms
+happy	😊	3	synonym
+laugh	😂	3	synonym
+haha	😂	3	slang
+lmao	🤣	3	slang
+angry	😠	3	synonym
+mad	😡	3	synonym
+tired	😫	3	synonym
+sleep	😴	3	synonym
+sick	🤒	3	synonym
+vomit	🤮	1	synonym
+puke	🤮	3	synonym
+cool	😎	3	synonym
+nerd	🤓	1	synonym
+kiss	😘	3	synonym
+hug	🤗	1	synonym
+thanks	🙏	3	synonym
+please	🙏	3	synonym
+celebrate	🎉	3	synonym
+congrats	🎉	3	synonym
+party	🥳	3	synonym
+party	🎉	3	synonym
+done	✅	3	synonym
+check	✅	3	synonym
+wow	😮	3	synonym
+omg	😱	3	slang
+surprised	😲	3	synonym
+scared	😨	3	synonym
+nervous	😬	3	synonym
+awkward	😬	3	synonym
+cringe	😬	3	slang
+confused	😕	1	synonym
+think	🤔	1	synonym
+hmm	🤔	3	slang
+eyeroll	🙄	3	synonym
+meh	😐	3	slang
+dead	💀	3	slang
+evil	😈	3	synonym
+devil	😈	3	synonym
+angel	😇	1	synonym
+ghost	👻	1	synonym
+alien	👽	1	synonym
+robot	🤖	1	synonym
+clown	🤡	1	synonym
+shit	💩	3	slang
+strong	💪	3	synonym
+flex	💪	3	slang
+applause	👏	3	synonym
+peace	✌️	3	synonym
+bye	👋	3	synonym
+hello	👋	3	synonym
+heartbreak	💔	3	synonym
+mindblown	🤯	3	slang
+hot	🥵	3	synonym
+cold	🥶	3	synonym
+yawn	🥱	1	synonym
+drool	🤤	1	synonym
+shush	🤫	3	synonym
+salute	🫡	3	synonym
+cry	😢	1	shortcode
+loudly	😭	1	name word
+pleading	🥺	1	name word
+melting	🫠	1	name word
+holding_back	🥹	1	name word
+exploding	🤯	1	name word
+starstruck	🤩	1	separator-insensitive
+nauseated	🤢	1	name word
+sneez	🤧	1	name word prefix
+monocle	🧐	1	name word
+zany	🤪	1	name word
+rolling	🤣	3	name word
+tears_of	😂	3	multi-word prefix
+red_heart	❤️	1	alias
+hearteyes	😍	1	separator-insensitive
+okhand	👌	1	separator-insensitive
+raisedhands	🙌	1	separator-insensitive
+white-check-mark	✅	1	separator-insensitive
+# --- texting abbreviations
+thx	🙏	3	abbreviation
+ty	🙏	3	abbreviation
+smh	🤦	3	abbreviation
+idk	🤷	3	abbreviation
+bday	🎂	3	abbreviation
+xd	😆	3	abbreviation
+# --- subsequence / abbreviation of shortcodes
+wcm	✅	3	abbreviation of white_check_mark
+sws	😅	3	abbreviation of sweat_smile
+rckt	🚀	3	abbreviation
+thnk	🤔	3	abbreviation
+pzz	🍕	3	abbreviation
+hrteyes	😍	3	abbreviation
+# --- typos
+rcoket	🚀	3	typo (transposition)
+pizzza	🍕	3	typo (insertion)
+cofee	☕	3	typo (deletion)
+unicron	🦄	3	typo (transposition)
+tahnks	🙏	3	typo (transposition)
+laughign	😆	3	typo (transposition, 8 chars)
+sunglases	😎	3	typo (deletion, 9 chars)
+rainbwo	🌈	3	typo (transposition)
+angery	😠	3	typo (insertion)
+trophey	🏆	3	typo (insertion)
+birthdya	🎂	3	typo (transposition, 8 chars)
+facpalm	🤦	3	typo (deletion)
+hearth	❤️	3	typo (insertion)
+thumbsupp	👍	3	typo (insertion)
+skul	💀	1	prefix
+# --- holdout: written after the first tuning pass, before running them
+grinning	😀	1	shortcode
+relieved	😌	1	shortcode
+smirk	😏	1	shortcode
+unamused	😒	1	shortcode
+pensive	😔	1	shortcode
+weary	😩	1	shortcode
+triumph	😤	1	shortcode
+flushed	😳	1	shortcode
+hushed	😯	1	shortcode
+yum	😋	1	slang
+stuck_out	😛	3	multi-word prefix
+kissing	😗	3	shortcode prefix
+sweat	😓	3	shortcode
+poop	💩	1	shortcode
+handshak	🤝	1	prefix
+thumbsdown	👎	1	separator-insensitive
+thumbs_d	👎	1	prefix
+ok_ha	👌	1	prefix
+fist	✊	3	shortcode
+writing	✍️	3	name word
+nail	💅	3	shortcode prefix
+selfie	🤳	1	shortcode
+brain	🧠	1	shortcode
+tooth	🦷	1	shortcode
+eye	👁️	3	shortcode
+tongue	👅	3	shortcode
+lips	👄	3	shortcode
+baby	👶	1	shortcode
+santa	🎅	1	shortcode
+ninja	🥷	1	shortcode
+mermaid	🧜	3	shortcode
+vampire	🧛	1	shortcode
+zombie	🧟	1	shortcode
+snowman	☃️	3	shortcode
+volcano	🌋	1	shortcode
+mushroom	🍄	1	shortcode
+cactus	🌵	1	shortcode
+hamburger	🍔	1	shortcode
+burger	🍔	3	synonym
+fries	🍟	1	shortcode
+sushi	🍣	1	shortcode
+ramen	🍜	1	synonym
+croissant	🥐	1	shortcode
+cheese	🧀	1	shortcode
+egg	🥚	1	shortcode
+bacon	🥓	1	shortcode
+icecream	🍦	1	shortcode
+chocolate	🍫	3	name word
+pumpkin	🎃	3	name word
+balloon	🎈	1	shortcode
+confetti	🎊	3	shortcode prefix
+crown	👑	1	shortcode
+ring	💍	1	shortcode
+gem	💎	1	shortcode
+diamond	💎	3	synonym
+umbrella	☂️	3	shortcode
+battery	🔋	1	shortcode
+plug	🔌	3	shortcode prefix
+satellite	🛰️	3	shortcode
+telescope	🔭	1	shortcode
+dna	🧬	1	shortcode
+magnet	🧲	1	shortcode
+pill	💊	1	shortcode
+syringe	💉	1	shortcode
+shopping	🛍️	3	shortcode prefix
+bank	🏦	1	shortcode
+hospital	🏥	1	shortcode
+school	🏫	1	shortcode
+tent	⛺	1	shortcode
+ticket	🎫	3	shortcode
+dice	🎲	3	synonym
+chess	♟️	3	name word
+puzzle	🧩	1	shortcode prefix
+teddy	🧸	1	shortcode prefix
+yarn	🧶	1	shortcode
+sewing	🪡	3	name word
+hourglass	⌛	3	shortcode
+stopwatch	⏱️	1	shortcode
+hammer_and	🛠️	3	multi-word prefix
+recycle	♻️	1	shortcode
+infinity	♾️	1	shortcode
+peace_symbol	☮️	1	shortcode
+yin	☯️	1	shortcode prefix
+question	❓	1	shortcode
+bangbang	‼️	1	shortcode
+copyright	©️	1	shortcode
+tm	™️	1	shortcode
+sos	🆘	1	shortcode
+new	🆕	3	shortcode
+free	🆓	1	shortcode
+red_circle	🔴	1	shortcode
+blue_square	🟦	1	shortcode
+arrow_right	➡️	1	shortcode
+arrow_up	⬆️	1	shortcode
+repeat	🔁	1	shortcode
+mute	🔇	1	shortcode
+loudspeaker	📢	1	shortcode
+hammr	🔨	3	typo (deletion)
+penguen	🐧	3	typo (substitution)
+dolhpin	🐬	3	typo (transposition)
+avocdao	🥑	3	typo (transposition)
+crwon	👑	3	typo (transposition)
+vlcano	🌋	3	typo (deletion)
+butterfyl	🦋	3	typo (transposition, 9 chars)
+tlescope	🔭	3	typo (deletion, 8 chars)
+chcolate	🍫	3	typo (deletion, 8 chars)
+scisors	✂️	3	typo (deletion)
+bnna	🍌	3	abbreviation
+cmptr	💻	3	abbreviation
+blln	🎈	3	abbreviation

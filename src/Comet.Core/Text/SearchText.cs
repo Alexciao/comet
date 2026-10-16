@@ -102,6 +102,18 @@ public static class SearchText
         return new string(buffer[..n]);
     }
 
+    /// <summary>Folds a single character (first folded char), or returns <c>'\0'</c> for separators.</summary>
+    public static char FoldChar(char c)
+    {
+        if (c < 0x250)
+        {
+            var f = s_fold[c];
+            return f.Length == 0 ? '\0' : f[0];
+        }
+
+        return char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : '\0';
+    }
+
     /// <summary>True for characters that separate words (anything that folds to nothing).</summary>
     public static bool IsSeparator(char c) => c < 0x250 ? s_fold[c].Length == 0 : !char.IsLetterOrDigit(c);
 

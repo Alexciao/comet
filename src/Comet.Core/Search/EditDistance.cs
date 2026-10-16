@@ -94,28 +94,4 @@ internal static class EditDistance
         >= '0' and <= '9' => 26 + (c - '0'),
         _ => -1,
     };
-
-    /// <summary>True when every character of <paramref name="query"/> appears in order in <paramref name="text"/>.</summary>
-    public static bool IsSubsequence(ReadOnlySpan<char> query, ReadOnlySpan<char> text, out int span)
-    {
-        span = 0;
-        var qi = 0;
-        var first = -1;
-        for (var ti = 0; ti < text.Length && qi < query.Length; ti++)
-        {
-            if (text[ti] == query[qi])
-            {
-                if (qi == 0)
-                    first = ti;
-                qi++;
-                if (qi == query.Length)
-                {
-                    span = ti - first + 1;
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
 }

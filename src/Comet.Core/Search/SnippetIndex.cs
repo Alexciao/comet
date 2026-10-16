@@ -25,7 +25,7 @@ public sealed class SnippetIndex
                     break;
             }
 
-            _entries[i] = new Entry(SearchText.Fold(name), [.. SearchText.WordSuffixes(name)], [.. words]);
+            _entries[i] = new Entry(name, SearchText.Fold(name), [.. SearchText.WordSuffixes(name)], [.. words]);
         }
     }
 
@@ -47,5 +47,5 @@ public sealed class SnippetIndex
         return -1;
     }
 
-    internal readonly record struct Entry(string FoldedName, string[] NameSuffixes, string[] TextWords);
+    internal readonly record struct Entry(string Name, string FoldedName, string[] NameSuffixes, string[] TextWords);
 }

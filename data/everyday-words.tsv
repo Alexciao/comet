@@ -1,0 +1,441 @@
+# Everyday words and texting slang people type after ":" that upstream data doesn't map well.
+# word<TAB>emoji in order of preference (space-separated). These rank like aliases, in this order.
+# Keep it general: add words people actually type, not just golden-set queries.
+love	❤️ 😍 🥰 😘 💕
+loving	🥰 😍 ❤️
+luv	❤️ 😍
+ily	❤️ 🤟
+xoxo	😘 💋 ❤️
+kiss	😘 💋 😚
+kisses	😘 💋
+hug	🤗 🫂
+hugs	🤗 🫂
+heart	❤️
+hearts	💕 ❤️ 💖
+crush	😍 🥰
+cute	🥰 🥺 😊
+aww	🥺 🥹 🥰
+adorable	🥰 🥺
+happy	😊 😄 😁 🙂
+glad	😊 🙂
+joy	😂
+smiley	😃 🙂
+lol	😂 🤣 😆
+lmao	🤣 😂
+lmfao	🤣 😂
+rofl	🤣
+haha	😂 🤣 😆
+hahaha	🤣 😂
+hehe	😆 😁 🤭
+lul	😂
+xd	😆 😂
+funny	😂 🤣 😆
+laugh	😂 🤣 😆
+laughing	😆 😂 🤣
+giggle	🤭 😆
+grin	😁 😀
+sad	😢 😞 😭 😔 🥺
+unhappy	😞 😢 ☹️
+depressed	😞 😔
+cry	😢 😭 🥹
+crying	😭 😢
+tears	😭 😢 🥹
+sob	😭
+upset	😞 😢 😠
+sorry	🙏 😔 😞
+disappointed	😞 😔
+lonely	😔 😞
+hurt	🤕 💔 😢
+heartbroken	💔 😢
+heartbreak	💔
+angry	😠 😡 🤬
+mad	😡 😠 🤬
+furious	🤬 😡
+rage	😡 🤬
+annoyed	😒 🙄 😤
+grr	😠 😤
+ugh	😩 😫 🙄
+eyeroll	🙄
+whatever	🙄 😒
+meh	😐 😑 🙄
+bored	🥱 😑 😐
+boring	🥱 😑
+tired	😫 😴 🥱 😩
+sleepy	😪 😴 🥱
+sleep	😴 💤 🛌
+night	🌙 😴 🌃
+goodnight	😴 🌙 💤
+gn	😴 🌙
+morning	☀️ 🌅 ☕
+gm	☀️ ☕
+sick	🤒 🤢 🤮 😷
+ill	🤒 🤧
+vomit	🤮
+puke	🤮 🤢
+gross	🤢 🤮
+disgusting	🤢 🤮
+eww	🤢
+yuck	🤢 🤮
+cold	🥶 ❄️
+freezing	🥶
+hot	🥵 🔥
+sweating	😅 😓 🥵
+cool	😎 🆒
+chill	😎 😌
+relaxed	😌 😎
+calm	😌
+nerd	🤓
+smart	🤓 🧠
+genius	🧠 🤓
+think	🤔
+thinking	🤔
+hmm	🤔 🧐
+hmmm	🤔 🧐
+wonder	🤔
+confused	😕 🤔 😵‍💫
+huh	🤨 😕 🤔
+what	😳 🤨 😮
+wow	😮 🤩 😲
+omg	😱 😮 😲
+oh	😮
+shocked	😱 😲 😮
+shock	😱 😲
+surprised	😲 😮 😯
+amazed	🤩 😮
+amazing	🤩 🔥 😍
+awesome	🤩 🔥 👏
+wtf	🤬 😳 🤯
+scared	😨 😱 😰
+afraid	😨 😰
+fear	😨 😱
+nervous	😬 😰 😅
+anxious	😰 😬
+awkward	😬 😅
+cringe	😬 😖
+oops	😅 🙊 😬
+yikes	😬 😳
+embarrassed	😳 😅
+blush	😊 😳
+shy	😊 🥺
+pleading	🥺
+please	🙏 🥺
+plz	🙏 🥺
+pls	🙏 🥺
+thanks	🙏 😊
+thank	🙏
+thankyou	🙏
+thx	🙏
+ty	🙏
+tysm	🙏 🥰
+grateful	🙏 🥹
+pray	🙏
+praying	🙏
+hope	🤞 🙏
+luck	🍀 🤞
+goodluck	🍀 🤞
+fingerscrossed	🤞
+ok	👌 ✅ 🆗 👍
+okay	👌 👍 🆗
+k	👍 👌
+kk	👌 👍
+yes	✅ 👍 🙌
+yep	👍 ✅
+yeah	👍 🙌
+sure	👍 👌
+agree	👍 💯
+no	❌ 🙅 👎
+nope	🙅 👎 ❌
+nah	🙅 👎
+wrong	❌
+deal	🤝
+done	✅ ✔️ 🏁
+check	✅ ✔️ ☑️
+checkmark	✅ ✔️
+correct	✅ ✔️
+good	👍 👌
+great	👍 🙌 🔥
+nice	👍 😎 👌
+perfect	👌 💯
+excellent	👌 💯
+best	🏆 💯 🥇
+yay	🎉 🥳 🙌
+yey	🎉 🥳
+woohoo	🎉 🥳 🙌
+woo	🎉 🥳
+hooray	🎉 🙌
+celebrate	🎉 🥳 🍾
+celebration	🎉 🥳
+congrats	🎉 🥳 👏
+congratulations	🎉 🥳 👏
+party	🥳 🎉 🎊
+bday	🎂 🎉 🥳
+hbd	🎂 🎉 🥳
+birthday	🎂 🎉 🥳
+cheers	🥂 🍻 🍺
+drinks	🍻 🥂 🍸
+win	🏆 🥇 🎉
+winner	🏆 🥇
+victory	✌️ 🏆
+lit	🔥
+fire	🔥
+hype	🔥 🙌 🚀
+goat	🐐
+slay	💅 🔥
+dead	💀 😂
+ded	💀
+rip	🪦 💀 🕊️
+skull	💀
+shit	💩
+crap	💩
+poo	💩
+fail	🤦 😬
+smh	🤦 😒
+facepalm	🤦
+idk	🤷
+dunno	🤷
+shrug	🤷
+whatever	🙄 🤷
+strong	💪
+flex	💪
+gym	💪 🏋️
+workout	💪 🏋️
+muscle	💪
+power	💪 ⚡
+clap	👏
+applause	👏
+bravo	👏
+respect	🫡 🙏
+salute	🫡
+hi	👋 😊
+hello	👋 😊
+hey	👋
+bye	👋 😘
+goodbye	👋
+cya	👋
+wave	👋
+peace	✌️ ☮️
+point	👉 ☝️
+up	⬆️ 👆 ☝️
+down	⬇️ 👇
+left	⬅️ 👈
+right	➡️ 👉
+eyes	👀
+look	👀
+watching	👀
+see	👀
+mindblown	🤯
+mind	🤯 🧠
+crazy	🤪 🤯
+silly	🤪 😜 😝
+tongue	😛 😜 😝
+wink	😉 😜
+kidding	😜 😉
+jk	😜 😉
+evil	😈 👿
+devil	😈 👿
+angel	😇 👼
+innocent	😇
+halo	😇
+money	💰 💸 🤑
+cash	💵 💸 💰
+rich	🤑 💰
+pay	💸 💳
+idea	💡
+light	💡
+star	⭐ 🌟
+stars	✨ ⭐
+shine	✨ 🌟
+magic	✨ 🪄
+sparkle	✨
+new	🆕 ✨
+sun	☀️ 🌞
+sunny	☀️ 🌞
+moon	🌙 🌕 🌚
+rain	🌧️ ☔
+snow	❄️ ☃️ 🌨️
+weather	⛅ ☀️ 🌧️
+summer	☀️ 🏖️ 🌴
+winter	❄️ ☃️
+beach	🏖️ 🌊
+sea	🌊
+ocean	🌊
+flower	🌸 🌹 🌷
+flowers	💐 🌸
+plant	🪴 🌱
+food	🍕 🍔 🍝
+hungry	🤤 🍕 🍔
+yum	😋 🤤
+yummy	😋 🤤
+delicious	😋 🤤
+eat	🍽️ 😋
+pasta	🍝
+spaghetti	🍝
+coffee	☕
+tea	🍵 ☕
+beer	🍺 🍻
+wine	🍷 🥂
+drink	🥤 🍹 🍺
+water	💧 🌊
+music	🎵 🎶 🎧
+song	🎵 🎶
+dance	💃 🕺
+dancing	💃 🕺
+game	🎮 🎲
+gaming	🎮
+movie	🎬 🍿
+book	📖 📚
+read	📖 📚
+work	💼 💻
+office	🏢 💼
+computer	💻 🖥️
+laptop	💻
+phone	📱 ☎️
+call	📞 📱 🤙
+email	📧 ✉️
+mail	📧 ✉️ 📬
+message	💬 ✉️
+chat	💬
+time	⏰ ⌛ 🕒
+clock	⏰ 🕒
+late	⏰ 🏃
+wait	⏳ ⌛
+soon	🔜
+deadline	⏰ 📅
+date	📅
+calendar	📅 🗓️
+meeting	📅 👥
+note	📝 🗒️
+notes	📝
+write	✍️ 📝
+list	📝 📋
+doc	📄 📝
+document	📄
+file	📄 📁
+folder	📁 📂
+link	🔗
+search	🔍 🔎
+find	🔍
+lock	🔒
+secure	🔒 🔐
+secret	🤫 🔒
+quiet	🤫
+shush	🤫
+shh	🤫
+fix	🔧 🛠️
+tools	🛠️ 🔧
+build	🏗️ 🔨
+bug	🐛 🐞
+ship	🚀 🚢
+launch	🚀
+deploy	🚀
+release	🚀 🎉
+speed	⚡ 🏎️
+fast	⚡ 💨 🏃
+quick	⚡
+slow	🐢 🐌
+warning	⚠️
+alert	🚨 ⚠️
+danger	⚠️ ☠️
+stop	🛑 ✋
+important	❗ ⚠️ ‼️
+question	❓ 🤔
+exclamation	❗ ‼️
+info	ℹ️
+plus	➕
+minus	➖
+pin	📌 📍
+location	📍
+home	🏠 🏡
+house	🏠 🏡
+travel	✈️ 🧳 🌍
+trip	✈️ 🧳
+vacation	🏖️ ✈️ 🌴
+holiday	🏖️ 🎄
+flight	✈️
+car	🚗 🚙
+bike	🚲
+train	🚆 🚄
+world	🌍 🌎 🌏
+earth	🌍 🌎
+globe	🌍 🌐
+gift	🎁
+present	🎁
+christmas	🎄 🎅 🎁
+xmas	🎄 🎅
+halloween	🎃 👻
+easter	🐣 🐰 🥚
+baby	👶 🍼
+family	👪 👨‍👩‍👧
+friends	👯 🫂
+friend	🤝 🫂
+team	🤝 👥
+dog	🐶 🐕
+puppy	🐶
+cat	🐱 🐈
+kitty	🐱
+pet	🐶 🐱
+bird	🐦
+unicorn	🦄
+dino	🦖 🦕
+monkey	🐒 🐵 🙈
+running	🏃
+run	🏃 💨
+walk	🚶
+swim	🏊
+sport	⚽ 🏀
+football	⚽ 🏈
+soccer	⚽
+basketball	🏀
+tennis	🎾
+trophy	🏆
+medal	🏅 🥇
+first	🥇
+1st	🥇
+number1	🥇 ☝️
+100	💯
+hundred	💯
+keep	💯
+true	💯
+facts	💯
+real	💯
+target	🎯
+goal	🎯 🥅 ⚽
+focus	🎯
+plan	📋 🗺️
+chart	📈 📊
+growth	📈 🌱
+stonks	📈
+graph	📈 📊
+up	⬆️ 📈
+sweat	😅 😓 💦
+phew	😅 😮‍💨
+relief	😌 😮‍💨
+sigh	😮‍💨 😔
+yawn	🥱
+facepalm	🤦
+blind	🙈
+monkeys	🙈 🙉 🙊
+oof	😬 😣
+ouch	🤕 😣
+pain	🤕 😣
+headache	🤕 🤯
+covid	😷 🦠
+mask	😷
+virus	🦠
+doctor	🧑‍⚕️ 🩺
+medicine	💊
+pill	💊
+brain	🧠
+think	🤔 🧠
+hmm	🤔
+clown	🤡
+robot	🤖
+bot	🤖
+alien	👽
+ghost	👻
+boo	👻
+skeleton	💀
+zombie	🧟
+poop	💩
+diamond	💎 ♦️
+gem	💎

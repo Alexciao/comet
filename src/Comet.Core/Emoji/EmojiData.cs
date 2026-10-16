@@ -68,12 +68,11 @@ public sealed unsafe class EmojiData : IDisposable
         {
             if (!Ok(r.Emoji) || !Ok(r.Name) || r.Emoji.Length == 0 || r.ShortcodeCount == 0
                 || !Range(r.FirstShortcode, r.ShortcodeCount, EmojiBlob.Section.Shortcodes)
-                || !Range(r.FirstFolded, r.FoldedCount, EmojiBlob.Section.Folded)
                 || (r.FirstTone >= 0 && !Range(r.FirstTone, 5, EmojiBlob.Section.Tones)))
                 throw new InvalidDataException("Emoji data has an invalid emoji record.");
         }
 
-        ReadOnlySpan<EmojiBlob.Section> stringSections = [EmojiBlob.Section.Shortcodes, EmojiBlob.Section.Folded, EmojiBlob.Section.Tones];
+        ReadOnlySpan<EmojiBlob.Section> stringSections = [EmojiBlob.Section.Shortcodes, EmojiBlob.Section.Tones];
         foreach (var s in stringSections)
         {
             foreach (var r in Section<StringRef>(s))
@@ -193,11 +192,6 @@ public sealed unsafe class EmojiData : IDisposable
         return Text(Section<StringRef>(EmojiBlob.Section.Shortcodes)[r.FirstShortcode + slot]);
     }
 
-    internal ReadOnlySpan<StringRef> FoldedStrings(int index)
-    {
-        ref readonly var r = ref Records[index];
-        return Section<StringRef>(EmojiBlob.Section.Folded).Slice(r.FirstFolded, r.FoldedCount);
-    }
 
     public int Popularity(int index) => Records[index].Popularity;
 

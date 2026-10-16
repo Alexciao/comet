@@ -4,11 +4,13 @@ using Comet.Core.Text;
 namespace Comet.Core.Emoji;
 
 /// <summary>One emoji as assembled by the data builder from the upstream datasets.</summary>
+/// <param name="Curated">Everyday words mapped to this emoji, with the emoji's preference position for that word.</param>
 public sealed record EmojiSourceEntry(
     string Emoji,
     string Name,
     IReadOnlyList<string> Shortcodes,
     IReadOnlyList<string> Keywords,
+    IReadOnlyList<(string Word, int Position)> Curated,
     IReadOnlyList<string>? SkinTones,
     int Popularity,
     int Order,
@@ -40,7 +42,6 @@ public static class EmojiBlobWriter
 
         var records = new EmojiRecord[entries.Count];
         var shortcodes = new List<StringRef>();
-        var folded = new List<StringRef>();
         var tones = new List<StringRef>();
         var postings = new SortedDictionary<string, List<uint>>(StringComparer.Ordinal);
 
@@ -67,7 +68,6 @@ public static class EmojiBlobWriter
             r.Name = Intern(e.Name);
             r.FirstShortcode = shortcodes.Count;
             r.ShortcodeCount = (ushort)e.Shortcodes.Count;
-            r.FirstFolded = folded.Count;
             r.Popularity = (ushort)Math.Clamp(e.Popularity, 1, ushort.MaxValue);
             r.Order = (ushort)Math.Clamp(e.Order, 0, ushort.MaxValue);
             r.Group = (byte)Math.Clamp(e.Group, 0, 255);
@@ -75,7 +75,6 @@ public static class EmojiBlobWriter
                 | (e.RenderedOnReferenceFont ? EmojiFlags.RenderedOnReferenceFont : EmojiFlags.None));
             r.FirstTone = -1;
 
-            var foldedSet = new List<string>();
             for (var slot = 0; slot < e.Shortcodes.Count; slot++)
             {
                 var sc = e.Shortcodes[slot];
@@ -83,22 +82,16 @@ public static class EmojiBlobWriter
                 var suffixes = SearchText.WordSuffixes(sc);
                 for (var k = 0; k < suffixes.Count; k++)
                     AddPosting(suffixes[k], Posting.Pack(i, k == 0 ? TermKind.Shortcode : TermKind.ShortcodeWord, slot));
-                if (suffixes.Count > 0 && !foldedSet.Contains(suffixes[0]))
-                    foldedSet.Add(suffixes[0]);
             }
+
+            foreach (var (word, position) in e.Curated)
+                AddPosting(SearchText.Fold(word), Posting.Pack(i, TermKind.Curated, position));
 
             foreach (var suffix in SearchText.WordSuffixes(e.Name))
                 AddPosting(suffix, Posting.Pack(i, TermKind.NameWord, 0));
-            var foldedName = SearchText.Fold(e.Name);
-            if (foldedName.Length > 0 && !foldedSet.Contains(foldedName))
-                foldedSet.Add(foldedName);
 
             foreach (var kw in e.Keywords)
                 AddPosting(SearchText.Fold(kw), Posting.Pack(i, TermKind.Keyword, 0));
-
-            foreach (var f in foldedSet)
-                folded.Add(Intern(f));
-            r.FoldedCount = (ushort)foldedSet.Count;
 
             if (e.SkinTones is { Count: 5 })
             {
@@ -133,7 +126,6 @@ public static class EmojiBlobWriter
 
         Section(EmojiBlob.Section.Emoji, records.AsSpan());
         Section(EmojiBlob.Section.Shortcodes, CollectionsMarshal.AsSpan(shortcodes));
-        Section(EmojiBlob.Section.Folded, CollectionsMarshal.AsSpan(folded));
         Section(EmojiBlob.Section.Tones, CollectionsMarshal.AsSpan(tones));
         Section(EmojiBlob.Section.Terms, CollectionsMarshal.AsSpan(terms));
         Section(EmojiBlob.Section.Postings, CollectionsMarshal.AsSpan(postingArray));
