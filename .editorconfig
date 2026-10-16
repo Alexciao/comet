@@ -1,0 +1,36 @@
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{cs,xaml}]
+indent_size = 4
+
+[*.{csproj,props,targets,xml,json,yml,yaml}]
+indent_size = 2
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:warning
+dotnet_style_qualification_for_field = false
+csharp_style_var_for_built_in_types = true
+csharp_prefer_braces = when_multiline
+# Interop structs and P/Invoke names mirror the Win32 headers.
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1712.severity = none
+dotnet_diagnostic.CA1028.severity = none
+dotnet_diagnostic.CA1008.severity = none
+dotnet_diagnostic.CA1716.severity = none
+dotnet_diagnostic.CA1805.severity = none
+dotnet_diagnostic.CA1815.severity = none
+dotnet_diagnostic.CA1051.severity = none
+dotnet_diagnostic.CA1062.severity = none
+dotnet_diagnostic.CA1303.severity = none
+dotnet_diagnostic.CA1031.severity = none
+dotnet_diagnostic.CA1515.severity = none
+dotnet_diagnostic.CA1822.severity = suggestion
+dotnet_diagnostic.CA1848.severity = none
+dotnet_diagnostic.CA2007.severity = none
+dotnet_diagnostic.IDE0005.severity = warning

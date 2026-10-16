@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsAotCompatible>true</IsAotCompatible>
+    <RootNamespace>Comet.Core</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Data\emoji.bin" LogicalName="Comet.emoji.bin" Condition="Exists('Data\emoji.bin')" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Comet.Core.Tests" />
+    <InternalsVisibleTo Include="Comet.Benchmarks" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,10 @@
+bin/
+obj/
+artifacts/
+.vs/
+.idea/
+*.user
+*.DotSettings.user
+BenchmarkDotNet.Artifacts/
+TestResults/
+/tmp/
