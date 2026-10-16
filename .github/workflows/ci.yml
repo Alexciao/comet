@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # Warnings are errors (Directory.Build.props), so this is also the analyzer gate.
+      - name: Build
+        run: dotnet build Comet.sln -c Release
+
+      - name: Unit tests (core, search golden set)
+        run: dotnet test tests/Comet.Core.Tests -c Release --no-build --logger trx --results-directory artifacts/test-results
+
+      - name: "Unit tests (platform: key translation, SendInput encoding, font check, updater over local HTTP)"
+        run: dotnet test tests/Comet.Platform.Tests -c Release --no-build --logger trx --results-directory artifacts/test-results
+
+      # The end-to-end tests (tests/Comet.E2E) drive a real desktop with real keystrokes and are run locally.
+
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+
+      - name: Native AOT publish, installer, portable zip
+        shell: pwsh
+        run: ./installer/build.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: comet
+          path: artifacts/installer/
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: artifacts/test-results/

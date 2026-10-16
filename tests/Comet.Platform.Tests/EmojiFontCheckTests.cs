@@ -20,6 +20,10 @@ public sealed class EmojiFontCheckTests
     [Fact]
     public void The_check_mostly_agrees_with_the_data_builder_on_this_machine()
     {
+        // The embedded flags were computed against the developer machine's Segoe UI Emoji; CI runners can have
+        // another build of the font, where differences are expected and are exactly what the runtime check is for.
+        if (Environment.GetEnvironmentVariable("CI") == "true")
+            Assert.Skip("Compares against the font the data was built with; the runner's font may differ.");
         using var data = EmojiData.LoadEmbedded();
         var sequences = Enumerable.Range(0, data.Count).Select(i => data.Emoji(i).ToString()).ToArray();
         var started = System.Diagnostics.Stopwatch.StartNew();
