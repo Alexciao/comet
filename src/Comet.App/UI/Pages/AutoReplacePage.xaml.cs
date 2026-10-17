@@ -1,30 +1,38 @@
 using Comet.App.Services;
+using Comet.App.UI.Controls;
 using Comet.App.UI.Dialogs;
 using Comet.Core.Settings;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Comet.App.UI.Pages;
 
 public sealed partial class AutoReplacePage : UserControl
 {
+    private const string ReplaceGlyph = "";
+
     private readonly AppHost _host;
     private readonly Window _owner;
     private (AutoReplaceDefinition Item, int Index)? _deleted;
     private bool _loading;
+    private bool _dialogOpen;
 
     internal AutoReplacePage(AppHost host, Window owner)
     {
         _host = host;
         _owner = owner;
         InitializeComponent();
-        Refresh();
-        _host.Settings.Changed += OnSettingsChanged;
-        Unloaded += (_, _) => _host.Settings.Changed -= OnSettingsChanged;
     }
 
     private List<AutoReplaceDefinition> Entries => _host.Settings.AutoReplace;
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _host.Settings.Changed += OnSettingsChanged;
+        Refresh();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e) => _host.Settings.Changed -= OnSettingsChanged;
 
     private void OnSettingsChanged(SettingsParts parts)
     {
@@ -46,28 +54,32 @@ public sealed partial class AutoReplacePage : UserControl
             if (!PageHelpers.Matches(query, entry.Abbreviation, entry.Replacement))
                 continue;
             var item = entry;
-            var toggle = new ToggleSwitch { IsOn = item.Enabled, OnContent = "", OffContent = "", MinWidth = 0, Margin = new Thickness(0, 0, 4, 0) };
-            AutomationProperties.SetName(toggle, $"Enable {item.Abbreviation}");
-            toggle.Toggled += (_, _) =>
+            var row = new EntryRow();
+            row.Show(
+                ReplaceGlyph,
+                $"{item.Abbreviation}  →  {PageHelpers.OneLine(item.Replacement)}",
+                item.MatchCase ? "Matches case exactly" : "",
+                warning: null,
+                enabled: item.Enabled);
+            row.EnabledChanged += on =>
             {
-                item.Enabled = toggle.IsOn;
+                item.Enabled = on;
                 _host.Settings.SaveAutoReplace();
             };
-            ListPanel.Children.Add(PageHelpers.EntryCard(
-                header: $"{item.Abbreviation} → {PageHelpers.OneLine(item.Replacement)}",
-                description: item.MatchCase ? "Matches case exactly" : "",
-                warning: null,
-                leading: toggle,
-                edit: () => _ = Edit(item),
-                duplicate: () => Duplicate(item),
-                delete: () => Delete(item)));
+            row.EditRequested += () => _ = Edit(item);
+            row.DuplicateRequested += () => Duplicate(item);
+            row.DeleteRequested += () => Delete(item);
+            ListPanel.Children.Add(row);
             shown++;
         }
 
-        EmptyState.Visibility = Entries.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        NoMatches.Visibility = Entries.Count > 0 && shown == 0 ? Visibility.Visible : Visibility.Collapsed;
-        SearchBox.Visibility = Entries.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        ExportItem.IsEnabled = Entries.Count > 0;
+        var any = Entries.Count > 0;
+        CountText.Text = any ? (Entries.Count == 1 ? "1 replacement" : $"{Entries.Count} replacements") : "";
+        EmptyState.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
+        NoMatches.Visibility = any && shown == 0 ? Visibility.Visible : Visibility.Collapsed;
+        SearchBox.Visibility = any ? Visibility.Visible : Visibility.Collapsed;
+        AddButton.Visibility = any ? Visibility.Visible : Visibility.Collapsed; // the empty state has its own
+        ExportItem.IsEnabled = any;
     }
 
     private void OnFeatureToggled(object sender, RoutedEventArgs e)
@@ -80,27 +92,39 @@ public sealed partial class AutoReplacePage : UserControl
 
     private void OnSearchChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args) => Refresh();
 
-    private async void OnAdd(object sender, RoutedEventArgs e) => await Edit(null);
+    private void OnAdd(object sender, RoutedEventArgs e) => _ = Edit(null);
 
     private async Task Edit(AutoReplaceDefinition? existing)
     {
-        var others = Entries.Where(x => x != existing).Select(x => x.Abbreviation).ToList();
-        var dialog = new AutoReplaceDialog(existing, others) { XamlRoot = XamlRoot };
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        // One dialog at a time (a second ShowAsync while one is open throws).
+        if (_dialogOpen || XamlRoot is null)
             return;
-
-        if (existing is null)
+        _dialogOpen = true;
+        try
         {
-            Entries.Add(new AutoReplaceDefinition { Abbreviation = dialog.Abbreviation, Replacement = dialog.Replacement, MatchCase = dialog.MatchCase });
-        }
-        else
-        {
-            existing.Abbreviation = dialog.Abbreviation;
-            existing.Replacement = dialog.Replacement;
-            existing.MatchCase = dialog.MatchCase;
-        }
+            var others = Entries.Where(x => x != existing).Select(x => x.Abbreviation).ToList();
+            var dialog = new AutoReplaceDialog(existing, others) { XamlRoot = XamlRoot };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+                return;
 
-        _host.Settings.SaveAutoReplace();
+            if (existing is null)
+            {
+                Entries.Add(new AutoReplaceDefinition { Abbreviation = dialog.Abbreviation, Replacement = dialog.Replacement, MatchCase = dialog.MatchCase });
+                ShowStatus(InfoBarSeverity.Success, $"Added {dialog.Abbreviation} → {PageHelpers.OneLine(dialog.Replacement)}.", canUndo: false);
+            }
+            else
+            {
+                existing.Abbreviation = dialog.Abbreviation;
+                existing.Replacement = dialog.Replacement;
+                existing.MatchCase = dialog.MatchCase;
+            }
+
+            _host.Settings.SaveAutoReplace();
+        }
+        finally
+        {
+            _dialogOpen = false;
+        }
     }
 
     private void Duplicate(AutoReplaceDefinition item)
@@ -120,7 +144,7 @@ public sealed partial class AutoReplacePage : UserControl
         Entries.RemoveAt(index);
         _deleted = (item, index);
         _host.Settings.SaveAutoReplace();
-        ShowStatus(InfoBarSeverity.Informational, $"Deleted “{item.Abbreviation}”.", canUndo: true);
+        ShowStatus(InfoBarSeverity.Informational, $"Deleted {item.Abbreviation}.", canUndo: true);
     }
 
     private void OnUndo(object sender, RoutedEventArgs e)
@@ -137,32 +161,32 @@ public sealed partial class AutoReplacePage : UserControl
 
     private async void OnImport(object sender, RoutedEventArgs e)
     {
-        var path = await PageHelpers.PickOpenAsync(_owner);
-        if (path is null)
-            return;
         try
         {
+            var path = await PageHelpers.PickOpenAsync(_owner);
+            if (path is null)
+                return;
             var (added, replaced) = ImportExport.ImportAutoReplace(await File.ReadAllTextAsync(path), Entries);
             _host.Settings.SaveAutoReplace();
             ShowStatus(InfoBarSeverity.Success, $"Imported {added} new and {replaced} updated replacements.", canUndo: false);
         }
-        catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
         {
-            ShowStatus(InfoBarSeverity.Error, $"Couldn't import {Path.GetFileName(path)}: {ex.Message}", canUndo: false);
+            ShowStatus(InfoBarSeverity.Error, $"Couldn't import: {ex.Message}", canUndo: false);
         }
     }
 
     private async void OnExport(object sender, RoutedEventArgs e)
     {
-        var path = await PageHelpers.PickSaveAsync(_owner, "Comet auto-replace");
-        if (path is null)
-            return;
         try
         {
+            var path = await PageHelpers.PickSaveAsync(_owner, "Comet auto-replace");
+            if (path is null)
+                return;
             await File.WriteAllTextAsync(path, ImportExport.ExportAutoReplace(Entries));
             ShowStatus(InfoBarSeverity.Success, $"Exported {Entries.Count} replacements to {Path.GetFileName(path)}.", canUndo: false);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
         {
             ShowStatus(InfoBarSeverity.Error, $"Couldn't export: {ex.Message}", canUndo: false);
         }

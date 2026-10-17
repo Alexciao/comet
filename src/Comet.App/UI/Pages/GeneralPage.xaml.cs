@@ -3,51 +3,65 @@ using Comet.App.Services;
 using Comet.Core.Settings;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 
 namespace Comet.App.UI.Pages;
 
 public sealed partial class GeneralPage : UserControl
 {
-    private static readonly string[] s_tones = ["Default ✋", "Light ✋🏻", "Medium-light ✋🏼", "Medium ✋🏽", "Medium-dark ✋🏾", "Dark ✋🏿"];
-
     private readonly AppHost _host;
+    private readonly SettingsWindow _window;
     private bool _loading;
 
-    internal GeneralPage(AppHost host)
+    internal GeneralPage(AppHost host, SettingsWindow window)
     {
         _host = host;
+        _window = window;
         InitializeComponent();
-        foreach (var tone in s_tones)
-            SkinToneBox.Items.Add(tone);
-        Load();
-        _host.Settings.Changed += OnSettingsChanged;
-        Unloaded += (_, _) => _host.Settings.Changed -= OnSettingsChanged;
     }
 
     private AppSettings Settings => _host.Settings.Settings;
 
-    private void OnSettingsChanged(SettingsParts parts)
+    // Listen only while the page is shown; it reloads when it comes back.
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (parts.HasFlag(SettingsParts.Settings))
-            Load();
+        _host.Settings.Changed += OnSettingsChanged;
+        _host.PausedChanged += OnPausedChanged;
+        Load();
     }
 
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        _host.Settings.Changed -= OnSettingsChanged;
+        _host.PausedChanged -= OnPausedChanged;
+    }
+
+    private void OnSettingsChanged(SettingsParts parts) => Load();
+
+    private void OnPausedChanged(bool paused) => Load();
+
     /// <summary>Shows the current settings (also after a hand edit of settings.json).</summary>
-    internal void Load()
+    private void Load()
     {
         _loading = true;
         try
         {
             var s = Settings;
+            ActiveToggle.IsOn = !_host.Paused;
+            ActiveCard.Header = _host.Paused ? "Comet is paused" : "Comet is on";
             EmojiToggle.IsOn = s.Features.Emoji;
             SnippetsToggle.IsOn = s.Features.Snippets;
             AutoReplaceToggle.IsOn = s.Features.AutoReplace;
+            SnippetsCard.Description = $"Your saved text, in the same : list · {Count(_host.Settings.Snippets.Count, "snippet")}";
+            AutoReplaceCard.Description = $"Abbreviations that expand as you type · {Count(_host.Settings.AutoReplace.Count, "replacement")}";
             StartAtLoginToggle.IsOn = s.StartAtLogin;
             TriggerBox.Text = s.TriggerCharacter;
-            MinCharsBox.SelectedIndex = s.MinimumCharacters - 1;
-            SkinToneBox.SelectedIndex = s.SkinTone;
+            MinCharsBox.SelectedIndex = Math.Clamp(s.MinimumCharacters, 1, 5) - 1;
+            SkinToneBox.SelectedIndex = Math.Clamp(s.SkinTone, 0, 5);
             UpdatesToggle.IsOn = s.UpdateEmojiAutomatically;
             UpdatesCard.Description = _host.EmojiDataDescription();
+            var excluded = s.PickerExcludedApps.Count + s.AutoReplaceExcludedApps.Count;
+            ExcludedCard.Description = excluded == 0 ? "Comet works in every app" : $"Comet stays out of {Count(excluded, "app")}";
             ShowProblems();
         }
         finally
@@ -55,6 +69,8 @@ public sealed partial class GeneralPage : UserControl
             _loading = false;
         }
     }
+
+    private static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n.ToString(CultureInfo.CurrentCulture)} {noun}s";
 
     private void ShowProblems()
     {
@@ -65,7 +81,7 @@ public sealed partial class GeneralPage : UserControl
         ProblemsBar.Title = status == LoadStatus.RecoveredFromBackup ? $"{file} was damaged" : $"{file} couldn't be read";
         ProblemsBar.Message = status == LoadStatus.RecoveredFromBackup
             ? $"Comet restored the previous version. The damaged file was kept as {Path.GetFileName(copy)}."
-            : $"Comet started with default values. The unreadable file was kept as {Path.GetFileName(copy)}.";
+            : $"Comet started without it. The unreadable file was kept as {Path.GetFileName(copy)}.";
         ProblemsBar.IsOpen = true;
     }
 
@@ -73,6 +89,12 @@ public sealed partial class GeneralPage : UserControl
     {
         if (!_loading)
             _host.Settings.SaveSettings();
+    }
+
+    private void OnActiveToggled(object sender, RoutedEventArgs e)
+    {
+        if (!_loading)
+            _host.SetPaused(!ActiveToggle.IsOn);
     }
 
     private void OnFeatureToggled(object sender, RoutedEventArgs e)
@@ -93,14 +115,28 @@ public sealed partial class GeneralPage : UserControl
         Save();
     }
 
-    private void OnTriggerChanged(object sender, RoutedEventArgs e)
+    private void OnTriggerKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Enter)
+        {
+            ApplyTrigger();
+            e.Handled = true;
+        }
+    }
+
+    private void OnTriggerChanged(object sender, RoutedEventArgs e) => ApplyTrigger();
+
+    private void ApplyTrigger()
     {
         if (_loading)
             return;
         var text = TriggerBox.Text.Trim();
-        Settings.TriggerCharacter = text.Length == 1 ? text : ":";
+        var trigger = text.Length == 1 && !char.IsLetterOrDigit(text[0]) ? text : Settings.TriggerCharacter;
+        TriggerBox.Text = trigger;
+        if (trigger == Settings.TriggerCharacter)
+            return;
+        Settings.TriggerCharacter = trigger;
         Save();
-        TriggerBox.Text = Settings.TriggerCharacter;
     }
 
     private void OnMinCharsChanged(object sender, SelectionChangedEventArgs e)
@@ -127,27 +163,12 @@ public sealed partial class GeneralPage : UserControl
         Save();
     }
 
-    private void OnResetFrecency(object sender, RoutedEventArgs e)
+    private void OnExcludedClick(object sender, RoutedEventArgs e) => _window.Navigate("excluded");
+
+    private void OnResetConfirmed(object sender, RoutedEventArgs e)
     {
-        var confirm = new Button { Content = "Reset", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
-        var flyout = new Flyout
-        {
-            Content = new StackPanel
-            {
-                Spacing = 12,
-                Children =
-                {
-                    new TextBlock { Text = "Forget which emoji and snippets you pick most?", Style = (Style)Application.Current.Resources["BodyTextBlockStyle"] },
-                    confirm,
-                },
-            },
-        };
-        confirm.Click += (_, _) =>
-        {
-            _host.ResetFrecency();
-            flyout.Hide();
-        };
-        flyout.ShowAt(ResetFrecencyButton);
+        _host.ResetFrecency();
+        ResetFlyout.Hide();
     }
 
     internal static string FormatDate(DateTimeOffset? date) =>

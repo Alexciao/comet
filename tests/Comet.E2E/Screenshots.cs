@@ -55,7 +55,7 @@ public sealed class Screenshots : IDisposable
         Thread.Sleep(800); // entrance animation and Mica
         Save(Native.FrameBounds(window), $"settings-general-{t}");
 
-        foreach (var (page, file) in new[] { ("Snippets", "snippets"), ("Auto-replace", "autoreplace"), ("Excluded apps", "excluded") })
+        foreach (var (page, file) in new[] { ("Snippets", "snippets"), ("Auto-replace", "autoreplace"), ("Excluded apps", "excluded"), ("About", "about") })
         {
             window.FindFirstDescendant(c => c.ByName(page).And(c.ByControlType(ControlType.ListItem)))!.Click();
             Thread.Sleep(600);

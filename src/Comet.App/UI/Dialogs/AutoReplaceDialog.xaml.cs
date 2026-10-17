@@ -31,7 +31,7 @@ public sealed partial class AutoReplaceDialog : ContentDialog
     {
         var messages = EntryValidation.ValidateAutoReplace(AbbreviationBox.Text, ReplacementBox.Text, _otherAbbreviations);
         var pristine = AbbreviationBox.Text.Length == 0 && ReplacementBox.Text.Length == 0;
-        ValidationView.Show(Messages, pristine ? [] : messages);
+        ValidationRow.Show(Messages, pristine ? [] : messages);
         IsPrimaryButtonEnabled = !EntryValidation.HasErrors(messages);
     }
 }

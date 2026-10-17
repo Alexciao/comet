@@ -47,6 +47,9 @@ internal sealed class AppHost : IDisposable
 
     internal bool Paused => _paused;
 
+    /// <summary>Raised on the UI thread when Comet is paused or resumed (tray or Settings).</summary>
+    internal event Action<bool>? PausedChanged;
+
     public void Start()
     {
         _settings = new SettingsService(_dispatcher);
@@ -165,13 +168,16 @@ internal sealed class AppHost : IDisposable
         });
     }
 
-    private void SetPaused(bool paused)
+    internal void SetPaused(bool paused)
     {
+        if (paused == _paused)
+            return;
         _paused = paused;
         _tray.Paused = paused;
         _engine.SetConfig(Config());
         _updates.Schedule();
         Log.Info(paused ? "paused" : "resumed");
+        PausedChanged?.Invoke(paused);
     }
 
     internal void TogglePause() => SetPaused(!_paused);
@@ -190,18 +196,25 @@ internal sealed class AppHost : IDisposable
     }
 
     /// <summary>"Emoji data: version X, last checked (date)" for the General page.</summary>
-    internal string EmojiDataDescription()
+    internal string EmojiDataDescription() =>
+        $"Emoji data: version {EmojiDataVersion()}, last checked {UI.Pages.GeneralPage.FormatDate(_updates.LastChecked)}";
+
+    /// <summary>The data version as a date (yyyyMMddNN → 2026.10.16, or 2026.10.16.2 for a second build that day).</summary>
+    internal string EmojiDataVersion()
     {
-        var data = _dataFactory.CurrentEmoji ?? EmojiData.LoadEmbedded();
-        return $"Emoji data: version {data.DataVersion}, last checked {UI.Pages.GeneralPage.FormatDate(_updates.LastChecked)}";
+        var v = (_dataFactory.CurrentEmoji ?? EmojiData.LoadEmbedded()).DataVersion;
+        var (date, build) = (v / 100, v % 100);
+        var text = $"{date / 10000}.{date / 100 % 100:00}.{date % 100:00}";
+        return build == 0 ? text : $"{text}.{build}";
     }
+
+    internal DateTimeOffset? EmojiDataLastChecked => _updates.LastChecked;
 
     internal void OpenSettings()
     {
         if (_settingsWindow is null)
         {
             _settingsWindow = new SettingsWindow(this);
-            _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
 
         _settingsWindow.BringToFront();
@@ -269,7 +282,7 @@ internal sealed class AppHost : IDisposable
         _engine?.Dispose();
         _updates?.Dispose();
         _tray?.Dispose();
-        _settingsWindow?.Close();
+        _settingsWindow?.CloseForGood();
         _settings?.Dispose();
         WtsApi32.WTSUnRegisterSessionNotification(_messages.Handle);
         _messages?.Dispose();

@@ -1,8 +1,7 @@
-using System.Diagnostics;
 using Comet.App.Services;
 using Comet.App.UI.Controls;
+using Comet.Platform.Context;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Comet.App.UI.Pages;
@@ -10,15 +9,26 @@ namespace Comet.App.UI.Pages;
 public sealed partial class ExcludedAppsPage : UserControl
 {
     private readonly AppHost _host;
+    private List<string> _running = [];
 
     internal ExcludedAppsPage(AppHost host)
     {
         _host = host;
         InitializeComponent();
-        Refresh();
-        _host.Settings.Changed += OnSettingsChanged;
-        Unloaded += (_, _) => _host.Settings.Changed -= OnSettingsChanged;
     }
+
+    private List<string> PickerApps => _host.Settings.Settings.PickerExcludedApps;
+
+    private List<string> AutoReplaceApps => _host.Settings.Settings.AutoReplaceExcludedApps;
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _host.Settings.Changed += OnSettingsChanged;
+        Refresh();
+        LoadRunningApps();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e) => _host.Settings.Changed -= OnSettingsChanged;
 
     private void OnSettingsChanged(SettingsParts parts)
     {
@@ -26,67 +36,85 @@ public sealed partial class ExcludedAppsPage : UserControl
             Refresh();
     }
 
+    /// <summary>Suggestions for the add boxes: apps with a window open, read in the background.</summary>
+    private void LoadRunningApps()
+    {
+        var dispatcher = DispatcherQueue;
+        _ = Task.Run(() =>
+        {
+            var apps = RunningApps.WithWindows();
+            dispatcher.TryEnqueue(() => _running = apps);
+        });
+    }
+
     private void Refresh()
     {
-        Fill(PickerList, _host.Settings.Settings.PickerExcludedApps, "Emoji and snippets work everywhere.");
-        Fill(AutoReplaceList, _host.Settings.Settings.AutoReplaceExcludedApps, "Auto-replace works everywhere.");
+        Fill(PickerList, PickerSummary, PickerApps, "The : list opens in every app");
+        Fill(AutoReplaceList, AutoReplaceSummary, AutoReplaceApps, "Abbreviations expand in every app");
     }
 
-    private void Fill(StackPanel panel, List<string> apps, string emptyText)
+    private void Fill(StackPanel list, TextBlock summary, List<string> apps, string emptyText)
     {
-        panel.Children.Clear();
-        if (apps.Count == 0)
+        list.Children.Clear();
+        summary.Text = apps.Count switch
         {
-            panel.Children.Add(new TextBlock { Text = emptyText, Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"], Margin = new Thickness(1, 0, 0, 4) });
-            return;
-        }
-
+            0 => emptyText,
+            1 => "Off in 1 app",
+            _ => $"Off in {apps.Count} apps",
+        };
         foreach (var app in apps.OrderBy(a => a, StringComparer.OrdinalIgnoreCase))
         {
-            var remove = new Button { Content = "Remove" };
-            AutomationProperties.SetName(remove, $"Remove {app}");
+            var row = new AppRow(app);
             var name = app;
-            remove.Click += (_, _) =>
+            row.RemoveRequested += () =>
             {
-                apps.Remove(name);
+                apps.RemoveAll(a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
                 _host.Settings.SaveSettings();
             };
-            panel.Children.Add(new SettingsCard { Header = name, Glyph = "", Content = remove, MinHeight = 56 });
+            list.Children.Add(row);
         }
     }
 
-    /// <summary>Lists the apps that have a window open right now.</summary>
-    private void OnAppBoxOpened(object? sender, object e)
+    private void OnAppBoxGotFocus(object sender, RoutedEventArgs e)
     {
-        if (sender is not ComboBox box)
-            return;
-        var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var p in Process.GetProcesses())
+        if (sender is AutoSuggestBox box)
+            ShowSuggestions(box);
+    }
+
+    private void OnAppBoxTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+            ShowSuggestions(sender);
+    }
+
+    /// <summary>Open apps whose name contains what was typed, not yet excluded in this list.</summary>
+    private void ShowSuggestions(AutoSuggestBox box)
+    {
+        var excluded = box == PickerAppBox ? PickerApps : AutoReplaceApps;
+        var typed = box.Text.Trim();
+        box.Items.Clear();
+        foreach (var app in _running)
         {
-            try
-            {
-                if (p.MainWindowHandle != 0 && p.Id != Environment.ProcessId)
-                    names.Add(p.ProcessName.ToLowerInvariant() + ".exe");
-            }
-            catch (InvalidOperationException)
-            {
-            }
-            finally
-            {
-                p.Dispose();
-            }
+            if (app.Contains(typed, StringComparison.OrdinalIgnoreCase) && !excluded.Contains(app, StringComparer.OrdinalIgnoreCase))
+                box.Items.Add(app);
         }
 
-        box.ItemsSource = names.ToList();
+        box.IsSuggestionListOpen = box.Items.Count > 0;
     }
 
-    private void OnAddPicker(object sender, RoutedEventArgs e) => Add(PickerAppBox, _host.Settings.Settings.PickerExcludedApps);
+    private void OnPickerQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args) =>
+        Add(PickerAppBox, PickerApps, args.ChosenSuggestion as string ?? args.QueryText);
 
-    private void OnAddAutoReplace(object sender, RoutedEventArgs e) => Add(AutoReplaceAppBox, _host.Settings.Settings.AutoReplaceExcludedApps);
+    private void OnAutoReplaceQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args) =>
+        Add(AutoReplaceAppBox, AutoReplaceApps, args.ChosenSuggestion as string ?? args.QueryText);
 
-    private void Add(ComboBox box, List<string> apps)
+    private void OnAddPicker(object sender, RoutedEventArgs e) => Add(PickerAppBox, PickerApps, null);
+
+    private void OnAddAutoReplace(object sender, RoutedEventArgs e) => Add(AutoReplaceAppBox, AutoReplaceApps, null);
+
+    private void Add(AutoSuggestBox box, List<string> apps, string? chosen)
     {
-        var name = (box.SelectedItem as string ?? box.Text ?? "").Trim().ToLowerInvariant();
+        var name = (chosen ?? box.Text).Trim().ToLowerInvariant();
         if (name.Length == 0)
             return;
         if (!name.EndsWith(".exe", StringComparison.Ordinal))
@@ -98,6 +126,7 @@ public sealed partial class ExcludedAppsPage : UserControl
         }
 
         box.Text = "";
-        box.SelectedItem = null;
+        box.Items.Clear();
+        box.IsSuggestionListOpen = false;
     }
 }

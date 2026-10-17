@@ -8,7 +8,7 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid>
+    <Grid x:Name="RootGrid">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -21,7 +21,7 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Image Source="ms-appx:///Assets/Comet.png" Width="16" Height="16" VerticalAlignment="Center" />
-            <TextBlock Grid.Column="1" Text="Comet Settings" Style="{ThemeResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Text="Settings" Style="{ThemeResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
         </Grid>
 
         <NavigationView
@@ -31,10 +31,30 @@
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="False"
             IsPaneToggleButtonVisible="False"
-            OpenPaneLength="260"
+            IsTitleBarAutoPaddingEnabled="False"
+            OpenPaneLength="288"
             SelectionChanged="OnNavigationChanged">
+            <NavigationView.PaneHeader>
+                <!-- Where Windows Settings shows your account: what Comet is and whether it's on. -->
+                <Grid Margin="16,4,16,16" ColumnSpacing="14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Image Source="ms-appx:///Assets/Comet.png" Width="56" Height="56" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Comet" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Ellipse x:Name="ActiveDot" Width="8" Height="8" Fill="{ThemeResource SystemFillColorSuccessBrush}" VerticalAlignment="Center" />
+                            <Ellipse x:Name="PausedDot" Width="8" Height="8" Fill="{ThemeResource SystemFillColorCautionBrush}" VerticalAlignment="Center" Visibility="Collapsed" />
+                            <TextBlock x:Name="StatusText" Text="Active" Style="{ThemeResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </NavigationView.PaneHeader>
+
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="General" Tag="general" IsSelected="True">
+                <NavigationViewItem x:Name="GeneralItem" Content="General" Tag="general">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />
                     </NavigationViewItem.Icon>
@@ -55,22 +75,49 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
-            <NavigationView.PaneFooter>
-                <TextBlock
-                    x:Name="VersionText"
-                    Margin="16,8,16,16"
-                    Style="{ThemeResource CaptionTextBlockStyle}"
-                    Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-            </NavigationView.PaneFooter>
+            <NavigationView.FooterMenuItems>
+                <NavigationViewItem Content="About" Tag="about">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE946;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.FooterMenuItems>
 
-            <ScrollViewer x:Name="PageScroller" VerticalScrollBarVisibility="Auto">
-                <ContentControl
-                    x:Name="PageHost"
-                    MaxWidth="{StaticResource SettingsContentMaxWidth}"
-                    Padding="{StaticResource SettingsPagePadding}"
-                    HorizontalContentAlignment="Stretch"
-                    IsTabStop="False" />
-            </ScrollViewer>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <!-- The page title stays put while the page scrolls, as in Windows Settings. Title and content share a
+                     left-aligned column that stretches up to the maximum content width. -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MaxWidth="{StaticResource SettingsContentMaxWidth}" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="PageTitle" Margin="{StaticResource SettingsPageHeaderMargin}" Style="{StaticResource SettingsPageTitleStyle}" />
+                </Grid>
+                <ScrollViewer x:Name="PageScroller" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MaxWidth="{StaticResource SettingsContentMaxWidth}" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ContentControl
+                            x:Name="PageHost"
+                            Padding="{StaticResource SettingsPagePadding}"
+                            HorizontalContentAlignment="Stretch"
+                            IsTabStop="False">
+                            <ContentControl.ContentTransitions>
+                                <!-- Windows' own short entrance when the page changes; nothing animates within a page. -->
+                                <TransitionCollection>
+                                    <ContentThemeTransition VerticalOffset="16" HorizontalOffset="0" />
+                                </TransitionCollection>
+                            </ContentControl.ContentTransitions>
+                        </ContentControl>
+                    </Grid>
+                </ScrollViewer>
+            </Grid>
         </NavigationView>
     </Grid>
 </Window>

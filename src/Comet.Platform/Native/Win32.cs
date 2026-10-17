@@ -161,6 +161,10 @@ internal struct LASTINPUTINFO
 
 internal static partial class User32
 {
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static unsafe partial bool EnumWindows(delegate* unmanaged<nint, nint, int> callback, nint lParam);
+
     public const int WH_KEYBOARD_LL = 13;
     public const int WH_MOUSE_LL = 14;
     public const int HC_ACTION = 0;

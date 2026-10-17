@@ -55,7 +55,7 @@ public sealed partial class SnippetDialog : ContentDialog
         var messages = EntryValidation.ValidateSnippet(NameBox.Text, SnippetText, _otherNames, _isEmojiShortcode);
         // Don't scold an empty, untouched dialog: only show problems once something was typed.
         var pristine = NameBox.Text.Length == 0 && TextBox.Text.Length == 0;
-        ValidationView.Show(Messages, pristine ? [] : messages);
+        ValidationRow.Show(Messages, pristine ? [] : messages);
         IsPrimaryButtonEnabled = !EntryValidation.HasErrors(messages);
         UpdatePreview();
     }

@@ -21,6 +21,7 @@
             </Grid>
             <TextBox
                 x:Name="TextBox"
+                AutomationProperties.Name="Text"
                 AcceptsReturn="True"
                 TextWrapping="Wrap"
                 Height="120"
