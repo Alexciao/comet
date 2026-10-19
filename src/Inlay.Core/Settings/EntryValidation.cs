@@ -17,6 +17,12 @@ public enum ValidationField
     Text,
     Shorthand,
     Expansion,
+    /// <summary>Images: the chosen file.</summary>
+    File,
+    /// <summary>Folders and collections: the chosen folder.</summary>
+    Folder,
+    /// <summary>Collections: the prefix.</summary>
+    Prefix,
 }
 
 public readonly record struct ValidationMessage(Severity Severity, ValidationField Field, string Text);
@@ -24,29 +30,93 @@ public readonly record struct ValidationMessage(Severity Severity, ValidationFie
 /// <summary>Live validation for the Add/Edit dialogs. Errors block saving; warnings only inform.</summary>
 public static class EntryValidation
 {
+    /// <summary>Above this, many chat apps reject the upload (Discord's free limit is 25 MB; Slack and Teams resize or refuse).</summary>
+    public const long LargeImageBytes = 25L * 1024 * 1024;
+
     /// <param name="otherNames">Names of the other snippets (the one being edited excluded).</param>
     /// <param name="isEmojiShortcode">True when a name is also an emoji shortcode (warn about the collision).</param>
     /// <param name="trigger">The trigger character, for codes shown in messages.</param>
-    public static IReadOnlyList<ValidationMessage> ValidateSnippet(string name, string text, IEnumerable<string> otherNames, Func<string, bool>? isEmojiShortcode, string trigger = ":")
+    public static IReadOnlyList<ValidationMessage> ValidateSnippet(string name, string text, IEnumerable<string> otherNames, Func<string, bool>? isEmojiShortcode, string trigger = ":") =>
+        ValidateSnippet(name, text, otherNames, [], isEmojiShortcode, trigger);
+
+    /// <param name="otherNames">Names of the other snippets (the one being edited excluded).</param>
+    /// <param name="imageNames">
+    /// Every name Quick Insert knows an image by: images, folders and each collection item (see
+    /// <c>ImagesService.Names</c>). Names are unique across snippets and images.
+    /// </param>
+    /// <param name="isEmojiShortcode">True when a name is also an emoji shortcode (warn about the collision).</param>
+    /// <param name="trigger">The trigger character, for codes shown in messages.</param>
+    public static IReadOnlyList<ValidationMessage> ValidateSnippet(string name, string text, IEnumerable<string> otherNames, IEnumerable<string> imageNames, Func<string, bool>? isEmojiShortcode, string trigger = ":")
     {
         var messages = new List<ValidationMessage>();
-        var trimmed = name.Trim();
-        if (trimmed.Length == 0)
-            messages.Add(new(Severity.Error, ValidationField.Name, "Give the snippet a name."));
-        else if (trimmed.Any(char.IsWhiteSpace))
-            messages.Add(new(Severity.Error, ValidationField.Name, "Names can't contain spaces. Use - or _ instead."));
-        else if (trimmed.Any(c => !(char.IsLetterOrDigit(c) || c is '_' or '-' or '+')))
-            messages.Add(new(Severity.Error, ValidationField.Name, "Names can only contain letters, digits, - and _."));
-        else if (otherNames.Any(n => string.Equals(n.Trim(), trimmed, StringComparison.OrdinalIgnoreCase)))
-            messages.Add(new(Severity.Error, ValidationField.Name, $"There's already a snippet named “{trimmed}”."));
-        else if (isEmojiShortcode?.Invoke(trimmed) == true)
-            messages.Add(new(Severity.Warning, ValidationField.Name, $"“{TriggerFormat.Code(trigger, trimmed)}” is also an emoji; the snippet will be picked instead."));
+        if (NameProblem(name, "snippet", otherNames, imageNames, isEmojiShortcode, trigger) is { } problem)
+            messages.Add(problem);
 
         if (text.Length == 0)
             messages.Add(new(Severity.Error, ValidationField.Text, "The snippet has no text."));
         foreach (var p in SnippetTemplate.Validate(text))
             messages.Add(new(Severity.Warning, ValidationField.Text, $"{p.Message} It will be inserted as typed."));
         return messages;
+    }
+
+    /// <summary>The Add/Edit image dialog: an image, a folder or a collection.</summary>
+    /// <param name="snippetNames">Names of every snippet.</param>
+    /// <param name="otherImageNames">Every name Quick Insert knows an image by, the entry being edited (and its collection items) excluded.</param>
+    /// <param name="isEmojiShortcode">True when a name is also an emoji shortcode (warn: the image wins).</param>
+    /// <param name="fileSize">Images: the file's size in bytes, when known (large files get a warning).</param>
+    /// <param name="trigger">The trigger character, for codes shown in messages.</param>
+    public static IReadOnlyList<ValidationMessage> ValidateImage(ImageEntry entry, IEnumerable<string> snippetNames, IEnumerable<string> otherImageNames, Func<string, bool>? isEmojiShortcode, long? fileSize = null, string trigger = ":")
+    {
+        var messages = new List<ValidationMessage>();
+        if (entry.Kind == ImageEntryKind.Collection)
+        {
+            // The prefix may be empty; collection items that collide with other names are numbered, not refused.
+            var prefix = entry.Prefix.Trim();
+            if (prefix.Any(char.IsWhiteSpace))
+                messages.Add(new(Severity.Error, ValidationField.Prefix, "The prefix can't contain spaces. Use - or _ instead."));
+            else if (!prefix.All(IsNameChar))
+                messages.Add(new(Severity.Error, ValidationField.Prefix, "The prefix can only contain letters, digits, - and _."));
+        }
+        else if (NameProblem(entry.Name, "image", snippetNames, otherImageNames, isEmojiShortcode, trigger) is { } problem)
+        {
+            messages.Add(problem);
+        }
+
+        if (entry.Kind == ImageEntryKind.Image)
+        {
+            if (string.IsNullOrWhiteSpace(entry.File))
+                messages.Add(new(Severity.Error, ValidationField.File, "Choose an image."));
+            else if (fileSize > LargeImageBytes)
+                messages.Add(new(Severity.Warning, ValidationField.File, $"This image is {fileSize.Value / (1024 * 1024)} MB; many chat apps reject larger uploads."));
+        }
+        else if (string.IsNullOrWhiteSpace(entry.Folder))
+        {
+            messages.Add(new(Severity.Error, ValidationField.Folder, "Choose a folder."));
+        }
+
+        return messages;
+    }
+
+    /// <summary>Letters, digits, <c>-</c>, <c>_</c> and <c>+</c> (as in <c>:+1</c>): what can follow the trigger.</summary>
+    public static bool IsNameChar(char c) => char.IsLetterOrDigit(c) || c is '_' or '-' or '+';
+
+    /// <summary>The first problem with a snippet or image name, or null. <paramref name="what"/> is "snippet" or "image".</summary>
+    private static ValidationMessage? NameProblem(string name, string what, IEnumerable<string> snippetNames, IEnumerable<string> imageNames, Func<string, bool>? isEmojiShortcode, string trigger)
+    {
+        var trimmed = name.Trim();
+        if (trimmed.Length == 0)
+            return new(Severity.Error, ValidationField.Name, $"Give the {what} a name.");
+        if (trimmed.Any(char.IsWhiteSpace))
+            return new(Severity.Error, ValidationField.Name, "Names can't contain spaces. Use - or _ instead.");
+        if (!trimmed.All(IsNameChar))
+            return new(Severity.Error, ValidationField.Name, "Names can only contain letters, digits, - and _.");
+        if (snippetNames.Any(n => string.Equals(n.Trim(), trimmed, StringComparison.OrdinalIgnoreCase)))
+            return new(Severity.Error, ValidationField.Name, $"There's already a snippet named “{trimmed}”.");
+        if (imageNames.Any(n => string.Equals(n.Trim(), trimmed, StringComparison.OrdinalIgnoreCase)))
+            return new(Severity.Error, ValidationField.Name, $"There's already an image named “{trimmed}”.");
+        if (isEmojiShortcode?.Invoke(trimmed) == true)
+            return new(Severity.Warning, ValidationField.Name, $"“{TriggerFormat.Code(trigger, trimmed)}” is also an emoji; the {what} will be picked instead.");
+        return null;
     }
 
     public static IReadOnlyList<ValidationMessage> ValidateShorthand(string abbreviation, string replacement, IEnumerable<string> otherAbbreviations)
