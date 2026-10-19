@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using Inlay.Core.Emoji;
 
 namespace Inlay.Platform.Fonts;
 
@@ -8,7 +9,8 @@ namespace Inlay.Platform.Fonts;
 /// vtables (AOT-safe). An emoji counts as drawable when every code point has a glyph in the font (ZWJ, variation
 /// selectors and tag characters aside) and the whole sequence lays out no wider than 1.25 × a single emoji —
 /// the same rule the data builder applies to the reference font, so ZWJ sequences and flags the font doesn't
-/// ligate are hidden instead of showing up as two or more pictures. Slot numbers come from dwrite.h / dwrite_2.h.
+/// ligate are hidden instead of showing up as two or more pictures. Symbols (→ ° €) are drawn as text, so they are
+/// checked against the text fonts instead (<see cref="CheckText"/>). Slot numbers come from dwrite.h / dwrite_2.h.
 /// </summary>
 internal static unsafe partial class EmojiFontCheck
 {
@@ -56,6 +58,123 @@ internal static unsafe partial class EmojiFontCheck
     {
         if (obj != 0)
             ((delegate* unmanaged[Stdcall]<nint, uint>)Vtbl(obj)[2])(obj);
+    }
+
+    /// <summary>
+    /// The fonts symbols are drawn with (as text, never as color emoji): Segoe UI and the fallbacks Windows uses
+    /// for arrows, math and other symbols.
+    /// </summary>
+    public static readonly string[] TextFontFamilies = ["Segoe UI", "Segoe UI Symbol", "Cambria Math"];
+
+    /// <summary>
+    /// One flag per entry of <paramref name="data"/>: emoji are checked against Segoe UI Emoji (see
+    /// <see cref="Check(IReadOnlyList{string})"/>), symbols against <see cref="TextFontFamilies"/> (every code point
+    /// in one of them). Null when Segoe UI Emoji or DirectWrite is unavailable; when only the text fonts are,
+    /// symbols keep the data's own flags. Call off the UI thread.
+    /// </summary>
+    public static bool[]? Check(EmojiData data)
+    {
+        var emoji = new string[data.FirstSymbol];
+        for (var i = 0; i < emoji.Length; i++)
+            emoji[i] = data.Emoji(i).ToString();
+        if (Check(emoji) is not { } drawn)
+            return null;
+
+        var symbols = new string[data.SymbolCount];
+        for (var i = 0; i < symbols.Length; i++)
+            symbols[i] = data.Emoji(data.FirstSymbol + i).ToString();
+        var text = CheckText(symbols);
+
+        var result = new bool[data.Count];
+        drawn.CopyTo(result, 0);
+        for (var i = 0; i < symbols.Length; i++)
+            result[data.FirstSymbol + i] = text?[i] ?? data.RenderedOnReferenceFont(data.FirstSymbol + i);
+        return result;
+    }
+
+    /// <summary>
+    /// One flag per text: true when every code point (variation selectors aside) has a glyph in one of
+    /// <see cref="TextFontFamilies"/>. Null when none of them is installed or DirectWrite is unavailable.
+    /// </summary>
+    public static bool[]? CheckText(IReadOnlyList<string> texts)
+    {
+        nint factory = 0, collection = 0;
+        var fonts = new List<nint>(TextFontFamilies.Length);
+        try
+        {
+            var iid = IidIDWriteFactory;
+            if (DWriteCreateFactory(0 /* shared */, &iid, &factory) < 0 || factory == 0)
+                return null;
+            if (((delegate* unmanaged[Stdcall]<nint, nint*, int, int>)Vtbl(factory)[SlotGetSystemFontCollection])(factory, &collection, 0) < 0)
+                return null;
+
+            foreach (var familyName in TextFontFamilies)
+            {
+                var font = FindFont(collection, familyName);
+                if (font != 0)
+                    fonts.Add(font);
+            }
+
+            if (fonts.Count == 0)
+                return null;
+
+            var result = new bool[texts.Count];
+            for (var i = 0; i < result.Length; i++)
+            {
+                result[i] = true;
+                foreach (var rune in texts[i].EnumerateRunes())
+                {
+                    if (!IsInvisibleJoiner(rune.Value) && !fonts.Exists(f => HasCharacter(f, rune.Value)))
+                    {
+                        result[i] = false;
+                        break;
+                    }
+                }
+            }
+
+            return result;
+        }
+        finally
+        {
+            foreach (var font in fonts)
+                Release(font);
+            Release(collection);
+            Release(factory);
+        }
+    }
+
+    /// <summary>The regular face of <paramref name="familyName"/> in the system collection, or 0 when it isn't installed.</summary>
+    private static nint FindFont(nint collection, string familyName)
+    {
+        uint index;
+        int exists;
+        fixed (char* name = familyName)
+        {
+            if (((delegate* unmanaged[Stdcall]<nint, char*, uint*, int*, int>)Vtbl(collection)[SlotFindFamilyName])(collection, name, &index, &exists) < 0 || exists == 0)
+                return 0;
+        }
+
+        nint family = 0, font = 0;
+        try
+        {
+            if (((delegate* unmanaged[Stdcall]<nint, uint, nint*, int>)Vtbl(collection)[SlotGetFontFamily])(collection, index, &family) < 0
+                || ((delegate* unmanaged[Stdcall]<nint, int, int, int, nint*, int>)Vtbl(family)[SlotGetFirstMatchingFont])(family, FontWeightNormal, FontStretchNormal, FontStyleNormal, &font) < 0)
+            {
+                return 0;
+            }
+
+            return font;
+        }
+        finally
+        {
+            Release(family);
+        }
+    }
+
+    private static bool HasCharacter(nint font, int codePoint)
+    {
+        int exists;
+        return ((delegate* unmanaged[Stdcall]<nint, uint, int*, int>)Vtbl(font)[SlotHasCharacter])(font, (uint)codePoint, &exists) >= 0 && exists != 0;
     }
 
     /// <summary>
@@ -127,10 +246,7 @@ internal static unsafe partial class EmojiFontCheck
     {
         foreach (var rune in sequence.EnumerateRunes())
         {
-            if (IsInvisibleJoiner(rune.Value))
-                continue;
-            int exists;
-            if (((delegate* unmanaged[Stdcall]<nint, uint, int*, int>)Vtbl(font)[SlotHasCharacter])(font, (uint)rune.Value, &exists) < 0 || exists == 0)
+            if (!IsInvisibleJoiner(rune.Value) && !HasCharacter(font, rune.Value))
                 return false;
         }
 

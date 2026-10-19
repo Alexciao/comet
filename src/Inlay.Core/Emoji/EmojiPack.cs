@@ -55,6 +55,8 @@ public enum PackVerdict
     NotNewer,
     /// <summary>A binary format this app can't read (a newer app is needed).</summary>
     FormatTooNew,
+    /// <summary>An older binary format than this app reads (packs for this app come with the next publish).</summary>
+    FormatTooOld,
     /// <summary>The manifest asks for a newer app.</summary>
     AppTooOld,
     SizeMismatch,
@@ -78,8 +80,8 @@ public static class EmojiPack
     /// <summary>Whether the manifest is worth downloading the pack for.</summary>
     public static PackVerdict CheckManifest(EmojiPackManifest manifest, int currentDataVersion, Version appVersion)
     {
-        if (manifest.FormatVersion > EmojiData.SupportedFormatVersion)
-            return PackVerdict.FormatTooNew;
+        if (manifest.FormatVersion != EmojiData.SupportedFormatVersion)
+            return manifest.FormatVersion > EmojiData.SupportedFormatVersion ? PackVerdict.FormatTooNew : PackVerdict.FormatTooOld;
         if (!Version.TryParse(manifest.MinAppVersion, out var min) || min > appVersion)
             return PackVerdict.AppTooOld;
         return manifest.DataVersion > currentDataVersion ? PackVerdict.Accept : PackVerdict.NotNewer;
@@ -97,8 +99,8 @@ public static class EmojiPack
             return PackVerdict.HashMismatch;
         if (!EmojiData.TryReadHeader(pack, out var format, out var version))
             return PackVerdict.Unreadable;
-        if (format > EmojiData.SupportedFormatVersion)
-            return PackVerdict.FormatTooNew;
+        if (format != EmojiData.SupportedFormatVersion)
+            return format > EmojiData.SupportedFormatVersion ? PackVerdict.FormatTooNew : PackVerdict.FormatTooOld;
         if (format != manifest.FormatVersion || version != manifest.DataVersion)
             return PackVerdict.ManifestMismatch;
 

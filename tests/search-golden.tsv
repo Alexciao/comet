@@ -373,8 +373,8 @@ new	🆕	3	shortcode
 free	🆓	1	shortcode
 red_circle	🔴	1	shortcode
 blue_square	🟦	1	shortcode
-arrow_right	➡️	1	shortcode
-arrow_up	⬆️	1	shortcode
+arrow_right	➡️	3	Slack shortcode, now a hidden alias: the symbol → owns arrow_right
+arrow_up	⬆️	3	Slack shortcode, now a hidden alias: the symbol ↑ owns arrow_up
 repeat	🔁	1	shortcode
 mute	🔇	1	shortcode
 loudspeaker	📢	1	shortcode
@@ -392,3 +392,29 @@ bnna	🍌	3	abbreviation
 cmptr	💻	3	abbreviation
 blln	🎈	3	abbreviation
 smi	😄	3	shortcode prefix (smirk ranks above it by popularity)
+# --- symbols (text characters; a symbol is first when the query is one of its names, else after emoji in its tier)
+arrow_right	→	1	symbol name
+arrow-right	→	1	symbol name, separator-insensitive
+arrow_up	↑	1	symbol name
+right	→	1	symbol alias
+deg	°	1	symbol alias
+degree	°	1	symbol name
+euro	€	1	symbol name (the banknote is euro_banknote)
+half	½	1	symbol name
+check	✓	1	symbol name
+alpha	α	1	symbol name
+em_dash	—	1	symbol name
+en-dash	–	1	symbol name
+pi	π	1	symbol name
+pm	±	1	symbol alias
+neq	≠	1	symbol alias
+times	×	1	symbol name
+ellipsis	…	1	symbol name
+bullet	•	1	symbol name
+inf	∞	1	symbol alias
+squared	²	1	symbol alias
+cmd	⌘	1	symbol alias
+celsius	℃	3	symbol name
+infinity	∞	3	symbol prefix (♾️ owns infinity)
+dash	—	3	symbol name word
+tick	✓	1	symbol alias (British English)

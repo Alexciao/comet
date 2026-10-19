@@ -8,7 +8,7 @@ BenchmarkSwitcher.FromAssembly(typeof(Inlay.Benchmarks.SearchBenchmarks).Assembl
 namespace Inlay.Benchmarks
 {
 
-    /// <summary>One search over the full emoji set, per query shape (what each keystroke costs).</summary>
+    /// <summary>One search over the full emoji and symbol set, per query shape (what each keystroke costs).</summary>
     [MemoryDiagnoser]
     public class SearchBenchmarks
     {
@@ -16,14 +16,18 @@ namespace Inlay.Benchmarks
         private SearchEngine _engine = null!;
         private readonly SearchResult[] _results = new SearchResult[24];
 
-        [Params("sm", "smi", "smile", "thumbsup", "hrt", "smiel", "thnumbs", "laughign", "zzzzqx")]
+        [Params("sm", "smi", "smile", "thumbsup", "hrt", "smiel", "thnumbs", "laughign", "zzzzqx", "deg", "arrow_r")]
         public string Query { get; set; } = "";
+
+        /// <summary>The Symbols setting (symbols left out cost nothing).</summary>
+        [Params(true, false)]
+        public bool Symbols { get; set; }
 
         [GlobalSetup]
         public void Setup()
         {
             _data = EmojiData.LoadEmbedded();
-            _engine = new SearchEngine(_data, new SnippetIndex([("website", "https://example.com/"), ("email", "someone@example.com")]));
+            _engine = new SearchEngine(_data, new SnippetIndex([("website", "https://example.com/"), ("email", "someone@example.com")]), Symbols);
         }
 
         [GlobalCleanup]

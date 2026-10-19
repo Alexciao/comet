@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Inlay.Core.Emoji;
+using Inlay.Core.Text;
 using HarfBuzzSharp;
 using Buffer = HarfBuzzSharp.Buffer;
 
@@ -13,9 +14,15 @@ using Buffer = HarfBuzzSharp.Buffer;
 //   emojilib-en-US.json            everyday keywords
 //   unicode-emoji-frequency.txt    popularity ranking (Unicode Consortium)
 //   ../everyday-words.tsv          curated everyday words and slang, ranked like aliases
+//   ../symbols.tsv                 curated text symbols (→ ° € …), stored after the emoji with their own index
 //
 // Every emoji is kept; the ones this machine's Segoe UI Emoji cannot draw as one glyph are flagged, and the
-// app re-checks against the installed font at load time (so a Windows font update reveals them).
+// app re-checks against the installed font at load time (so a Windows font update reveals them). Symbols are
+// checked the same way against the text fonts they are drawn with (Segoe UI, Segoe UI Symbol, Cambria Math).
+//
+// Displayed codes follow EmojiCode: snake_case, unique once folded. Upstream codes are normalized ("t-rex" →
+// t_rex); a code another entry owns (symbol names first, then primaries by popularity, then aliases) stays
+// searchable as a hidden alias. The build fails when the result still breaks the rule.
 //
 // Options: --font <ttf>  --data-version <yyyymmddNN>  --out <path>  --sources <dir>
 //          --manifest <path> --min-app-version <x.y.z>   also write the update manifest for the pack (CI)
@@ -39,9 +46,12 @@ var popularity = LoadPopularity(Path.Combine(src, "unicode-emoji-frequency.txt")
 var curated = LoadEverydayWords(Path.Combine(root, "data", "everyday-words.tsv"));
 var curatedUsed = new HashSet<string>();
 using var font = new FontChecker(fontPath);
+using var textFont = new TextFontChecker(TextFontFiles.Select(f => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), f)));
 
 var entries = new List<EmojiSourceEntry>();
 var unsupported = new List<string>();
+var emojiForms = new HashSet<string>(StringComparer.Ordinal);
+var upstreamCodes = new Dictionary<string, string>(StringComparer.Ordinal);
 foreach (var e in emojibase.RootElement.EnumerateArray())
 {
     if (!e.TryGetProperty("group", out var groupEl) || groupEl.GetInt32() == 2)
@@ -50,19 +60,39 @@ foreach (var e in emojibase.RootElement.EnumerateArray())
     var hex = e.GetProperty("hexcode").GetString()!;
     var emoji = e.GetProperty("emoji").GetString()!;
     var label = e.GetProperty("label").GetString()!;
+    emojiForms.Add(emoji);
     var rendered = font.Renders(emoji);
     if (!rendered)
         unsupported.Add($"{emoji}\t{label}\tv{e.GetProperty("version").GetDouble().ToString(CultureInfo.InvariantCulture)}");
 
     var key = StripVs(emoji);
     var shortcodes = new List<string>();
+    var aliases = new List<string>();
+    var upstream = new List<string>();
     void AddShortcodes(IEnumerable<string>? codes)
     {
         foreach (var c in codes ?? [])
         {
-            var code = c.Trim().ToLowerInvariant();
-            if (code.Length > 0 && !shortcodes.Contains(code))
+            var raw = c.Trim().ToLowerInvariant();
+            if (raw.Length == 0 || upstream.Contains(raw))
+                continue;
+            upstream.Add(raw);
+            if (EmojiCode.IsSignedNumber(raw))
+            {
+                aliases.Add(raw); // "+1": typeable, never displayed
+                continue;
+            }
+
+            // "t-rex" → t_rex. Spellings that fold the same are one code: the first is shown ("thumbsup"), the others
+            // ("thumbs_up") stay searchable for their word suffixes.
+            var code = EmojiCode.Normalize(raw);
+            if (code.Length == 0)
+                continue;
+            var same = shortcodes.FindIndex(s => SearchText.Fold(s) == SearchText.Fold(code));
+            if (same < 0)
                 shortcodes.Add(code);
+            else if (code != shortcodes[same])
+                aliases.Add(code);
         }
     }
 
@@ -72,9 +102,10 @@ foreach (var e in emojibase.RootElement.EnumerateArray())
     AddShortcodes(shortcodeSets[2].GetValueOrDefault(hex));           // emojibase
     AddShortcodes(shortcodeSets[3].GetValueOrDefault(hex));           // CLDR
     if (shortcodes.Count == 0)
-        shortcodes.Add(SnakeCase(label));
+        shortcodes.Add(EmojiCode.Normalize(label));
+    upstreamCodes[emoji] = string.Join(' ', upstream);
 
-    // Primary shortcode: the first Slack/GitHub one that starts with a letter (so 👍 shows "thumbsup", not "+1").
+    // Primary shortcode: the first Slack/GitHub one that starts with a letter.
     var primary = shortcodes.FindIndex(s => char.IsAsciiLetter(s[0]));
     if (primary > 0)
     {
@@ -124,7 +155,8 @@ foreach (var e in emojibase.RootElement.EnumerateArray())
         Order: e.TryGetProperty("order", out var order) ? order.GetInt32() : 0,
         Group: groupEl.GetInt32(),
         IsVariant: IsVariant(hex),
-        RenderedOnReferenceFont: rendered));
+        RenderedOnReferenceFont: rendered,
+        SearchAliases: aliases));
 }
 
 IReadOnlyList<(string Word, int Position)> CuratedFor(string key)
@@ -139,6 +171,24 @@ foreach (var missing in curated.Keys.Except(curatedUsed))
     Console.WriteLine($"warning: everyday-words.tsv references unknown emoji {missing}");
 
 entries.Sort((a, b) => a.Order.CompareTo(b.Order));
+
+var symbols = LoadSymbols(Path.Combine(root, "data", "symbols.tsv"), emojiForms);
+var firstSymbolOrder = entries.Count == 0 ? 0 : entries.Max(x => x.Order) + 1;
+var hiddenSymbols = new List<string>();
+for (var i = 0; i < symbols.Count; i++)
+{
+    var s = symbols[i];
+    var rendered = textFont.Renders(s.Symbol);
+    if (!rendered)
+        hiddenSymbols.Add($"{s.Symbol} {s.Names[0]}");
+    entries.Add(new EmojiSourceEntry(s.Symbol, s.Display, s.Names, s.Keywords, [], null, s.Popularity, firstSymbolOrder + i, SymbolGroup,
+        IsVariant: false, RenderedOnReferenceFont: rendered, IsSymbol: true));
+}
+
+entries = AssignCodes(entries);
+CheckCodes(entries);
+ReportCodeChanges(entries, upstreamCodes);
+
 var blob = EmojiBlobWriter.Write(entries, dataVersion);
 File.WriteAllBytes(outPath, blob);
 if (options.TryGetValue("manifest", out var manifestPath))
@@ -155,17 +205,126 @@ foreach (var x in entries)
 {
     dump.Append(x.Emoji).Append('\t')
         .Append(x.Popularity == ushort.MaxValue ? "-" : x.Popularity.ToString(CultureInfo.InvariantCulture)).Append('\t')
-        .Append(string.Join(' ', x.Shortcodes)).Append('\t')
+        .Append(string.Join(' ', x.Shortcodes));
+    if (x.SearchAliases is { Count: > 0 } hidden)
+        dump.Append(" [").Append(string.Join(' ', hidden)).Append(']');
+    dump.Append('\t')
         .Append(x.Name).Append('\t')
         .AppendLine(string.Join(", ", x.Keywords));
 }
 
 Directory.CreateDirectory(Path.Combine(root, "data", "generated"));
 File.WriteAllText(Path.Combine(root, "data", "generated", "emoji-index.tsv"), dump.ToString().ReplaceLineEndings("\n"));
-File.WriteAllText(Path.Combine(root, "data", "generated", "unsupported-on-reference-font.tsv"), string.Join('\n', unsupported) + "\n");
+File.WriteAllText(Path.Combine(root, "data", "generated", "unsupported-on-reference-font.tsv"),
+    string.Join('\n', unsupported.Concat(hiddenSymbols.Select(s => s + "\tsymbol, not in " + string.Join(", ", TextFontFiles)))) + "\n");
 
-Console.WriteLine($"{entries.Count} emoji ({unsupported.Count} not drawn by {Path.GetFileName(fontPath)}), data version {dataVersion}, blob {blob.Length / 1024} KiB -> {outPath}");
+Console.WriteLine($"{entries.Count - symbols.Count} emoji ({unsupported.Count} not drawn by {Path.GetFileName(fontPath)}), " +
+    $"{symbols.Count} symbols ({hiddenSymbols.Count} not drawn by the text fonts), data version {dataVersion}, blob {blob.Length / 1024} KiB -> {outPath}");
 return 0;
+
+// Gives every displayed code one owner: symbol names first (curated, so a clash between two is an error), then emoji
+// primaries by popularity, then the other aliases slot by slot. A code that loses stays searchable as a hidden alias.
+static List<EmojiSourceEntry> AssignCodes(List<EmojiSourceEntry> entries)
+{
+    var owner = new Dictionary<string, int>(StringComparer.Ordinal);
+    var kept = entries.Select(_ => new List<string>()).ToArray();
+    var hidden = entries.Select(x => new List<string>(x.SearchAliases ?? [])).ToArray();
+    for (var i = 0; i < entries.Count; i++)
+    {
+        if (!entries[i].IsSymbol)
+            continue;
+        foreach (var name in entries[i].Shortcodes)
+        {
+            if (!owner.TryAdd(SearchText.Fold(name), i))
+                throw new InvalidDataException($"symbols.tsv: '{name}' ({entries[i].Emoji}) clashes with {entries[owner[SearchText.Fold(name)]].Emoji}.");
+            kept[i].Add(name);
+        }
+    }
+
+    var emoji = Enumerable.Range(0, entries.Count).Where(i => !entries[i].IsSymbol)
+        .OrderBy(i => entries[i].Popularity).ThenBy(i => entries[i].Order).ToArray();
+    var slots = emoji.Max(i => entries[i].Shortcodes.Count);
+    for (var slot = 0; slot < slots; slot++)
+    {
+        foreach (var i in emoji)
+        {
+            if (slot >= entries[i].Shortcodes.Count)
+                continue;
+            var code = entries[i].Shortcodes[slot];
+            if (owner.TryAdd(SearchText.Fold(code), i))
+                kept[i].Add(code);
+            else
+                hidden[i].Add(code);
+        }
+    }
+
+    for (var i = 0; i < entries.Count; i++)
+    {
+        if (kept[i].Count > 0)
+            continue;
+        // Every code went to another entry: take back the primary from an emoji that has others (🍨 ice_cream from
+        // 🍦 icecream, which keeps soft_ice_cream), else fall back to the name.
+        var code = entries[i].Shortcodes[0];
+        var key = SearchText.Fold(code);
+        if (owner.TryGetValue(key, out var other) && !entries[other].IsSymbol && kept[other].Count > 1)
+        {
+            var lost = kept[other].Find(c => SearchText.Fold(c) == key)!;
+            kept[other].Remove(lost);
+            hidden[other].Add(lost);
+            hidden[i].Remove(code);
+            owner[key] = i;
+        }
+        else if (!owner.TryAdd(SearchText.Fold(code = EmojiCode.Normalize(entries[i].Name)), i))
+        {
+            throw new InvalidDataException($"{entries[i].Emoji} has no code of its own ({string.Join(' ', entries[i].Shortcodes)}).");
+        }
+
+        kept[i].Add(code);
+    }
+
+    return [.. entries.Select((x, i) => x with { Shortcodes = kept[i], SearchAliases = hidden[i] })];
+}
+
+// The rule the app relies on (and EmojiCodeTests re-checks on the shipped data): fail the build when it is broken.
+static void CheckCodes(List<EmojiSourceEntry> entries)
+{
+    var seen = new Dictionary<string, string>(StringComparer.Ordinal);
+    var errors = new List<string>();
+    foreach (var x in entries)
+    {
+        foreach (var code in x.Shortcodes)
+        {
+            if (!EmojiCode.IsValid(code))
+                errors.Add($"{x.Emoji} '{code}' is not snake_case");
+            else if (!seen.TryAdd(SearchText.Fold(code), $"{x.Emoji} '{code}'"))
+                errors.Add($"{x.Emoji} '{code}' collides with {seen[SearchText.Fold(code)]}");
+        }
+    }
+
+    if (errors.Count > 0)
+        throw new InvalidDataException("Built-in codes break the snake_case rule:\n  " + string.Join("\n  ", errors));
+}
+
+static void ReportCodeChanges(List<EmojiSourceEntry> entries, Dictionary<string, string> upstreamCodes)
+{
+    int changed = 0, primaryChanged = 0;
+    var examples = new List<string>();
+    foreach (var x in entries.Where(x => !x.IsSymbol))
+    {
+        var before = upstreamCodes[x.Emoji].Split(' ').Where(c => !EmojiCode.IsSignedNumber(c)).ToArray();
+        if (before.SequenceEqual(x.Shortcodes))
+            continue;
+        changed++;
+        if (before.Length > 0 && before.Where(c => char.IsAsciiLetter(c[0])).DefaultIfEmpty(before[0]).First() != x.Shortcodes[0])
+        {
+            primaryChanged++;
+            if (examples.Count < 12)
+                examples.Add($"{x.Emoji} {before.Where(c => char.IsAsciiLetter(c[0])).DefaultIfEmpty(before[0]).First()} → {x.Shortcodes[0]}");
+        }
+    }
+
+    Console.WriteLine($"codes: {changed} emoji show other codes than upstream ({primaryChanged} another primary: {string.Join(", ", examples)})");
+}
 
 static Dictionary<string, string> ParseOptions(string[] args)
 {
@@ -190,8 +349,49 @@ static string FindRepoRoot()
 
 static string StripVs(string s) => s.Replace("️", "", StringComparison.Ordinal).Replace("︎", "", StringComparison.Ordinal);
 
-static string SnakeCase(string label) =>
-    string.Join('_', label.ToLowerInvariant().Split([' ', ':', ',', '.', '’', '\'', '-', '!', '“', '”', '(', ')'], StringSplitOptions.RemoveEmptyEntries));
+// Rows "name [alias ...]<TAB>symbol<TAB>popularity<TAB>display<TAB>keywords" after a header line; '#' starts a comment.
+static List<SymbolRow> LoadSymbols(string path, HashSet<string> emojiForms)
+{
+    var rows = new List<SymbolRow>();
+    var errors = new List<string>();
+    var lineNumber = 0;
+    var header = true;
+    foreach (var line in File.ReadLines(path))
+    {
+        lineNumber++;
+        if (line.StartsWith('#') || string.IsNullOrWhiteSpace(line))
+            continue;
+        if (header)
+        {
+            header = false; // name, symbol, popularity, display, keywords
+            continue;
+        }
+
+        var f = line.Split('\t');
+        if (f.Length != 5 || !int.TryParse(f[2], NumberStyles.None, CultureInfo.InvariantCulture, out var popularity) || popularity < 1)
+        {
+            errors.Add($"line {lineNumber}: expected name, symbol, popularity, display, keywords");
+            continue;
+        }
+
+        var names = f[0].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var symbol = f[1];
+        foreach (var name in names.Where(n => !EmojiCode.IsValid(n)))
+            errors.Add($"line {lineNumber}: '{name}' is not snake_case");
+        if (names.Length == 0 || symbol.Length == 0 || f[3].Trim().Length == 0)
+            errors.Add($"line {lineNumber}: name, symbol and display name are required");
+        // An emoji-presentation character (➕ ✅) or a VS16 sequence draws as a color emoji wherever it is inserted.
+        if (symbol.Contains('️', StringComparison.Ordinal) || emojiForms.Contains(symbol))
+            errors.Add($"line {lineNumber}: {symbol} draws as an emoji; symbols must be text");
+        if (rows.Find(r => r.Symbol == symbol) is { } duplicate)
+            errors.Add($"line {lineNumber}: {symbol} is already listed as {duplicate.Names[0]}");
+        rows.Add(new SymbolRow(names, symbol, popularity, f[3].Trim(), f[4].Split(' ', StringSplitOptions.RemoveEmptyEntries)));
+    }
+
+    if (errors.Count > 0)
+        throw new InvalidDataException("symbols.tsv:\n  " + string.Join("\n  ", errors));
+    return rows;
+}
 
 // Gendered ZWJ forms (♀/♂) are variants of their gender-neutral base.
 static bool IsVariant(string hex) => hex.Contains("200D", StringComparison.Ordinal) && (hex.Contains("2640", StringComparison.Ordinal) || hex.Contains("2642", StringComparison.Ordinal));
@@ -345,7 +545,57 @@ internal sealed class FontChecker : IDisposable
     }
 }
 
+/// <summary>
+/// Whether the text fonts symbols are drawn with have a glyph for every code point of a symbol, like the app's
+/// DirectWrite check: a code point counts when any of the fonts (any face of a collection) has it. Missing files are skipped.
+/// </summary>
+internal sealed class TextFontChecker : IDisposable
+{
+    private readonly List<Blob> _blobs = [];
+    private readonly List<(Face Face, Font Font)> _faces = [];
+
+    public TextFontChecker(IEnumerable<string> paths)
+    {
+        foreach (var path in paths.Where(File.Exists))
+        {
+            var blob = Blob.FromFile(path);
+            _blobs.Add(blob);
+            for (var i = 0; i < Math.Max(blob.FaceCount, 1); i++)
+            {
+                var face = new Face(blob, i);
+                _faces.Add((face, new Font(face)));
+            }
+        }
+
+        if (_faces.Count == 0)
+            throw new FileNotFoundException("None of the text fonts for symbols is installed.");
+    }
+
+    public bool Renders(string text) =>
+        text.EnumerateRunes().All(r => r.Value is 0xFE0E || _faces.Exists(f => f.Font.TryGetGlyph(r.Value, out _)));
+
+    public void Dispose()
+    {
+        foreach (var (face, font) in _faces)
+        {
+            font.Dispose();
+            face.Dispose();
+        }
+
+        foreach (var blob in _blobs)
+            blob.Dispose();
+    }
+}
+
+internal sealed record SymbolRow(string[] Names, string Symbol, int Popularity, string Display, string[] Keywords);
+
 partial class Program
 {
+    /// <summary>Segoe UI, Segoe UI Symbol, and Cambria Math (in cambria.ttc): what symbols are drawn with.</summary>
+    private static readonly string[] TextFontFiles = ["segoeui.ttf", "seguisym.ttf", "cambria.ttc"];
+
+    /// <summary>Emoji groups are 0–9 (emojibase); symbols get their own.</summary>
+    private const int SymbolGroup = 10;
+
     private static readonly string[] ShortcodeSources = ["github", "iamcal", "emojibase", "cldr"];
 }

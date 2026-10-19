@@ -112,6 +112,36 @@ public sealed class EmojiPackTests
     }
 
     [Fact]
+    public void A_pack_in_an_older_format_is_not_downloaded_and_a_stale_download_is_not_corrupt()
+    {
+        // After the update to format 2 (symbols), format-1 packs may still be published for a while.
+        var manifest = ManifestFor(Pack(300));
+        Assert.Equal(PackVerdict.FormatTooOld, EmojiPack.CheckManifest(manifest with { FormatVersion = EmojiData.SupportedFormatVersion - 1 }, 100, s_app));
+
+        var pack = Pack(300);
+        BitConverter.TryWriteBytes(pack.AsSpan(4), EmojiData.SupportedFormatVersion - 1);
+        Assert.Equal(PackVerdict.FormatTooOld, EmojiPack.CheckPack(pack, manifest with { Size = pack.Length, Sha256 = EmojiPack.Hash(pack) }, 100));
+        Assert.Null(EmojiPack.ChooseDownloaded(pack, embeddedDataVersion: 200, out var corrupt));
+        Assert.False(corrupt);
+    }
+
+    [Fact]
+    public void A_pack_with_symbols_round_trips_and_counts_them()
+    {
+        var entries = new List<EmojiSourceEntry>
+        {
+            new("🔥", "fire", ["fire"], ["flame"], [], null, 1, 0, 0, false, true),
+            new("→", "Rightwards arrow", ["arrow_right"], ["arrow"], [], null, 100, 1, 10, false, true, IsSymbol: true),
+        };
+        var pack = EmojiBlobWriter.Write(entries, 300);
+        var manifest = ManifestFor(pack);
+        Assert.Equal(2, manifest.EmojiCount);
+        Assert.Equal(PackVerdict.Accept, EmojiPack.CheckPack(pack, manifest, 2));
+        using var data = EmojiPack.ChooseDownloaded(pack, 200, out _);
+        Assert.True(data!.IsSymbol(1));
+    }
+
+    [Fact]
     public void A_pack_that_does_not_load_is_rejected_even_with_a_matching_hash()
     {
         var pack = Pack(200);

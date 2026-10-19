@@ -66,8 +66,8 @@ public sealed unsafe class EmojiData : IDisposable
     {
         EmojiBlob.Section.Chars => sizeof(char),
         EmojiBlob.Section.Emoji => sizeof(EmojiRecord),
-        EmojiBlob.Section.Terms => sizeof(TermRecord),
-        EmojiBlob.Section.Postings => sizeof(uint),
+        EmojiBlob.Section.Terms or EmojiBlob.Section.SymbolTerms => sizeof(TermRecord),
+        EmojiBlob.Section.Postings or EmojiBlob.Section.SymbolPostings => sizeof(uint),
         _ => sizeof(StringRef),
     };
 
@@ -78,11 +78,18 @@ public sealed unsafe class EmojiData : IDisposable
         bool Ok(StringRef r) => r.Offset >= 0 && r.Length >= 0 && (long)r.Offset + r.Length <= chars;
         bool Range(int first, int count, EmojiBlob.Section s) => first >= 0 && count >= 0 && (long)first + count <= _sectionCount[(int)s];
 
-        foreach (var r in Records)
+        var records = Records;
+        FirstSymbol = records.Length;
+        for (var i = 0; i < records.Length; i++)
         {
+            ref readonly var r = ref records[i];
+            var symbol = (r.Flags & (byte)EmojiFlags.Symbol) != 0;
+            if (symbol && FirstSymbol == records.Length)
+                FirstSymbol = i;
             if (!Ok(r.Emoji) || !Ok(r.Name) || r.Emoji.Length == 0 || r.ShortcodeCount == 0
                 || !Range(r.FirstShortcode, r.ShortcodeCount, EmojiBlob.Section.Shortcodes)
-                || (r.FirstTone >= 0 && !Range(r.FirstTone, 5, EmojiBlob.Section.Tones)))
+                || (r.FirstTone >= 0 && !Range(r.FirstTone, 5, EmojiBlob.Section.Tones))
+                || symbol != (i >= FirstSymbol))
                 throw new InvalidDataException("Emoji data has an invalid emoji record.");
         }
 
@@ -96,16 +103,23 @@ public sealed unsafe class EmojiData : IDisposable
             }
         }
 
-        foreach (var t in Terms)
-        {
-            if (!Ok(t.Text) || t.Text.Length == 0 || !Range(t.PostingStart, t.PostingCount, EmojiBlob.Section.Postings))
-                throw new InvalidDataException("Emoji data has an invalid term.");
-        }
+        ValidateIndex(EmojiBlob.Section.Terms, EmojiBlob.Section.Postings, 0, FirstSymbol);
+        ValidateIndex(EmojiBlob.Section.SymbolTerms, EmojiBlob.Section.SymbolPostings, FirstSymbol, Count);
 
-        foreach (var p in Postings)
+        // Each index may only point at its own entries: leaving symbols out must leave no trace of them.
+        void ValidateIndex(EmojiBlob.Section termSection, EmojiBlob.Section postingSection, int first, int end)
         {
-            if (Posting.Emoji(p) >= Count)
-                throw new InvalidDataException("Emoji data has an invalid posting.");
+            foreach (var t in Section<TermRecord>(termSection))
+            {
+                if (!Ok(t.Text) || t.Text.Length == 0 || !Range(t.PostingStart, t.PostingCount, postingSection))
+                    throw new InvalidDataException("Emoji data has an invalid term.");
+            }
+
+            foreach (var p in Section<uint>(postingSection))
+            {
+                if (Posting.Emoji(p) < first || Posting.Emoji(p) >= end)
+                    throw new InvalidDataException("Emoji data has an invalid posting.");
+            }
         }
     }
 
@@ -129,8 +143,14 @@ public sealed unsafe class EmojiData : IDisposable
         return true;
     }
 
-    /// <summary>Number of emoji in the dataset.</summary>
+    /// <summary>Number of entries in the dataset: emoji, then symbols.</summary>
     public int Count { get; private set; }
+
+    /// <summary>Index of the first symbol; every entry from here to <see cref="Count"/> is a symbol.</summary>
+    public int FirstSymbol { get; private set; }
+
+    /// <summary>Number of symbols (→ ° € …) after the emoji.</summary>
+    public int SymbolCount => Count - FirstSymbol;
 
     /// <summary>Loads the dataset compiled into this assembly.</summary>
     public static EmojiData LoadEmbedded()
@@ -176,11 +196,15 @@ public sealed unsafe class EmojiData : IDisposable
 
     internal ReadOnlySpan<uint> Postings => Section<uint>(EmojiBlob.Section.Postings);
 
+    internal ReadOnlySpan<TermRecord> SymbolTerms => Section<TermRecord>(EmojiBlob.Section.SymbolTerms);
+
+    internal ReadOnlySpan<uint> SymbolPostings => Section<uint>(EmojiBlob.Section.SymbolPostings);
+
     internal ReadOnlySpan<char> Text(StringRef r) => Section<char>(EmojiBlob.Section.Chars).Slice(r.Offset, r.Length);
 
     internal ref readonly EmojiRecord Record(int index) => ref Records[index];
 
-    /// <summary>The emoji itself (fully qualified).</summary>
+    /// <summary>The emoji itself (fully qualified), or the symbol's text.</summary>
     public ReadOnlySpan<char> Emoji(int index) => Text(Records[index].Emoji);
 
     /// <summary>The emoji with the given skin tone (1..5) applied, or the base emoji when it has no tone variants.</summary>
@@ -194,12 +218,12 @@ public sealed unsafe class EmojiData : IDisposable
 
     public bool HasSkinTones(int index) => Records[index].FirstTone >= 0;
 
-    /// <summary>CLDR name, e.g. "face with tears of joy".</summary>
+    /// <summary>CLDR name, e.g. "face with tears of joy"; for a symbol, its display name ("Degree sign").</summary>
     public ReadOnlySpan<char> Name(int index) => Text(Records[index].Name);
 
     public int ShortcodeCount(int index) => Records[index].ShortcodeCount;
 
-    /// <summary>Shortcode <paramref name="slot"/> of the emoji; slot 0 is the primary (Slack/GitHub) shortcode.</summary>
+    /// <summary>Shortcode <paramref name="slot"/> of the emoji; slot 0 is the primary (Slack/GitHub) shortcode, or the symbol's name.</summary>
     public ReadOnlySpan<char> Shortcode(int index, int slot)
     {
         ref readonly var r = ref Records[index];
@@ -211,7 +235,16 @@ public sealed unsafe class EmojiData : IDisposable
 
     public bool IsVariant(int index) => (Records[index].Flags & (byte)EmojiFlags.Variant) != 0;
 
-    /// <summary>Whether the build machine's emoji font drew this emoji (the default visibility before a runtime font check).</summary>
+    /// <summary>
+    /// Whether the entry is a text symbol (→ ° €) rather than an emoji: draw it with a text font (Segoe UI and its
+    /// fallbacks), never as a color emoji; it has no skin tones.
+    /// </summary>
+    public bool IsSymbol(int index) => index >= FirstSymbol && (uint)index < (uint)Count;
+
+    /// <summary>
+    /// Whether the build machine's fonts drew this entry (the default visibility before a runtime font check):
+    /// Segoe UI Emoji for emoji, the text fonts for symbols.
+    /// </summary>
     public bool RenderedOnReferenceFont(int index) => (Records[index].Flags & (byte)EmojiFlags.RenderedOnReferenceFont) != 0;
 
     /// <summary>Finds the emoji whose base form equals <paramref name="emoji"/> exactly, or -1.</summary>

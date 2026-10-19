@@ -60,6 +60,21 @@ public sealed class EmojiUpdaterTests : IDisposable
     }
 
     [Fact]
+    public async Task A_pack_in_another_format_is_not_downloaded()
+    {
+        var pack = Pack(300);
+        var manifest = EmojiPackManifest.Describe(pack, "1.0.0");
+        foreach (var format in new[] { EmojiData.SupportedFormatVersion - 1, EmojiData.SupportedFormatVersion + 1 })
+        {
+            Serve(pack, manifest with { FormatVersion = format });
+            var result = await Updater().CheckAsync(new EmojiUpdateState(), 200, 100, () => true, TestContext.Current.CancellationToken);
+            Assert.Equal(UpdateOutcome.UpToDate, result.Outcome);
+        }
+
+        Assert.Equal(0, _server.PackRequests);
+    }
+
+    [Fact]
     public async Task With_a_matching_etag_the_server_answers_304_and_nothing_is_downloaded()
     {
         Serve(Pack(300));

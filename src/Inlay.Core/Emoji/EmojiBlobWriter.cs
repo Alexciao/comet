@@ -3,8 +3,11 @@ using Inlay.Core.Text;
 
 namespace Inlay.Core.Emoji;
 
-/// <summary>One emoji as assembled by the data builder from the upstream datasets.</summary>
+/// <summary>One emoji (or symbol) as assembled by the data builder from the upstream datasets and data/symbols.tsv.</summary>
+/// <param name="Shortcodes">Displayed codes, primary first.</param>
 /// <param name="Curated">Everyday words mapped to this emoji, with the emoji's preference position for that word.</param>
+/// <param name="SearchAliases">Codes that find the entry but are never displayed (<see cref="TermKind.Alias"/>).</param>
+/// <param name="IsSymbol">A text symbol; symbols must come after every emoji.</param>
 public sealed record EmojiSourceEntry(
     string Emoji,
     string Name,
@@ -16,7 +19,9 @@ public sealed record EmojiSourceEntry(
     int Order,
     int Group,
     bool IsVariant,
-    bool RenderedOnReferenceFont);
+    bool RenderedOnReferenceFont,
+    IReadOnlyList<string>? SearchAliases = null,
+    bool IsSymbol = false);
 
 /// <summary>Builds the term index and serializes the dataset into the <see cref="EmojiBlob"/> layout.</summary>
 public static class EmojiBlobWriter
@@ -43,7 +48,9 @@ public static class EmojiBlobWriter
         var records = new EmojiRecord[entries.Count];
         var shortcodes = new List<StringRef>();
         var tones = new List<StringRef>();
-        var postings = new SortedDictionary<string, List<uint>>(StringComparer.Ordinal);
+        var emojiPostings = new SortedDictionary<string, List<uint>>(StringComparer.Ordinal);
+        var symbolPostings = new SortedDictionary<string, List<uint>>(StringComparer.Ordinal);
+        var postings = emojiPostings;
 
         void AddPosting(string term, uint posting)
         {
@@ -63,6 +70,10 @@ public static class EmojiBlobWriter
         for (var i = 0; i < entries.Count; i++)
         {
             var e = entries[i];
+            if (!e.IsSymbol && postings == symbolPostings)
+                throw new ArgumentException("Symbols must follow every emoji.", nameof(entries));
+            if (e.IsSymbol)
+                postings = symbolPostings;
             ref var r = ref records[i];
             r.Emoji = Intern(e.Emoji);
             r.Name = Intern(e.Name);
@@ -72,7 +83,8 @@ public static class EmojiBlobWriter
             r.Order = (ushort)Math.Clamp(e.Order, 0, ushort.MaxValue);
             r.Group = (byte)Math.Clamp(e.Group, 0, 255);
             r.Flags = (byte)((e.IsVariant ? EmojiFlags.Variant : EmojiFlags.None)
-                | (e.RenderedOnReferenceFont ? EmojiFlags.RenderedOnReferenceFont : EmojiFlags.None));
+                | (e.RenderedOnReferenceFont ? EmojiFlags.RenderedOnReferenceFont : EmojiFlags.None)
+                | (e.IsSymbol ? EmojiFlags.Symbol : EmojiFlags.None));
             r.FirstTone = -1;
 
             for (var slot = 0; slot < e.Shortcodes.Count; slot++)
@@ -82,6 +94,13 @@ public static class EmojiBlobWriter
                 var suffixes = SearchText.WordSuffixes(sc);
                 for (var k = 0; k < suffixes.Count; k++)
                     AddPosting(suffixes[k], Posting.Pack(i, k == 0 ? TermKind.Shortcode : TermKind.ShortcodeWord, slot));
+            }
+
+            foreach (var alias in e.SearchAliases ?? [])
+            {
+                var suffixes = SearchText.WordSuffixes(alias);
+                for (var k = 0; k < suffixes.Count; k++)
+                    AddPosting(suffixes[k], Posting.Pack(i, k == 0 ? TermKind.Alias : TermKind.ShortcodeWord, 0));
             }
 
             foreach (var (word, position) in e.Curated)
@@ -101,13 +120,21 @@ public static class EmojiBlobWriter
             }
         }
 
-        var terms = new List<TermRecord>(postings.Count);
-        var postingArray = new List<uint>();
-        foreach (var (term, list) in postings)
+        (List<TermRecord> Terms, List<uint> Postings) Index(SortedDictionary<string, List<uint>> map)
         {
-            terms.Add(new TermRecord { Text = Intern(term), PostingStart = postingArray.Count, PostingCount = list.Count });
-            postingArray.AddRange(list);
+            var terms = new List<TermRecord>(map.Count);
+            var postingArray = new List<uint>();
+            foreach (var (term, list) in map)
+            {
+                terms.Add(new TermRecord { Text = Intern(term), PostingStart = postingArray.Count, PostingCount = list.Count });
+                postingArray.AddRange(list);
+            }
+
+            return (terms, postingArray);
         }
+
+        var emojiIndex = Index(emojiPostings);
+        var symbolIndex = Index(symbolPostings);
 
         using var ms = new MemoryStream();
         using var w = new BinaryWriter(ms);
@@ -127,8 +154,10 @@ public static class EmojiBlobWriter
         Section(EmojiBlob.Section.Emoji, records.AsSpan());
         Section(EmojiBlob.Section.Shortcodes, CollectionsMarshal.AsSpan(shortcodes));
         Section(EmojiBlob.Section.Tones, CollectionsMarshal.AsSpan(tones));
-        Section(EmojiBlob.Section.Terms, CollectionsMarshal.AsSpan(terms));
-        Section(EmojiBlob.Section.Postings, CollectionsMarshal.AsSpan(postingArray));
+        Section(EmojiBlob.Section.Terms, CollectionsMarshal.AsSpan(emojiIndex.Terms));
+        Section(EmojiBlob.Section.Postings, CollectionsMarshal.AsSpan(emojiIndex.Postings));
+        Section(EmojiBlob.Section.SymbolTerms, CollectionsMarshal.AsSpan(symbolIndex.Terms));
+        Section(EmojiBlob.Section.SymbolPostings, CollectionsMarshal.AsSpan(symbolIndex.Postings));
         Section(EmojiBlob.Section.Chars, CollectionsMarshal.AsSpan(chars));
 
         ms.Position = 0;

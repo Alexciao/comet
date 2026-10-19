@@ -1,0 +1,320 @@
+# Curated symbols for Quick Insert, compiled into emoji.bin by tools/Inlay.DataBuilder (part of the Emoji feature).
+# name        snake_case code; extra space-separated names are aliases (":deg" for degree). The first is displayed.
+#             A symbol's names win over an emoji shortcode that folds the same (arrow_right, euro): keep that rare.
+# symbol      the text inserted. Never an emoji-presentation character (➕ ✅ ❌): those draw as color emoji.
+# popularity  rank on the emoji popularity scale (1 = most used): 100 everyday, 400 common, 1200 occasional, 3000 rare.
+# display     shown under the code, Unicode-name-like in sentence case.
+# keywords    space-separated search words.
+name	symbol	popularity	display	keywords
+# --- arrows
+arrow_right right	→	100	Rightwards arrow	arrow next then to forward
+arrow_left left	←	150	Leftwards arrow	arrow back previous from
+arrow_up	↑	200	Upwards arrow	arrow increase rise
+arrow_down	↓	200	Downwards arrow	arrow decrease fall
+arrow_left_right	↔	400	Left right arrow	arrow both ways bidirectional between
+arrow_up_down	↕	1200	Up down arrow	arrow vertical both
+arrow_up_right	↗	1200	North east arrow	arrow diagonal northeast trend up
+arrow_up_left	↖	1200	North west arrow	arrow diagonal northwest
+arrow_down_right	↘	1200	South east arrow	arrow diagonal southeast trend down
+arrow_down_left	↙	1200	South west arrow	arrow diagonal southwest
+double_arrow_right implies	⇒	400	Rightwards double arrow	arrow implies therefore then logic
+double_arrow_left	⇐	1200	Leftwards double arrow	arrow implied logic
+double_arrow_left_right iff	⇔	1200	Left right double arrow	arrow equivalent if only logic
+double_arrow_up	⇑	3000	Upwards double arrow	arrow
+double_arrow_down	⇓	3000	Downwards double arrow	arrow
+double_arrow_up_down	⇕	3000	Up down double arrow	arrow
+long_arrow_right	⟶	1200	Long rightwards arrow	arrow long
+long_arrow_left	⟵	1200	Long leftwards arrow	arrow long
+long_arrow_left_right	⟷	3000	Long left right arrow	arrow long
+maps_to	↦	3000	Rightwards arrow from bar	arrow function math mapsto
+arrows_right_left	⇄	3000	Rightwards arrow over leftwards arrow	arrow swap exchange
+equilibrium	⇌	3000	Rightwards harpoon over leftwards harpoon	arrow reaction chemistry reversible harpoon
+arrow_clockwise	↻	1200	Clockwise open circle arrow	arrow refresh reload redo rotate
+arrow_counterclockwise	↺	1200	Anticlockwise open circle arrow	arrow undo rotate anticlockwise
+arrow_return	↵	1200	Downwards arrow with corner leftwards	arrow enter newline carriage
+arrow_curved_right	↷	3000	Clockwise top semicircle arrow	arrow redo curve
+arrow_curved_left	↶	3000	Anticlockwise top semicircle arrow	arrow undo curve
+arrow_bold_right	➜	1200	Heavy round-tipped rightwards arrow	arrow bold heavy next
+# --- math
+plus_minus pm	±	100	Plus-minus sign	plus minus tolerance approximately math
+minus_plus	∓	3000	Minus-or-plus sign	minus plus math
+times	×	100	Multiplication sign	multiply multiplication by dimensions math x
+division_sign obelus	÷	400	Division sign	divide division math
+minus_sign	−	400	Minus sign	minus subtract negative math
+not_equal neq	≠	100	Not equal to	equal unequal different math
+approx almost_equal	≈	100	Almost equal to	approximately about roughly equal math
+identical equiv	≡	1200	Identical to	equivalent congruent defined math
+congruent	≅	3000	Approximately equal to	isomorphic math
+less_equal leq	≤	100	Less-than or equal to	less equal at most math
+greater_equal geq	≥	100	Greater-than or equal to	greater equal at least math
+much_less	≪	3000	Much less-than	less math
+much_greater	≫	3000	Much greater-than	greater math
+infinity_sign inf	∞	100	Infinity	infinite forever endless math
+square_root sqrt	√	400	Square root	root radical math
+cube_root	∛	3000	Cube root	root radical math
+sum summation	∑	400	N-ary summation	sigma total math
+product	∏	1200	N-ary product	pi math
+integral	∫	400	Integral	calculus math
+double_integral	∬	3000	Double integral	calculus math
+contour_integral	∮	3000	Contour integral	calculus math
+partial	∂	1200	Partial differential	derivative calculus math
+nabla	∇	1200	Nabla	gradient del math
+increment	∆	1200	Increment	change difference math
+proportional	∝	1200	Proportional to	proportion varies math
+for_all	∀	1200	For all	forall every logic math
+exists	∃	1200	There exists	exist logic math
+not_exists	∄	3000	There does not exist	exist logic math
+empty_set	∅	1200	Empty set	null void math
+element_of	∈	1200	Element of	in member set math
+not_element_of	∉	3000	Not an element of	member set math
+subset	⊂	1200	Subset of	set math
+superset	⊃	3000	Superset of	set math
+subset_equal	⊆	3000	Subset of or equal to	set math
+superset_equal	⊇	3000	Superset of or equal to	set math
+union	∪	1200	Union	set cup math
+intersection	∩	1200	Intersection	set cap math
+logical_and	∧	1200	Logical and	and wedge logic
+logical_or	∨	1200	Logical or	or vee logic
+logical_not	¬	1200	Not sign	not negation logic
+circled_plus xor	⊕	3000	Circled plus	direct sum logic math
+circled_times	⊗	3000	Circled times	tensor product math
+therefore	∴	1200	Therefore	so hence logic
+because	∵	3000	Because	since logic
+angle	∠	1200	Angle	geometry math
+perpendicular	⊥	1200	Up tack	orthogonal bottom geometry math
+parallel	∥	1200	Parallel to	geometry math
+dot_operator cdot	⋅	1200	Dot operator	multiply product math
+ring_operator compose	∘	3000	Ring operator	composition function math
+prime	′	1200	Prime	minutes feet derivative
+double_prime	″	1200	Double prime	seconds inches
+aleph	ℵ	3000	Alef symbol	cardinal infinity math
+planck hbar	ℏ	3000	Planck constant over two pi	physics quantum
+naturals	ℕ	3000	Double-struck capital n	natural numbers set math
+integers	ℤ	3000	Double-struck capital z	integer numbers set math
+rationals	ℚ	3000	Double-struck capital q	rational numbers set math
+reals	ℝ	1200	Double-struck capital r	real numbers set math
+complex	ℂ	3000	Double-struck capital c	complex numbers set math
+left_angle_bracket	⟨	3000	Mathematical left angle bracket	bra bracket
+right_angle_bracket	⟩	3000	Mathematical right angle bracket	ket bracket
+floor_left	⌊	3000	Left floor	floor bracket math
+floor_right	⌋	3000	Right floor	floor bracket math
+ceiling_left	⌈	3000	Left ceiling	ceiling bracket math
+ceiling_right	⌉	3000	Right ceiling	ceiling bracket math
+diameter	⌀	1200	Diameter sign	diameter circle width
+# --- superscripts and subscripts
+superscript_zero	⁰	1200	Superscript zero	superscript power exponent 0
+superscript_one	¹	1200	Superscript one	superscript power exponent footnote 1
+superscript_two squared	²	100	Superscript two	superscript power exponent square 2
+superscript_three cubed	³	400	Superscript three	superscript power exponent cube 3
+superscript_four	⁴	1200	Superscript four	superscript power exponent 4
+superscript_five	⁵	1200	Superscript five	superscript power exponent 5
+superscript_six	⁶	1200	Superscript six	superscript power exponent 6
+superscript_seven	⁷	1200	Superscript seven	superscript power exponent 7
+superscript_eight	⁸	1200	Superscript eight	superscript power exponent 8
+superscript_nine	⁹	1200	Superscript nine	superscript power exponent 9
+superscript_plus	⁺	3000	Superscript plus sign	superscript positive charge
+superscript_minus	⁻	3000	Superscript minus	superscript negative charge
+superscript_n	ⁿ	3000	Superscript latin small letter n	superscript power exponent nth
+superscript_i	ⁱ	3000	Superscript latin small letter i	superscript
+subscript_zero	₀	1200	Subscript zero	subscript index 0
+subscript_one	₁	1200	Subscript one	subscript index 1
+subscript_two	₂	400	Subscript two	subscript index co2 h2o 2
+subscript_three	₃	1200	Subscript three	subscript index 3
+subscript_four	₄	1200	Subscript four	subscript index 4
+subscript_five	₅	3000	Subscript five	subscript index 5
+subscript_six	₆	3000	Subscript six	subscript index 6
+subscript_seven	₇	3000	Subscript seven	subscript index 7
+subscript_eight	₈	3000	Subscript eight	subscript index 8
+subscript_nine	₉	3000	Subscript nine	subscript index 9
+# --- fractions
+half one_half	½	100	Vulgar fraction one half	fraction 1/2
+third one_third	⅓	400	Vulgar fraction one third	fraction 1/3
+two_thirds	⅔	400	Vulgar fraction two thirds	fraction 2/3
+quarter one_quarter	¼	100	Vulgar fraction one quarter	fraction fourth 1/4
+three_quarters	¾	400	Vulgar fraction three quarters	fraction fourths 3/4
+fifth one_fifth	⅕	1200	Vulgar fraction one fifth	fraction 1/5
+two_fifths	⅖	3000	Vulgar fraction two fifths	fraction 2/5
+three_fifths	⅗	3000	Vulgar fraction three fifths	fraction 3/5
+four_fifths	⅘	3000	Vulgar fraction four fifths	fraction 4/5
+sixth one_sixth	⅙	3000	Vulgar fraction one sixth	fraction 1/6
+five_sixths	⅚	3000	Vulgar fraction five sixths	fraction 5/6
+seventh one_seventh	⅐	3000	Vulgar fraction one seventh	fraction 1/7
+eighth one_eighth	⅛	1200	Vulgar fraction one eighth	fraction 1/8
+three_eighths	⅜	3000	Vulgar fraction three eighths	fraction 3/8
+five_eighths	⅝	3000	Vulgar fraction five eighths	fraction 5/8
+seven_eighths	⅞	3000	Vulgar fraction seven eighths	fraction 7/8
+ninth one_ninth	⅑	3000	Vulgar fraction one ninth	fraction 1/9
+tenth one_tenth	⅒	3000	Vulgar fraction one tenth	fraction 1/10
+# --- degrees and units
+degree deg	°	100	Degree sign	degrees temperature angle celsius fahrenheit
+celsius	℃	400	Degree celsius	temperature centigrade degrees
+fahrenheit	℉	1200	Degree fahrenheit	temperature degrees
+per_mille	‰	1200	Per mille sign	thousand promille percent
+per_ten_thousand	‱	3000	Per ten thousand sign	basis point bps percent
+micro	µ	400	Micro sign	micron micrometer mu
+ohm	Ω	1200	Ohm sign	resistance electricity omega
+angstrom	Å	3000	Angstrom sign	length unit
+numero	№	1200	Numero sign	number no
+estimated	℮	3000	Estimated symbol	e mark quantity
+liter	ℓ	3000	Script small l	litre length ell
+# --- currency
+euro	€	100	Euro sign	currency money eur europe
+pound	£	100	Pound sign	currency money gbp sterling uk
+yen	¥	400	Yen sign	currency money jpy yuan cny japan china
+cent	¢	400	Cent sign	currency money cents
+rupee	₹	400	Indian rupee sign	currency money inr india
+bitcoin	₿	400	Bitcoin sign	currency money btc crypto
+won	₩	1200	Won sign	currency money krw korea
+ruble	₽	1200	Ruble sign	currency money rub russia rouble
+lira	₺	1200	Turkish lira sign	currency money try turkey
+hryvnia	₴	1200	Hryvnia sign	currency money uah ukraine
+naira	₦	1200	Naira sign	currency money ngn nigeria
+peso	₱	1200	Peso sign	currency money php philippines
+shekel	₪	1200	New sheqel sign	currency money ils israel sheqel
+dong	₫	1200	Dong sign	currency money vnd vietnam
+rupee_sign	₨	3000	Rupee sign	currency money pkr pakistan rs
+kip	₭	3000	Kip sign	currency money lak laos
+tugrik	₮	3000	Tugrik sign	currency money mnt mongolia
+guarani	₲	3000	Guarani sign	currency money pyg paraguay
+tenge	₸	3000	Tenge sign	currency money kzt kazakhstan
+lari	₾	3000	Lari sign	currency money gel georgia
+manat	₼	3000	Manat sign	currency money azn azerbaijan
+colon_currency	₡	3000	Colon sign	currency money crc costa rica colon
+franc	₣	3000	French franc sign	currency money frf france
+currency	¤	3000	Currency sign	money generic
+# --- typography
+em_dash	—	100	Em dash	dash long mdash
+en_dash	–	100	En dash	dash range ndash
+ellipsis	…	100	Horizontal ellipsis	dots three etc hellip
+left_double_quote ldquo	“	400	Left double quotation mark	quote quotation open curly smart
+right_double_quote rdquo	”	400	Right double quotation mark	quote quotation close curly smart
+left_single_quote lsquo	‘	400	Left single quotation mark	quote quotation open curly smart
+right_single_quote rsquo apostrophe	’	400	Right single quotation mark	quote quotation close curly smart apostrophe
+low_double_quote bdquo	„	1200	Double low-9 quotation mark	quote quotation german
+low_single_quote sbquo	‚	3000	Single low-9 quotation mark	quote quotation
+left_guillemet laquo	«	400	Left-pointing double angle quotation mark	quote quotation guillemet french chevron
+right_guillemet raquo	»	400	Right-pointing double angle quotation mark	quote quotation guillemet french chevron
+left_single_guillemet lsaquo	‹	3000	Single left-pointing angle quotation mark	quote quotation guillemet
+right_single_guillemet rsaquo	›	3000	Single right-pointing angle quotation mark	quote quotation guillemet
+bullet	•	100	Bullet	dot list point
+middle_dot middot	·	400	Middle dot	dot interpunct separator
+triangle_bullet	‣	3000	Triangular bullet	list point
+white_bullet	◦	3000	White bullet	list point hollow
+section	§	400	Section sign	paragraph law clause
+pilcrow paragraph	¶	400	Pilcrow sign	paragraph mark
+dagger	†	400	Dagger	footnote obelisk death
+double_dagger	‡	1200	Double dagger	footnote diesis
+copyright_sign	©	100	Copyright sign	copy rights legal c
+registered_sign	®	400	Registered sign	trademark legal r
+trademark	™	100	Trade mark sign	tm brand legal
+service_mark	℠	3000	Service mark	sm legal
+sound_recording_copyright	℗	3000	Sound recording copyright	phonogram legal
+inverted_question	¿	400	Inverted question mark	question spanish
+inverted_exclamation	¡	400	Inverted exclamation mark	exclamation spanish
+interrobang	‽	1200	Interrobang	question exclamation
+asterism	⁂	3000	Asterism	stars section break
+reference_mark	※	3000	Reference mark	note komejirushi
+feminine_ordinal	ª	3000	Feminine ordinal indicator	ordinal primera
+masculine_ordinal	º	3000	Masculine ordinal indicator	ordinal primero numero
+broken_bar	¦	3000	Broken bar	pipe vertical
+lozenge	◊	3000	Lozenge	diamond rhombus
+hyphen_bullet	⁃	3000	Hyphen bullet	list dash
+figure_dash	‒	3000	Figure dash	dash digits
+horizontal_bar	―	3000	Horizontal bar	dash quotation
+# --- checks, stars and shapes
+check tick	✓	100	Check mark	done yes ok correct checkmark
+ballot_x cross	✗	400	Ballot x	no wrong incorrect fail cross x
+heavy_ballot_x	✘	1200	Heavy ballot x	no wrong incorrect cross x
+checkbox	☐	400	Ballot box	todo unchecked empty box task
+checkbox_x	☒	1200	Ballot box with x	todo checked done box task
+black_star	★	400	Black star	star rating favorite filled
+white_star	☆	400	White star	star rating outline empty
+black_square	■	1200	Black square	square filled box
+white_square	□	1200	White square	square empty box
+filled_circle	●	1200	Black circle	circle filled dot
+hollow_circle	○	1200	White circle	circle empty ring
+black_diamond	◆	1200	Black diamond	diamond filled
+white_diamond	◇	3000	White diamond	diamond empty
+triangle_up	▲	1200	Black up-pointing triangle	triangle up increase
+triangle_down	▼	1200	Black down-pointing triangle	triangle down decrease
+triangle_right	►	1200	Black right-pointing pointer	triangle right play
+triangle_left	◄	1200	Black left-pointing pointer	triangle left
+white_triangle_up	△	3000	White up-pointing triangle	triangle delta
+white_triangle_down	▽	3000	White down-pointing triangle	triangle
+heart_suit	♥	400	Black heart suit	heart love card suit
+white_heart_suit	♡	1200	White heart suit	heart love card suit outline
+spade_suit	♠	1200	Black spade suit	spade card suit
+club_suit	♣	1200	Black club suit	club card suit
+diamond_suit	♦	1200	Black diamond suit	diamond card suit
+eighth_note	♪	400	Eighth note	music note quaver
+beamed_notes	♫	1200	Beamed eighth notes	music notes
+quarter_note	♩	3000	Quarter note	music note crotchet
+music_flat	♭	1200	Music flat sign	music flat
+music_natural	♮	3000	Music natural sign	music natural
+music_sharp	♯	1200	Music sharp sign	music sharp
+# --- keyboard
+command cmd	⌘	400	Place of interest sign	mac key keyboard apple
+option opt	⌥	400	Option key	mac key keyboard alt
+shift	⇧	400	Upwards white arrow	key keyboard
+caps_lock	⇪	1200	Upwards white arrow from bar	key keyboard capslock
+control ctrl	⌃	400	Up arrowhead	key keyboard mac
+return_key enter	⏎	400	Return symbol	key keyboard newline
+backspace	⌫	400	Erase to the left	key keyboard delete
+delete_key forward_delete	⌦	1200	Erase to the right	key keyboard del
+escape esc	⎋	1200	Broken circle with northwest arrow	key keyboard
+tab_key	⇥	1200	Rightwards arrow to bar	key keyboard tab
+back_tab	⇤	3000	Leftwards arrow to bar	key keyboard tab shift
+page_up	⇞	3000	Upwards arrow with double stroke	key keyboard pgup
+page_down	⇟	3000	Downwards arrow with double stroke	key keyboard pgdn
+space_key	␣	1200	Open box	space blank key keyboard
+power_symbol	⏻	3000	Power symbol	power on off standby
+# --- greek letters
+alpha	α	400	Greek small letter alpha	greek letter
+beta	β	400	Greek small letter beta	greek letter
+gamma	γ	1200	Greek small letter gamma	greek letter
+delta	δ	400	Greek small letter delta	greek letter
+epsilon	ε	1200	Greek small letter epsilon	greek letter
+zeta	ζ	1200	Greek small letter zeta	greek letter
+eta	η	1200	Greek small letter eta	greek letter
+theta	θ	1200	Greek small letter theta	greek letter angle
+iota	ι	3000	Greek small letter iota	greek letter
+kappa	κ	1200	Greek small letter kappa	greek letter
+lambda	λ	400	Greek small letter lambda	greek letter function wavelength
+mu	μ	400	Greek small letter mu	greek letter micro
+nu	ν	3000	Greek small letter nu	greek letter frequency
+xi	ξ	3000	Greek small letter xi	greek letter
+omicron	ο	3000	Greek small letter omicron	greek letter
+pi	π	100	Greek small letter pi	greek letter circle math 3.14
+rho	ρ	1200	Greek small letter rho	greek letter density
+sigma	σ	400	Greek small letter sigma	greek letter standard deviation
+final_sigma	ς	3000	Greek small letter final sigma	greek letter
+tau	τ	1200	Greek small letter tau	greek letter
+upsilon	υ	3000	Greek small letter upsilon	greek letter
+phi	φ	1200	Greek small letter phi	greek letter golden ratio
+chi	χ	1200	Greek small letter chi	greek letter
+psi	ψ	1200	Greek small letter psi	greek letter
+omega	ω	400	Greek small letter omega	greek letter angular
+capital_alpha	Α	3000	Greek capital letter alpha	greek letter uppercase
+capital_beta	Β	3000	Greek capital letter beta	greek letter uppercase
+capital_gamma	Γ	1200	Greek capital letter gamma	greek letter uppercase
+capital_delta	Δ	400	Greek capital letter delta	greek letter uppercase change difference
+capital_epsilon	Ε	3000	Greek capital letter epsilon	greek letter uppercase
+capital_zeta	Ζ	3000	Greek capital letter zeta	greek letter uppercase
+capital_eta	Η	3000	Greek capital letter eta	greek letter uppercase
+capital_theta	Θ	1200	Greek capital letter theta	greek letter uppercase
+capital_iota	Ι	3000	Greek capital letter iota	greek letter uppercase
+capital_kappa	Κ	3000	Greek capital letter kappa	greek letter uppercase
+capital_lambda	Λ	1200	Greek capital letter lambda	greek letter uppercase
+capital_mu	Μ	3000	Greek capital letter mu	greek letter uppercase
+capital_nu	Ν	3000	Greek capital letter nu	greek letter uppercase
+capital_xi	Ξ	3000	Greek capital letter xi	greek letter uppercase
+capital_omicron	Ο	3000	Greek capital letter omicron	greek letter uppercase
+capital_pi	Π	1200	Greek capital letter pi	greek letter uppercase product
+capital_rho	Ρ	3000	Greek capital letter rho	greek letter uppercase
+capital_sigma	Σ	400	Greek capital letter sigma	greek letter uppercase sum
+capital_tau	Τ	3000	Greek capital letter tau	greek letter uppercase
+capital_upsilon	Υ	3000	Greek capital letter upsilon	greek letter uppercase
+capital_phi	Φ	1200	Greek capital letter phi	greek letter uppercase
+capital_chi	Χ	3000	Greek capital letter chi	greek letter uppercase
+capital_psi	Ψ	1200	Greek capital letter psi	greek letter uppercase
+capital_omega	Ω	400	Greek capital letter omega	greek letter uppercase ohm
