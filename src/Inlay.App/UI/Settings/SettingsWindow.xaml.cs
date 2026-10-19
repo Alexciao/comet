@@ -150,6 +150,7 @@ public sealed partial class SettingsWindow : Window
         "general" => GeneralItem,
         "quickinsert" => QuickInsertItem,
         "snippets" => SnippetsItem,
+        "images" => ImagesItem,
         "emoji" => EmojiItem,
         "shorthands" or "autoreplace" => ShorthandsItem,
         _ => null,
@@ -163,6 +164,7 @@ public sealed partial class SettingsWindow : Window
         {
             "quickinsert" => typeof(QuickInsertPage),
             "snippets" => typeof(SnippetsPage),
+            "images" => typeof(ImagesPage),
             "emoji" => typeof(EmojiPage),
             "shorthands" => typeof(ShorthandsPage),
             _ => typeof(GeneralPage),

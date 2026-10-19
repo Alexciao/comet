@@ -51,5 +51,23 @@ internal static class FilePickers
         return file?.Path;
     }
 
+    /// <summary>Lets the user pick an image (PNG, JPG, GIF, WebP or BMP); returns its path, or null when cancelled.</summary>
+    public static async Task<string?> OpenImageAsync(Window owner)
+    {
+        var picker = new FileOpenPicker(owner.AppWindow.Id) { SuggestedStartLocation = PickerLocationId.PicturesLibrary };
+        foreach (var extension in Inlay.Core.Images.ImageTypes.Extensions)
+            picker.FileTypeFilter.Add("." + extension);
+        var file = await picker.PickSingleFileAsync();
+        return file?.Path;
+    }
+
+    /// <summary>Lets the user pick a folder; returns its path, or null when cancelled.</summary>
+    public static async Task<string?> OpenFolderAsync(Window owner)
+    {
+        var picker = new FolderPicker(owner.AppWindow.Id) { SuggestedStartLocation = PickerLocationId.PicturesLibrary };
+        var folder = await picker.PickSingleFolderAsync();
+        return folder?.Path;
+    }
+
     public static bool IsFileError(Exception ex) => ex is IOException or UnauthorizedAccessException or COMException;
 }
