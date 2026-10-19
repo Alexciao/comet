@@ -1,0 +1,123 @@
+<local:SettingsPage
+    x:Class="Inlay.App.UI.Settings.Pages.GeneralPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Inlay.App.UI.Settings"
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
+    NavigationCacheMode="Required">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <TextBlock Style="{StaticResource SettingsPageTitleTextBlockStyle}" Text="General" />
+
+        <ScrollViewer Grid.Row="1">
+            <Grid Padding="{StaticResource SettingsPagePadding}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MaxWidth="{StaticResource SettingsContentMaxWidth}" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <InfoBar x:Name="UpdateBar" x:Load="False" IsClosable="True" IsOpen="False" Severity="Informational">
+                        <InfoBar.ActionButton>
+                            <Button Click="OnDownloadUpdate" Content="Download" Style="{StaticResource AccentButtonStyle}" />
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+                    <InfoBar x:Name="ProblemsBar" x:Load="False" IsOpen="False" Severity="Warning" />
+                    <InfoBar x:Name="StatusBar" x:Load="False" IsOpen="False" />
+
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Startup" />
+                    <toolkit:SettingsCard x:Name="StartupCard" Header="Start with Windows" Description="Inlay starts in the notification area when you sign in">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE7E8;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <ToggleSwitch OffContent="Off" OnContent="On" x:Name="StartupToggle" AutomationProperties.Name="Start with Windows" Toggled="OnStartupToggled" />
+                    </toolkit:SettingsCard>
+
+                    <TextBlock x:Name="MenuHeader" Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="The : menu" />
+                    <toolkit:SettingsCard Header="Trigger character" Description="Type it, then a few letters, to open the menu of emoji and snippets">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE765;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <TextBox
+                            x:Name="TriggerBox"
+                            AutomationProperties.Name="Trigger character"
+                            KeyDown="OnTriggerKeyDown"
+                            LostFocus="OnTriggerLostFocus"
+                            MaxLength="1"
+                            TextAlignment="Center" />
+                    </toolkit:SettingsCard>
+                    <toolkit:SettingsCard Header="Minimum characters" Description="How many letters after the trigger before the menu appears">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8E9;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <NumberBox
+                            x:Name="MinCharsBox"
+                            AutomationProperties.Name="Minimum characters"
+                            Maximum="4"
+                            Minimum="1"
+                            SmallChange="1"
+                            SpinButtonPlacementMode="Compact"
+                            ValueChanged="OnMinCharsChanged" />
+                    </toolkit:SettingsCard>
+
+                    <!-- At or below the bottom edge at the default size: built right after the page's first frame. -->
+                    <StackPanel x:Name="LaterSections" x:Load="False" Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Updates" />
+                    <toolkit:SettingsCard x:Name="EmojiUpdatesCard" Header="Update emoji automatically">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE895;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <ToggleSwitch OffContent="Off" OnContent="On" x:Name="EmojiUpdatesToggle" AutomationProperties.Name="Update emoji automatically" Toggled="OnEmojiUpdatesToggled" />
+                    </toolkit:SettingsCard>
+                    <toolkit:SettingsCard x:Name="AppUpdatesCard" Header="Notify me about Inlay updates">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xEA8F;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <ToggleSwitch OffContent="Off" OnContent="On" x:Name="AppUpdatesToggle" AutomationProperties.Name="Notify me about Inlay updates" Toggled="OnAppUpdatesToggled" />
+                    </toolkit:SettingsCard>
+
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Backup" />
+                    <toolkit:SettingsCard Header="Export settings" Description="Save your settings, snippets and replacements in one file">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xEDE1;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <Button Click="OnExport" Content="Export" />
+                    </toolkit:SettingsCard>
+                    <toolkit:SettingsCard Header="Import settings" Description="Replace your settings, snippets and replacements with the ones in a backup file">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8B5;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <Button Click="OnImport" Content="Import" />
+                    </toolkit:SettingsCard>
+
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="About" />
+                    <toolkit:SettingsExpander x:Name="AboutExpander" AutomationProperties.Name="About Inlay" Header="Inlay" Description="Emoji, snippets and shorthands for any app">
+                        <toolkit:SettingsExpander.HeaderIcon>
+                            <ImageIcon Source="ms-appx:///Assets/AppIcon16.png" />
+                        </toolkit:SettingsExpander.HeaderIcon>
+                        <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" IsTextSelectionEnabled="True" />
+                        <toolkit:SettingsExpander.Items>
+                            <toolkit:SettingsCard x:Name="RepositoryCard" Header="Source code" Click="OnOpenRepository" IsClickEnabled="True">
+                                <toolkit:SettingsCard.ActionIcon>
+                                    <FontIcon Glyph="&#xE8A7;" />
+                                </toolkit:SettingsCard.ActionIcon>
+                            </toolkit:SettingsCard>
+                            <toolkit:SettingsCard Header="License" Description="MIT" Click="OnOpenLicense" IsClickEnabled="True">
+                                <toolkit:SettingsCard.ActionIcon>
+                                    <FontIcon Glyph="&#xE8A7;" />
+                                </toolkit:SettingsCard.ActionIcon>
+                            </toolkit:SettingsCard>
+                            <toolkit:SettingsCard Header="Logs" Description="Events and timings only, never what you type">
+                                <Button Click="OnOpenLogs" Content="Open logs folder" />
+                            </toolkit:SettingsCard>
+                        </toolkit:SettingsExpander.Items>
+                    </toolkit:SettingsExpander>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</local:SettingsPage>

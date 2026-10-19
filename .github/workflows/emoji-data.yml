@@ -1,6 +1,6 @@
 # Rebuilds the emoji data from the latest upstream datasets with the same builder as the app, runs the golden
 # search tests against it, and publishes it to the fixed `emoji-data` release only when the tests pass and the
-# data actually changed. Installed copies of Comet pick it up silently (at most one check a week).
+# data actually changed. Installed copies of Inlay pick it up silently (at most one check a week).
 name: Emoji data
 
 on:
@@ -68,15 +68,15 @@ jobs:
           $version = (Get-Date).ToUniversalTime().ToString('yyyyMMdd') + '00'
           New-Item -ItemType Directory artifacts/emoji-data -Force | Out-Null
           # Same builder and font check as the app's embedded data; written where the golden test reads it.
-          dotnet run --project tools/Comet.DataBuilder -c Release -- `
+          dotnet run --project tools/Inlay.DataBuilder -c Release -- `
             --data-version $version `
-            --out src/Comet.Core/Data/emoji.bin `
+            --out src/Inlay.Core/Data/emoji.bin `
             --manifest artifacts/emoji-data/manifest.json `
             --min-app-version $env:MIN_APP_VERSION
-          Copy-Item src/Comet.Core/Data/emoji.bin artifacts/emoji-data/emoji-data.bin
+          Copy-Item src/Inlay.Core/Data/emoji.bin artifacts/emoji-data/emoji-data.bin
 
       - name: Golden search tests on the new data
-        run: dotnet test tests/Comet.Core.Tests -c Release
+        run: dotnet test tests/Inlay.Core.Tests -c Release
 
       - name: Compare with the published pack
         id: compare
@@ -106,7 +106,7 @@ jobs:
           gh release view emoji-data 2>$null | Out-Null
           if ($LASTEXITCODE -ne 0) {
             gh release create emoji-data --prerelease --latest=false --title "Emoji data" `
-              --notes "Emoji data for Comet's silent updates. Rebuilt weekly from upstream; the app checks at most once a week."
+              --notes "Emoji data for Inlay's silent updates. Rebuilt weekly from upstream; the app checks at most once a week."
           }
           # The pack first, then the manifest that announces it: a client never sees a manifest for a missing pack.
           gh release upload emoji-data artifacts/emoji-data/emoji-data.bin --clobber

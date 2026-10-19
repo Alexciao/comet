@@ -2,7 +2,7 @@
 
 Machine: 12 logical cores, Windows 11 (build 26200), .NET 10.0. All numbers are measured, not estimated.
 
-## Search (BenchmarkDotNet, `tests/Comet.Benchmarks`, full set of 1,923 emoji + 2 snippets, 24 results)
+## Search (BenchmarkDotNet, `tests/Inlay.Benchmarks`, full set of 1,923 emoji + 2 snippets, 24 results)
 
 | Query | What it exercises | Mean | Allocated |
 |---|---|---:|---:|
@@ -27,7 +27,7 @@ Holdout on first run, before any fix: top-1 100%, top-3 99.1%.
 
 ## Keystroke → popup (E2E, `PerformanceTests`, Notepad, 30 sessions × 3 query keystrokes)
 
-Measured inside Comet from the hook callback for the key to the composition frame that shows the updated popup,
+Measured inside Inlay from the hook callback for the key to the composition frame that shows the updated popup,
 after the startup warm-up (top 500 emoji pre-rendered at idle priority, done 12.5 s after start).
 
 | Build | Warm p50 | Warm p95 | Warm p99 | First-time emoji p95 | Hook, idle key p50 / p95 | Hook, popup open p50 / p95 |
@@ -49,11 +49,11 @@ scheduler noise.
 | Working set / private bytes, 1 s after start | 99 MB / 112 MB | WinUI 3 + DirectComposition + the acrylic popup window |
 | Working set / private bytes, after warm-up | 124–132 MB / 197–212 MB | each pre-rendered emoji is its own `RenderTargetBitmap` surface (~170 KB commit each) |
 | Handles / threads (idle) | 874 / 36–41 | |
-| Idle CPU (60 s, popup closed, no typing) | 47–63 ms per minute (≈0.08% of one core; Task Manager shows 0%) | per-thread cycle counts: Comet's own threads (hook, engine, context worker, UI) **0 cycles**; the rest is the GPU driver's worker threads (`nvwgf2umx.dll`, created with the composition device) and the .NET finalizer |
-| `Comet.exe` | 9.3 MB | Native AOT, single native image |
-| Publish folder | 105 MB, of which 38.5 MB is `Comet.pdb` | the shipped package leaves the PDB out (symbols are a separate artifact): **66 MB** installed, Windows App SDK runtime included |
+| Idle CPU (60 s, popup closed, no typing) | 47–63 ms per minute (≈0.08% of one core; Task Manager shows 0%) | per-thread cycle counts: Inlay's own threads (hook, engine, context worker, UI) **0 cycles**; the rest is the GPU driver's worker threads (`nvwgf2umx.dll`, created with the composition device) and the .NET finalizer |
+| `Inlay.exe` | 9.3 MB | Native AOT, single native image |
+| Publish folder | 105 MB, of which 38.5 MB is `Inlay.pdb` | the shipped package leaves the PDB out (symbols are a separate artifact): **66 MB** installed, Windows App SDK runtime included |
 
-Memory note: the emoji bitmap cache is the one sizeable cost under Comet's control. Packing pre-rendered emoji
+Memory note: the emoji bitmap cache is the one sizeable cost under Inlay's control. Packing pre-rendered emoji
 into a few atlas bitmaps would cut ~80 MB of commit; it is listed as a future idea because there is no memory
 target and the latency target is met.
 
@@ -68,7 +68,7 @@ target and the latency target is met.
 
 ## Soak (10,000 triggers, Release AOT build, Edge textarea, 17.4 min)
 
-Mix per 10 triggers: 1 auto-replacement, 2 emoji inserted with Enter, 7 popups opened, browsed and cancelled.
+Mix per 10 triggers: 1 shorthandsment, 2 emoji inserted with Enter, 7 popups opened, browsed and cancelled.
 
 | After | Private | Working set | Handles | GDI | USER |
 |---:|---:|---:|---:|---:|---:|
@@ -84,7 +84,7 @@ open.
 
 ## Settings window (Release, Native AOT, 500 snippets + 500 replacements)
 
-Measured inside Comet with `COMET_PERF=1` (time from the action to the composed frame that shows its result,
+Measured inside Inlay with `INLAY_PERF=1` (time from the action to the composed frame that shows its result,
 split into the frame's own layout + render work), on a 165 Hz display; 60 Hz has a 16.7 ms frame.
 
 | Action | Target | Measured |
@@ -102,7 +102,7 @@ what the scroll row measures. First visits stay under 50 ms because each page bu
 frame and the rest (list cards, the sections below the fold) in the next one, behind the entrance transition.
 
 **Memory.** The window is destroyed on close and its objects are collected (checked with heap dumps and weak
-references; an E2E test fails if closed windows stay in memory). Then Comet trims its working set and re-renders one
+references; an E2E test fails if closed windows stay in memory). Then Inlay trims its working set and re-renders one
 cloaked popup frame, so the popup's own pages are back before the next keystroke.
 
 | | Working set | Private bytes |

@@ -1,13 +1,13 @@
 <div align="center">
 
-<img src="src/Comet.App/Assets/Comet.png" width="96" alt="">
+<img src="src/Inlay.App/Assets/Inlay.png" width="96" alt="">
 
-# Comet
+# Inlay
 
-**Slack-style emoji, snippets and auto-replace for any app on Windows 11.**
+**Slack-style emoji, snippets and shorthands for any app on Windows 11.**
 
-[![Latest release](https://img.shields.io/github/v/release/Alexciao/comet?label=release)](https://github.com/Alexciao/comet/releases/latest)
-[![CI](https://github.com/Alexciao/comet/actions/workflows/ci.yml/badge.svg)](https://github.com/Alexciao/comet/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/Alexciao/inlay?label=release)](https://github.com/Alexciao/inlay/releases/latest)
+[![CI](https://github.com/Alexciao/inlay/actions/workflows/ci.yml/badge.svg)](https://github.com/Alexciao/inlay/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4)
 
@@ -20,11 +20,11 @@
 
 > [!NOTE]
 > **Notice on AI-generated code**<br>
-> Most of Comet's code was written with the help of AI coding agents.<br>
+> Most of Inlay's code was written with the help of AI coding agents.<br>
 > Extensive unit testing and manual testing was performed to help avoid bugs and keep a high quality bar for the app.<br>
-> Comet is private: it works fully offline. No keystrokes are ever logged or sent to any servers. The only optional network requests it performs are to GitHub servers to check for updates for emoji data and for Comet itself.<br>
+> Inlay is private: it works fully offline. No keystrokes are ever logged or sent to any servers. The only optional network requests it performs are to GitHub servers to check for updates for emoji data and for Inlay itself.<br>
 > Any feature, including these requests, is fully toggleable in Settings.<br>
-> Comet is modular, fast and lightweight, and every feature you don't need can be fully disabled.
+> Inlay is modular, fast and lightweight, and every feature you don't need can be fully disabled.
 
 ## Features
 
@@ -62,22 +62,22 @@ Saved text with a short name, offered in the same `:` list: `:addr` becomes your
 | `{cursor}` | where the caret ends up |
 | `{{`, `}}` | literal braces |
 
-### Auto-replace
+### Shorthands
 Abbreviations that expand when you finish the word: `btw` + space becomes `by the way `. The replacement follows
 how you typed it (`Btw` → `By the way`, `BTW` → `BY THE WAY`) unless *Match case exactly* is on, and the space,
 Enter or punctuation you typed is kept. **Backspace** right after an expansion undoes it. Each app can be excluded.
 
-Emoji, Snippets and Auto-replace can each be switched off; Pause from the tray stops everything. Comet never takes
+Emoji, Snippets and Shorthands can each be switched off; Pause from the tray stops everything. Inlay never takes
 focus, and stays out of password fields, apps running as administrator and IME input.
 
 ## Install
 
 | | x64 | Arm64 |
 |---|---|---|
-| **Installer** (per user, no admin rights) | [Comet-Setup-x64.exe](https://github.com/Alexciao/comet/releases/latest/download/Comet-Setup-x64.exe) | [Comet-Setup-arm64.exe](https://github.com/Alexciao/comet/releases/latest/download/Comet-Setup-arm64.exe) |
-| **Portable** (unzip and run; data stays in the folder) | [Comet-Portable-x64.zip](https://github.com/Alexciao/comet/releases/latest/download/Comet-Portable-x64.zip) | [Comet-Portable-arm64.zip](https://github.com/Alexciao/comet/releases/latest/download/Comet-Portable-arm64.zip) |
+| **Installer** (per user, no admin rights) | [Inlay-Setup-x64.exe](https://github.com/Alexciao/inlay/releases/latest/download/Inlay-Setup-x64.exe) | [Inlay-Setup-arm64.exe](https://github.com/Alexciao/inlay/releases/latest/download/Inlay-Setup-arm64.exe) |
+| **Portable** (unzip and run; data stays in the folder) | [Inlay-Portable-x64.zip](https://github.com/Alexciao/inlay/releases/latest/download/Inlay-Portable-x64.zip) | [Inlay-Portable-arm64.zip](https://github.com/Alexciao/inlay/releases/latest/download/Inlay-Portable-arm64.zip) |
 
-Checksums: [SHA256SUMS.txt](https://github.com/Alexciao/comet/releases/latest/download/SHA256SUMS.txt).
+Checksums: [SHA256SUMS.txt](https://github.com/Alexciao/inlay/releases/latest/download/SHA256SUMS.txt).
 
 **Requirements:** Windows 11 (build 22000 or later). Windows 10 is not supported: the installer and the app
 require Windows 11, and it hasn't been tested there.
@@ -87,13 +87,13 @@ require Windows 11, and it hasn't been tested there.
 
 ## Settings
 
-Left-click the tray icon (or start Comet again) to open Settings. Changes apply and save at once.
+Left-click the tray icon (or start Inlay again) to open Settings. Changes apply and save at once.
 
 | | |
 |---|---|
 | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-emoji-dark.png"><img src="docs/images/settings-emoji-light.png" alt="Emoji page"></picture> | **Emoji:** switch the picker on or off, choose the default skin tone, clear recently used emoji. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-snippets-dark.png"><img src="docs/images/settings-snippets-light.png" alt="Snippets page"></picture> | **Snippets:** add, search, edit, duplicate, import and export snippets, with a live preview. |
-| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-autoreplace-dark.png"><img src="docs/images/settings-autoreplace-light.png" alt="Auto-replace page"></picture> | **Auto-replace:** your abbreviations, each with its own switch, and the apps where they don't expand. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-autoreplace-dark.png"><img src="docs/images/settings-autoreplace-light.png" alt="Shorthands page"></picture> | **Shorthands:** your abbreviations, each with its own switch, and the apps where they don't expand. |
 | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-general-dark.png"><img src="docs/images/settings-general-light.png" alt="General page"></picture> | **General:** start with Windows, the trigger character and minimum letters, excluded apps, updates, backup and about. |
 
 ## Performance
@@ -106,20 +106,20 @@ Release build (Native AOT), measured; details in [docs/performance.md](docs/perf
 | Search, worst case per keystroke | 0.32 ms |
 | Start → ready | 113–148 ms |
 | Tray click → Settings drawn (warm / first) | 154–168 ms / 217–243 ms |
-| CPU while idle | ≈ 0 (Comet's threads: 0 cycles) |
+| CPU while idle | ≈ 0 (Inlay's threads: 0 cycles) |
 | Download (installer) | 18 MB |
 
 ## Privacy
 
-Comet contacts exactly two addresses, once a week each, with only a `User-Agent: Comet/<version>` header:
+Inlay contacts exactly two addresses, once a week each, with only a `User-Agent: Inlay/<version>` header:
 
 | Address | Why | Turn off |
 |---|---|---|
-| `https://github.com/Alexciao/comet/releases/download/emoji-data/manifest.json` | newer emoji data | Settings › General › Update emoji automatically |
-| `https://api.github.com/repos/Alexciao/comet/releases/latest` | newer Comet version (it only tells you) | Settings › General › Notify me about Comet updates |
+| `https://github.com/Alexciao/inlay/releases/download/emoji-data/manifest.json` | newer emoji data | Settings › General › Update emoji automatically |
+| `https://api.github.com/repos/Alexciao/inlay/releases/latest` | newer Inlay version (it only tells you) | Settings › General › Notify me about Inlay updates |
 
-Neither runs while Comet is paused or on a metered connection. A test fails the build if any other network code
-appears. The local log in `%LocalAppData%\Comet\logs` records events and timings, never typed text.
+Neither runs while Inlay is paused or on a metered connection. A test fails the build if any other network code
+appears. The local log in `%LocalAppData%\Inlay\logs` records events and timings, never typed text.
 
 ## Build from source
 
@@ -127,13 +127,13 @@ Prerequisites: the [.NET 10 SDK](https://dotnet.microsoft.com/download), Visual 
 **Desktop development with C++** workload (for Native AOT), and the Windows 11 SDK (10.0.26100).
 
 ```pwsh
-dotnet build Comet.sln                      # Debug build
-dotnet test tests/Comet.Core.Tests          # unit tests incl. the search golden set
-dotnet test tests/Comet.Platform.Tests
+dotnet build Inlay.sln                      # Debug build
+dotnet test tests/Inlay.Core.Tests          # unit tests incl. the search golden set
+dotnet test tests/Inlay.Platform.Tests
 ./installer/build.ps1 -Version 1.0.0        # Native AOT publish, installer and portable zip (needs Inno Setup 6)
 ```
 
-The end-to-end tests (`tests/Comet.E2E`) drive a real desktop with real keystrokes; run them when you're away from
+The end-to-end tests (`tests/Inlay.E2E`) drive a real desktop with real keystrokes; run them when you're away from
 the keyboard. The solution opens in Rider or Visual Studio.
 
 ## License and acknowledgements

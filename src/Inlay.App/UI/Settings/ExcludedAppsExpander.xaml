@@ -1,0 +1,35 @@
+<UserControl
+    x:Class="Inlay.App.UI.Settings.ExcludedAppsExpander"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Inlay.App.UI.Settings"
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls">
+
+    <!-- As in Windows Settings › Apps › Startup: icon, name, path, and an action on the right. -->
+    <toolkit:SettingsExpander
+        x:Name="Expander"
+        Description="{x:Bind Description}"
+        Header="Excluded apps"
+        ItemsSource="{x:Bind Apps}">
+        <toolkit:SettingsExpander.HeaderIcon>
+            <FontIcon Glyph="&#xE733;" />
+        </toolkit:SettingsExpander.HeaderIcon>
+        <Button x:Name="AddButton" Click="OnAdd" Content="Add app" />
+        <toolkit:SettingsExpander.ItemTemplate>
+            <DataTemplate x:DataType="local:AppItem">
+                <toolkit:SettingsCard Description="{x:Bind Location, Mode=OneWay}" Header="{x:Bind DisplayName, Mode=OneWay}">
+                    <toolkit:SettingsCard.HeaderIcon>
+                        <ImageIcon Source="{x:Bind Icon, Mode=OneWay}" />
+                    </toolkit:SettingsCard.HeaderIcon>
+                    <Button
+                        AutomationProperties.Name="{x:Bind RemoveName, Mode=OneWay}"
+                        Click="{x:Bind Remove}"
+                        Style="{StaticResource SubtleButtonStyle}"
+                        ToolTipService.ToolTip="Remove">
+                        <FontIcon Glyph="&#xE74D;" />
+                    </Button>
+                </toolkit:SettingsCard>
+            </DataTemplate>
+        </toolkit:SettingsExpander.ItemTemplate>
+    </toolkit:SettingsExpander>
+</UserControl>

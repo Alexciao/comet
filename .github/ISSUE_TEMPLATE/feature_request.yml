@@ -1,10 +1,10 @@
 name: Feature request
-description: An idea for Comet
+description: An idea for Inlay
 labels: [enhancement]
 body:
   - type: textarea
     id: idea
     attributes:
-      label: What would you like Comet to do, and why?
+      label: What would you like Inlay to do, and why?
     validations:
       required: true

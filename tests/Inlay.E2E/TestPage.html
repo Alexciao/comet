@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Inlay E2E</title>
+<style>body{font:16px "Segoe UI";margin:24px} textarea,div,input{display:block;width:600px;margin:12px 0;font:16px "Segoe UI"} div[contenteditable]{border:1px solid #888;min-height:80px;padding:4px}</style>
+</head>
+<body>
+  <textarea id="area" aria-label="Plain textarea" rows="5"></textarea>
+  <div id="rich" contenteditable="true" aria-label="Rich editor" role="textbox" aria-multiline="true"></div>
+  <input id="secret" type="password" aria-label="Password">
+  <!-- Mirrors for reading values back through UI Automation. -->
+  <input id="areaOut" aria-label="areaOut" readonly>
+  <input id="richOut" aria-label="richOut" readonly>
+  <input id="secretOut" aria-label="secretOut" readonly>
+  <script>
+    const area = document.getElementById('area'), rich = document.getElementById('rich'), secret = document.getElementById('secret');
+    const sync = () => {
+      document.getElementById('areaOut').value = JSON.stringify(area.value);
+      document.getElementById('richOut').value = JSON.stringify(rich.innerText);
+      document.getElementById('secretOut').value = JSON.stringify(secret.value);
+    };
+    // Each mirror holds its field's exact value as JSON, readable through UI Automation by its label.
+    ['input','keyup'].forEach(e => { area.addEventListener(e, sync); rich.addEventListener(e, sync); secret.addEventListener(e, sync); });
+    sync();
+  </script>
+</body>
+</html>
