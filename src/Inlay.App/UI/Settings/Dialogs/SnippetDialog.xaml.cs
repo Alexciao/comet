@@ -16,12 +16,15 @@ public sealed partial class SnippetDialog : ContentDialog
 
     private readonly IReadOnlyList<string> _otherNames;
     private readonly Func<string, bool> _isEmojiShortcode;
+    private readonly string _trigger;
     private readonly PreviewEnvironment _environment = new();
 
-    internal SnippetDialog(SnippetDefinition? editing, IReadOnlyList<string> otherNames, Func<string, bool> isEmojiShortcode)
+    /// <param name="newName">A name to start a new snippet with (from Quick Insert); the text box gets the focus.</param>
+    internal SnippetDialog(SnippetDefinition? editing, IReadOnlyList<string> otherNames, Func<string, bool> isEmojiShortcode, string trigger, string? newName = null)
     {
         _otherNames = otherNames;
         _isEmojiShortcode = isEmojiShortcode;
+        _trigger = trigger;
         InitializeComponent();
         Title = editing is null ? "Add snippet" : "Edit snippet";
         foreach (var (placeholder, description) in SnippetTemplate.Catalog)
@@ -33,7 +36,9 @@ public sealed partial class SnippetDialog : ContentDialog
 
         // A multi-line text box handles Enter itself; see it anyway, for Ctrl+Enter.
         TextBox.AddHandler(KeyDownEvent, new KeyEventHandler(OnTextKeyDown), handledEventsToo: true);
-        NameBox.Text = editing?.Name ?? "";
+        NameBox.Text = editing?.Name ?? newName ?? "";
+        if (editing is null && newName is not null)
+            Opened += (_, _) => TextBox.Focus(FocusState.Programmatic);
         TextBox.Text = editing?.Text ?? "";
         Validate();
     }
@@ -70,7 +75,7 @@ public sealed partial class SnippetDialog : ContentDialog
 
     private void Validate()
     {
-        var messages = EntryValidation.ValidateSnippet(NameBox.Text, SnippetText, _otherNames, _isEmojiShortcode);
+        var messages = EntryValidation.ValidateSnippet(NameBox.Text, SnippetText, _otherNames, _isEmojiShortcode, _trigger);
         // Don't scold an empty, untouched dialog: only show problems once something was typed.
         var pristine = NameBox.Text.Length == 0 && TextBox.Text.Length == 0;
         FieldMessage.Show(NameError, NameWarning, messages, ValidationField.Name, pristine);

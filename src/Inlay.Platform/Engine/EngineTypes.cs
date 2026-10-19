@@ -27,6 +27,14 @@ internal sealed record EngineConfig
 
     public int SkinTone { get; init; }
 
+    /// <summary>Open Quick Insert with recent items when the user pauses after the trigger.</summary>
+    public bool ShowRecents { get; init; } = true;
+
+    public int RecentsDelayMs { get; init; } = 500;
+
+    /// <summary>Offer "Create snippet :name" when nothing of the user's matches the query exactly.</summary>
+    public bool OfferCreateSnippet { get; init; } = true;
+
     /// <summary>Per-app Quick Insert modes (apps not listed show everything).</summary>
     public FrozenDictionary<string, QuickInsertMode> QuickInsertModes { get; init; } = FrozenDictionary<string, QuickInsertMode>.Empty;
 
@@ -57,6 +65,9 @@ internal sealed record EngineConfig
         TriggerString = s.TriggerCharacter[..1],
         MinChars = s.MinimumCharacters,
         SkinTone = s.SkinTone,
+        ShowRecents = s.ShowRecentsOnPause,
+        RecentsDelayMs = s.RecentsDelayMs,
+        OfferCreateSnippet = s.OfferCreateSnippet,
         ImagesEnabled = s.Features.Images,
         QuickInsertModes = s.QuickInsertApps.DistinctBy(a => a.App, StringComparer.OrdinalIgnoreCase).ToFrozenDictionary(a => a.App, a => a.Mode, StringComparer.OrdinalIgnoreCase),
         ShorthandsExcluded = s.ShorthandsExcludedApps.ToFrozenSet(StringComparer.OrdinalIgnoreCase),
@@ -64,11 +75,30 @@ internal sealed record EngineConfig
     };
 }
 
+/// <summary>What one of the user's own Quick Insert entries is.</summary>
+internal enum UserItemKind : byte
+{
+    Snippet,
+    /// <summary>An image entry: one file, or a folder resolved when it is used.</summary>
+    Image,
+    /// <summary>One file of a collection, named after the file.</summary>
+    CollectionImage,
+}
+
 /// <summary>
-/// What the picker searches and shorthands matches. Built off the hook thread (loading emoji data, building
-/// indexes) and handed over whole; the engine swaps it only while the popup is closed.
+/// One of the user's own entries, in the order of the search engine's snippet index (snippets and images share
+/// that index: same fuzzy matching and ranking, and they win over emoji).
 /// </summary>
-internal sealed class EngineData(SearchEngine search, SnippetDefinition[] snippets, ShorthandRule[] rules)
+internal sealed record UserItem(UserItemKind Kind, string Name, string FrecencyKey, SnippetDefinition? Snippet = null, ImageEntry? Image = null, string? File = null)
+{
+    public static UserItem From(SnippetDefinition s) => new(UserItemKind.Snippet, s.Name, Frecency.SnippetKey(s.Id), Snippet: s);
+}
+
+/// <summary>
+/// What Quick Insert searches and shorthands match. Built off the hook thread (loading emoji data, building
+/// indexes) and handed over whole; the engine swaps it only while Quick Insert is closed.
+/// </summary>
+internal sealed class EngineData(SearchEngine search, UserItem[] userItems, ShorthandRule[] rules, RecentItem[]? recents = null)
 {
     public static EngineData Empty { get; } = new(new SearchEngine(null, null), [], []);
 
@@ -76,11 +106,18 @@ internal sealed class EngineData(SearchEngine search, SnippetDefinition[] snippe
 
     public EmojiData? Emoji => Search.Emoji;
 
-    /// <summary>Snippets in the same order as the search engine's snippet index.</summary>
-    public SnippetDefinition[] Snippets { get; } = snippets;
+    /// <summary>Snippets and images, in the same order as the search engine's snippet index.</summary>
+    public UserItem[] UserItems { get; } = userItems;
 
     public ShorthandRule[] Rules { get; } = rules;
+
+    /// <summary>Everything picked before, most used first (frecency), across every enabled kind.</summary>
+    public RecentItem[] Recents { get; } = recents ?? [];
 }
+
+/// <param name="Result">The item as a search result (emoji index, or user item index as a snippet result).</param>
+/// <param name="Score">Frecency score at build time; picks add to it live.</param>
+internal readonly record struct RecentItem(SearchResult Result, double Score);
 
 /// <summary>Everything the popup needs to draw one update. Owned by the engine; the sink copies it under <see cref="Gate"/>.</summary>
 internal sealed class PopupFrame
@@ -99,6 +136,18 @@ internal sealed class PopupFrame
     public int SkinTone;
     public string Trigger = ":";
     public EngineData Data = EngineData.Empty;
+
+    /// <summary>The list is the user's recent items (each row shows a history icon).</summary>
+    public bool Recents;
+
+    /// <summary>Opened by the keyboard shortcut: a search line with the query sits above the rows.</summary>
+    public bool FromShortcut;
+
+    /// <summary>The last row is "Create snippet :query" (counted in <see cref="Count"/>).</summary>
+    public bool CreateRow;
+
+    /// <summary>No caret: <see cref="Anchor"/> is the foreground window, and Quick Insert sits at its bottom center.</summary>
+    public bool AnchorIsWindow;
 
     /// <summary>Stopwatch timestamp of the keystroke that caused this frame (for keystroke→render latency).</summary>
     public long KeyTimestamp;

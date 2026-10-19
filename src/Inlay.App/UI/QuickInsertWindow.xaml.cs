@@ -34,6 +34,9 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
     private const double PaddingEpx = 4;
     private const double CaretGapEpx = 4;
 
+    /// <summary>Without a caret, Quick Insert sits this far above the bottom of the window.</summary>
+    private const double WindowBottomGapEpx = 48;
+
     internal const uint WmUpdate = User32.WM_APP + 1;
     internal const uint WmHide = User32.WM_APP + 2;
 
@@ -49,6 +52,10 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
     private EngineData _data = EngineData.Empty;
     private int _skinTone;
     private string _trigger = ":";
+    private bool _recents;
+    private bool _createRow;
+    private bool _fromShortcut;
+    private bool _anchorIsWindow;
     private int _queryLength;
     private int _updatePending;
     private int _shownVersion = -1;
@@ -128,7 +135,7 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
     /// </summary>
     internal void WarmUp()
     {
-        _rows[0].ShowEmoji("😀", null, ":", "warm_up", (0, 4));
+        _rows[0].ShowEmoji("😀", null, ":", "warm_up", (0, 4), "Warm up");
         _rows[0].Visibility = Visibility.Visible;
         var (w, h) = PhysicalSize(1, 1);
         User32.SetWindowPos(_hwnd, User32.HWND_TOPMOST, 0, 0, w, h, User32.SWP_NOACTIVATE | User32.SWP_SHOWWINDOW);
@@ -186,6 +193,11 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
                 _awaitingFrame = false;
                 CompositionTarget.Rendered -= OnFrameRendered;
                 Cloak(true);
+                if (SearchLine.Visibility == Visibility.Visible)
+                {
+                    CaretBlink.Stop(); // nothing animates while Quick Insert is hidden
+                    SearchLine.Visibility = Visibility.Collapsed;
+                }
                 return true;
             default:
                 return false;
@@ -211,6 +223,10 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
             anchor = frame.Anchor;
             _skinTone = frame.SkinTone;
             _trigger = frame.Trigger;
+            _recents = frame.Recents;
+            _createRow = frame.CreateRow;
+            _fromShortcut = frame.FromShortcut;
+            _anchorIsWindow = frame.AnchorIsWindow;
             _data = frame.Data;
             _queryLength = frame.QueryLength;
             frame.Query.AsSpan(0, _queryLength).CopyTo(_query);
@@ -229,6 +245,7 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
             _first = _selected - VisibleRows + 1;
         _first = Math.Clamp(_first, 0, Math.Max(0, _count - VisibleRows));
 
+        ShowSearchLine();
         FillRows();
         Position(anchor, Math.Min(_count, VisibleRows));
         PublishGeometry();
@@ -262,7 +279,17 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
                 continue;
             }
 
-            Fill(row, _results[index], query);
+            if (_createRow && index == _count - 1)
+            {
+                row.ShowCreateSnippet(_trigger, query.ToString());
+                row.IsRecent = false;
+            }
+            else
+            {
+                Fill(row, _results[index], query);
+                row.IsRecent = _recents;
+            }
+
             row.IsSelected = index == _selected;
             if (row.Visibility != Visibility.Visible)
                 row.Visibility = Visibility.Visible;
@@ -280,14 +307,39 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
             var bitmap = _emojiBitmaps.Get(text, Root.XamlRoot?.RasterizationScale ?? _scale);
             if (bitmap is null)
                 _misses++;
-            row.ShowEmoji(text, bitmap, _trigger, shortcode, Highlighter.Find(shortcode, query));
+            row.ShowEmoji(text, bitmap, _trigger, shortcode, Highlighter.Find(shortcode, query), Caption(emoji.Name(r.Index)));
         }
-        else if (r.Kind == ResultKind.Snippet && r.Index < _data.Snippets.Length)
+        else if (r.Kind == ResultKind.Snippet && r.Index < _data.UserItems.Length && _data.UserItems[r.Index] is { Snippet: { } s })
         {
-            var s = _data.Snippets[r.Index];
-            row.ShowSnippet(s.Name, Preview(s.Text), Highlighter.Find(s.Name, query));
+            row.ShowSnippet(_trigger, s.Name, Preview(s.Text), Highlighter.Find(s.Name, query));
         }
     }
+
+    /// <summary>"Face with tears of joy": a name in sentence case for the caption line.</summary>
+    private static string Caption(ReadOnlySpan<char> name) =>
+        name.IsEmpty ? "" : string.Concat(char.ToUpperInvariant(name[0]).ToString(), name[1..]);
+
+    /// <summary>The search line (from the shortcut) shows the query; its caret blinks only while it is visible.</summary>
+    private void ShowSearchLine()
+    {
+        if (_fromShortcut)
+        {
+            QueryText.Text = new string(_query, 0, _queryLength);
+            if (SearchLine.Visibility != Visibility.Visible)
+            {
+                SearchLine.Visibility = Visibility.Visible;
+                CaretBlink.Begin();
+            }
+        }
+        else if (SearchLine.Visibility == Visibility.Visible)
+        {
+            CaretBlink.Stop();
+            SearchLine.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>Height of the search line when it is shown (rows start below it).</summary>
+    private double HeaderEpx => _fromShortcut ? QuickInsertRow.RowHeight : 0;
 
     /// <summary>First line of the snippet text, whitespace collapsed (the row ellipsizes it).</summary>
     private static string Preview(string text)
@@ -308,7 +360,7 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
 
         var track = VisibleRows * QuickInsertRow.RowHeight;
         ScrollThumb.Height = Math.Max(16, track * VisibleRows / _count);
-        ScrollThumb.Margin = new Thickness(0, PaddingEpx + ((track - ScrollThumb.Height) * _first / (_count - VisibleRows)), 2, 0);
+        ScrollThumb.Margin = new Thickness(0, PaddingEpx + HeaderEpx + ((track - ScrollThumb.Height) * _first / (_count - VisibleRows)), 2, 0);
         ScrollThumb.Visibility = Visibility.Visible;
     }
 
@@ -355,8 +407,8 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
 
     // ------------------------------------------------------------------ geometry
 
-    private static (int Width, int Height) PhysicalSize(int rows, double scale) =>
-        ((int)Math.Round(WidthEpx * scale), (int)Math.Round(((rows * QuickInsertRow.RowHeight) + (2 * PaddingEpx)) * scale));
+    private (int Width, int Height) PhysicalSize(int rows, double scale) =>
+        ((int)Math.Round(WidthEpx * scale), (int)Math.Round(((rows * QuickInsertRow.RowHeight) + HeaderEpx + (2 * PaddingEpx)) * scale));
 
     /// <summary>Below the caret; above it near the bottom of the screen; always inside the monitor's work area.</summary>
     private void Position(RECT caret, int rows)
@@ -371,8 +423,16 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
 
         var x = caret.Left;
         var y = caret.Bottom + gap;
-        if (y + h > work.Bottom)
+        if (_anchorIsWindow)
+        {
+            // No caret: the bottom center of the window, like a command bar.
+            x = ((caret.Left + caret.Right) / 2) - (w / 2);
+            y = caret.Bottom - (int)Math.Round(WindowBottomGapEpx * _scale) - h;
+        }
+        else if (y + h > work.Bottom)
+        {
             y = caret.Top - gap - h;
+        }
         x = Math.Clamp(x, work.Left, Math.Max(work.Left, work.Right - w));
         y = Math.Clamp(y, work.Top, Math.Max(work.Top, work.Bottom - h));
 
@@ -384,7 +444,7 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
     }
 
     private void PublishGeometry() =>
-        _geometry = new PopupGeometry(_windowRect, (int)Math.Round(PaddingEpx * _scale), (int)Math.Round(QuickInsertRow.RowHeight * _scale), _first, VisibleRows, _shownVersion);
+        _geometry = new PopupGeometry(_windowRect, (int)Math.Round((PaddingEpx + HeaderEpx) * _scale), (int)Math.Round(QuickInsertRow.RowHeight * _scale), _first, VisibleRows, _shownVersion);
 
     // ------------------------------------------------------------------ cloak
 

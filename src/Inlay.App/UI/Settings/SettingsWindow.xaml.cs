@@ -113,6 +113,31 @@ public sealed partial class SettingsWindow : Window
         User32.SetForegroundWindow(_hwnd);
     }
 
+    /// <summary>
+    /// Shows Snippets with the New snippet dialog, its name filled in (Quick Insert's "Create snippet" row). Returns
+    /// the saved snippet, or null when the dialog was cancelled or couldn't open.
+    /// </summary>
+    internal async Task<SnippetDefinition?> CreateSnippetAsync(string name)
+    {
+        Navigate("snippets");
+        if (ContentFrame.Content is not SnippetsPage page)
+            return null;
+        if (page.XamlRoot is null || !page.IsLoaded)
+        {
+            var loaded = new TaskCompletionSource();
+            void OnLoaded(object sender, RoutedEventArgs e)
+            {
+                page.Loaded -= OnLoaded;
+                loaded.TrySetResult();
+            }
+
+            page.Loaded += OnLoaded;
+            await loaded.Task.ConfigureAwait(true);
+        }
+
+        return await page.AddAsync(name).ConfigureAwait(true);
+    }
+
     /// <summary>Opens a page by its tag ("emoji", "snippets", "autoreplace", "general").</summary>
     internal void Navigate(string tag)
     {

@@ -65,7 +65,8 @@ internal sealed class EngineDataFactory
         var snippetDefs = settings.Features.Snippets
             ? snippets.Where(s => s.Name.Length > 0).ToArray()
             : [];
-        var snippetIndex = new SnippetIndex([.. snippetDefs.Select(s => (s.Name, s.Text))]);
+        UserItem[] userItems = [.. snippetDefs.Select(UserItem.From)];
+        var snippetIndex = new SnippetIndex([.. userItems.Select(i => (i.Name, i.Snippet?.Text ?? i.Image?.Keywords ?? ""))]);
         var search = new SearchEngine(emoji, snippetIndex);
 
         if (emoji is not null && Visibility?.Invoke(emoji) is { } visible)
@@ -74,23 +75,39 @@ internal sealed class EngineDataFactory
                 search.SetVisible(i, visible[i]);
         }
 
-        var snippetById = new Dictionary<string, int>(StringComparer.Ordinal);
-        for (var i = 0; i < snippetDefs.Length; i++)
-            snippetById.TryAdd(Frecency.SnippetKey(snippetDefs[i].Id), i);
+        var itemByKey = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var i = 0; i < userItems.Length; i++)
+            itemByKey.TryAdd(userItems[i].FrecencyKey, i);
+        var recents = new List<RecentItem>();
         foreach (var (key, score) in frecency)
         {
             if (index is not null && index.TryGetValue(key, out var e))
+            {
                 search.SetEmojiFrecency(e, (float)score);
-            else if (snippetById.TryGetValue(key, out var s))
+                if (search.IsVisible(e))
+                    recents.Add(new RecentItem(new SearchResult(ResultKind.Emoji, e, MatchTier.Exact, 0, 0), score));
+            }
+            else if (itemByKey.TryGetValue(key, out var s))
+            {
                 search.SetSnippetFrecency(s, (float)score);
+                recents.Add(new RecentItem(new SearchResult(ResultKind.Snippet, s, MatchTier.Exact, 0, 0), score));
+            }
         }
+
+        // Most used first; ties by kind then index, so the order is stable between rebuilds.
+        recents.Sort((a, b) => b.Score != a.Score ? b.Score.CompareTo(a.Score) : a.Result.Kind != b.Result.Kind ? a.Result.Kind.CompareTo(b.Result.Kind) : a.Result.Index.CompareTo(b.Result.Index));
+        if (recents.Count > MaxRecents)
+            recents.RemoveRange(MaxRecents, recents.Count - MaxRecents);
 
         var rules = settings.Features.Shorthands
             ? shorthands.Where(r => r.Enabled && r.Shorthand.Length > 0).Select(r => new ShorthandRule(r.Shorthand.Trim(), r.Expansion, r.MatchCase)).ToArray()
             : [];
 
-        return new EngineData(search, snippetDefs, rules);
+        return new EngineData(search, userItems, rules, [.. recents]);
     }
+
+    /// <summary>Recents kept per build: the 8 shown plus room for picks to move up.</summary>
+    private const int MaxRecents = 32;
 
     /// <summary>Index of an emoji by frecency key, for applying a single new pick to the live engine.</summary>
     public int EmojiIndexOf(string key)

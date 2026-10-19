@@ -3,6 +3,7 @@ using System.Globalization;
 using Inlay.App.Services;
 using Inlay.App.UI.Settings.Dialogs;
 using Inlay.Core.Settings;
+using Inlay.Core.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -114,6 +115,12 @@ public sealed partial class SnippetsPage : SettingsPage, ICardHost<SnippetItem>
 
     private void OnAdd(object sender, RoutedEventArgs e) => _ = EditAsync(null);
 
+    /// <summary>
+    /// Opens the New snippet dialog with <paramref name="name"/> filled in (chosen from Quick Insert's "Create
+    /// snippet" row). Returns the snippet when it was saved, null when the dialog was cancelled.
+    /// </summary>
+    internal Task<SnippetDefinition?> AddAsync(string name) => EditAsync(null, name);
+
     void ICardHost<SnippetItem>.Open(SnippetItem item) => _ = EditAsync(item.Definition);
 
     void ICardHost<SnippetItem>.ShowMenu(SnippetItem item, FrameworkElement anchor)
@@ -134,18 +141,18 @@ public sealed partial class SnippetsPage : SettingsPage, ICardHost<SnippetItem>
             card.Focus(FocusState.Programmatic);
     }
 
-    private async Task EditAsync(SnippetDefinition? existing)
+    private async Task<SnippetDefinition?> EditAsync(SnippetDefinition? existing, string? newName = null)
     {
         // One dialog at a time (a second ShowAsync while one is open throws).
         if (_dialogOpen || XamlRoot is null)
-            return;
+            return null;
         _dialogOpen = true;
         try
         {
             var others = Snippets.Where(s => s != existing).Select(s => s.Name).ToList();
-            var dialog = new SnippetDialog(existing, others, Host.IsEmojiShortcode) { XamlRoot = XamlRoot };
+            var dialog = new SnippetDialog(existing, others, Host.IsEmojiShortcode, Settings.TriggerCharacter, newName) { XamlRoot = XamlRoot };
             if (await dialog.ShowAsync() != ContentDialogResult.Primary && !dialog.SavedWithShortcut)
-                return;
+                return null;
 
             // The list may have been reloaded (a hand edit, an import) while the dialog was open: edit what is there now.
             var target = existing is null ? null : Snippets.Find(s => s.Id == existing.Id);
@@ -154,7 +161,7 @@ public sealed partial class SnippetsPage : SettingsPage, ICardHost<SnippetItem>
                 target = new SnippetDefinition { Name = dialog.SnippetName, Text = dialog.SnippetText };
                 Snippets.Add(target);
                 if (existing is null)
-                    ShowStatus(InfoBarSeverity.Success, $"Added {dialog.SnippetName}. Type :{dialog.SnippetName} in any app.", canUndo: false);
+                    ShowStatus(InfoBarSeverity.Success, $"Added {dialog.SnippetName}. Type {TriggerFormat.Code(Settings.TriggerCharacter, dialog.SnippetName)} in any app.", canUndo: false);
             }
             else
             {
@@ -164,6 +171,7 @@ public sealed partial class SnippetsPage : SettingsPage, ICardHost<SnippetItem>
 
             Store.SaveSnippets();
             FocusCard(target);
+            return target;
         }
         finally
         {

@@ -79,6 +79,7 @@ internal sealed class AppHost : IDisposable
 
         _engine = new InputEngine(_popup, _options.AcceptInjectedInput);
         _engine.Picked += _settings.RecordPick;
+        _engine.CreateSnippetRequested += (name, window) => _dispatcher.TryEnqueue(() => _ = CreateSnippetAsync(name, window));
         _engine.Start(Config(), BuildData());
         _settings.Changed += OnSettingsChanged;
         PrefetchEmoji();
@@ -154,7 +155,7 @@ internal sealed class AppHost : IDisposable
     internal string Status()
     {
         var f = _settings.Settings.Features;
-        return _paused ? "Paused" : !f.Emoji && !f.Snippets && !f.Shorthands ? "All features off" : "Active";
+        return _paused ? "Paused" : !f.Emoji && !f.Snippets && !f.Images && !f.Shorthands ? "All features off" : "Active";
     }
 
     /// <summary>A new emoji pack or font check result: rebuild the search data in the background, at low priority.</summary>
@@ -275,6 +276,34 @@ internal sealed class AppHost : IDisposable
     }
 
     internal DateTimeOffset? EmojiDataLastChecked => _updates.LastChecked;
+
+    /// <summary>
+    /// Quick Insert's "Create snippet :name": the New snippet dialog in Settings, then focus goes back to the window
+    /// the user was typing in, and the snippet is inserted there on Save (nothing on Cancel).
+    /// </summary>
+    private async Task CreateSnippetAsync(string name, nint window)
+    {
+        OpenSettings();
+        if (_settingsWindow is not { } settings)
+            return;
+        var snippet = await settings.CreateSnippetAsync(name).ConfigureAwait(true);
+        if (window == 0 || !User32.IsWindow(window))
+            return;
+        User32.SetForegroundWindow(window); // allowed: Settings is in the foreground
+        if (snippet is null)
+            return;
+        // Insert once the window really has focus again (focus moves asynchronously); give up after a second.
+        for (var waited = 0; User32.GetForegroundWindow() != window && waited < 1000; waited += 20)
+            await Task.Delay(20).ConfigureAwait(true);
+        if (User32.GetForegroundWindow() != window)
+        {
+            Log.Warn("create snippet: the window didn't get focus back; nothing inserted");
+            return;
+        }
+
+        _settings.RecordPick(Inlay.Core.Settings.Frecency.SnippetKey(snippet.Id));
+        _engine.InsertSnippet(snippet.Text);
+    }
 
     /// <summary>Opens Settings, creating the window if it isn't open (it is destroyed when closed).</summary>
     internal void OpenSettings()

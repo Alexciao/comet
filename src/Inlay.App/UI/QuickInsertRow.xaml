@@ -41,11 +41,13 @@
             VerticalAlignment="Center"
             Fill="{ThemeResource AccentFillColorDefaultBrush}"
             Visibility="Collapsed" />
-        <Grid Margin="10,0,12,0" ColumnSpacing="10">
+        <Grid Margin="8,0,12,0" ColumnSpacing="10">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="28" />
+                <ColumnDefinition Width="32" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
+            <!-- The glyph slot: one of these is visible. -->
             <Image x:Name="EmojiImage" Width="28" Height="28" Stretch="None" VerticalAlignment="Center" HorizontalAlignment="Center" />
             <TextBlock
                 x:Name="EmojiText"
@@ -54,23 +56,72 @@
                 IsColorFontEnabled="True"
                 IsTextScaleFactorEnabled="False"
                 TextAlignment="Center"
-                VerticalAlignment="Center" />
+                VerticalAlignment="Center"
+                Visibility="Collapsed" />
+            <!-- Symbols are text, drawn in the UI font (with Windows' font fallback), not as color emoji. -->
+            <TextBlock
+                x:Name="SymbolText"
+                FontSize="18"
+                IsColorFontEnabled="False"
+                IsTextScaleFactorEnabled="False"
+                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                TextAlignment="Center"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Visibility="Collapsed" />
             <FontIcon
-                x:Name="SnippetIcon"
+                x:Name="GlyphIcon"
                 FontFamily="{ThemeResource SymbolThemeFontFamily}"
                 Glyph="&#xE70B;"
                 FontSize="16"
                 VerticalAlignment="Center"
                 Visibility="Collapsed" />
-            <TextBlock
-                Grid.Column="1"
+            <Border
+                x:Name="Thumb"
+                Width="32"
+                Height="32"
+                CornerRadius="4"
+                BorderThickness="1"
+                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                Background="{ThemeResource ControlFillColorSecondaryBrush}"
                 VerticalAlignment="Center"
-                Style="{ThemeResource BodyTextBlockStyle}"
-                TextWrapping="NoWrap"
-                TextTrimming="CharacterEllipsis"
-                MaxLines="1">
-                <Run x:Name="BeforeRun" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /><Run x:Name="MatchRun" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" /><Run x:Name="AfterRun" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /><Run x:Name="PreviewRun" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </TextBlock>
+                Visibility="Collapsed">
+                <Image x:Name="ThumbImage" Stretch="UniformToFill" />
+            </Border>
+
+            <!-- Two stacked lines that fit the row's height as a pair: the code, then a caption. -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock
+                    x:Name="CodeLine"
+                    Style="{ThemeResource BodyTextBlockStyle}"
+                    LineHeight="18"
+                    LineStackingStrategy="BlockLineHeight"
+                    TextWrapping="NoWrap"
+                    TextTrimming="CharacterEllipsis"
+                    MaxLines="1">
+                    <Run x:Name="BeforeRun" Foreground="{ThemeResource TextFillColorSecondaryBrush}" /><Run x:Name="MatchRun" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorPrimaryBrush}" /><Run x:Name="AfterRun" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </TextBlock>
+                <TextBlock
+                    x:Name="CaptionLine"
+                    Style="{ThemeResource CaptionTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    LineHeight="15"
+                    LineStackingStrategy="BlockLineHeight"
+                    TextWrapping="NoWrap"
+                    TextTrimming="CharacterEllipsis"
+                    MaxLines="1" />
+            </StackPanel>
+
+            <!-- Marks a recent item (Quick Insert opened after a pause, or from the shortcut). -->
+            <FontIcon
+                x:Name="HistoryIcon"
+                Grid.Column="2"
+                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                Glyph="&#xE81C;"
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                VerticalAlignment="Center"
+                Visibility="Collapsed" />
         </Grid>
     </Grid>
 </UserControl>

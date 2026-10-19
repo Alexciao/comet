@@ -24,6 +24,8 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     private const uint WmInjected = HookThread.WmClientBase + 3;
     private const uint WmCancel = HookThread.WmClientBase + 4;
     private const uint WmDispatchInjection = HookThread.WmClientBase + 5;
+    private const uint WmShortcut = HookThread.WmClientBase + 6;
+    private const uint WmInsertTemplate = HookThread.WmClientBase + 7;
 
     /// <summary>
     /// Give up holding keys if an insertion hasn't completed by then (they are then replayed, in order). Longer than
@@ -53,6 +55,8 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     private readonly ConcurrentQueue<ContextResult> _contextResults = new();
     private readonly ConcurrentQueue<InsertionJob> _completedJobs = new();
     private readonly Queue<InsertionJob> _queuedJobs = new(); // hook thread only
+    private readonly ConcurrentQueue<string> _templatesToInsert = new();
+    private readonly List<RecentItem> _recents = new(32); // the data's recents plus this session's picks
     private InsertionJob? _currentJob;
 
     private EngineConfig _config = new();
@@ -67,6 +71,10 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     private RECT _anchor;
     private bool _anchorKnown;
     private int _resultCount;
+    private bool _hasCreateRow;
+    private bool _showingRecents;
+    private bool _anchorIsWindow;
+    private nuint _recentsTimer;
     private int _selected;
     private bool _popupVisible;
     private bool _swallowNextMouseUp;
@@ -100,6 +108,12 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     /// <summary>Raised on the hook thread when the user picks something (frecency key, e.g. the emoji or "snippet:id").</summary>
     public event Action<string>? Picked;
 
+    /// <summary>
+    /// Raised on the hook thread when the user chose "Create snippet :name" (the typed token is already being
+    /// removed): open the New snippet dialog, then give the window focus back.
+    /// </summary>
+    public event Action<string, nint>? CreateSnippetRequested;
+
     /// <summary>Hook overhead per keystroke when nothing is triggered.</summary>
     public LatencyStats IdleKeyLatency { get; } = new("hook idle keystroke");
 
@@ -116,6 +130,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     {
         _config = config;
         _data = data;
+        _recents.AddRange(data.Recents);
         ApplyConfig(config);
         _shorthands.SetRules(data.Rules);
         _hook.Start(config.NeedsHook);
@@ -138,6 +153,16 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
 
     /// <summary>Closes the popup and forgets any session (any thread).</summary>
     public void Cancel() => _hook.Post(WmCancel);
+
+    /// <summary>The keyboard shortcut was pressed (any thread): open Quick Insert at the caret without typing anything.</summary>
+    public void OpenFromShortcut() => _hook.Post(WmShortcut);
+
+    /// <summary>Inserts a snippet's text at the caret of the focused window (any thread), e.g. one just created.</summary>
+    public void InsertSnippet(string template)
+    {
+        _templatesToInsert.Enqueue(template);
+        _hook.Post(WmInsertTemplate);
+    }
 
     /// <summary>The data currently in use (for tests).</summary>
     internal EngineData CurrentData => Volatile.Read(ref _data);
@@ -179,6 +204,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         var start = Stopwatch.GetTimestamp();
         _keyTimestamp = start;
         var wasActive = _picker.IsActive;
+        DisarmRecents(); // the pause after the trigger is over
 
         Span<KeyInput> inputs = stackalloc KeyInput[2];
         // Focus-change events arrive asynchronously, after hook callbacks for keys already typed in the new window:
@@ -224,7 +250,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         var config = _config;
 
         // ---- picker
-        if (config.QuickInsertEnabled && QuickInsertAllowedHere(config)
+        if (config.QuickInsertEnabled && (_picker.FromShortcut || QuickInsertAllowedHere(config))
             && !(key.Kind == KeyKind.Char && key.Char == config.TriggerChar && !_picker.IsActive && ImeOpen()))
         {
             var d = _picker.OnKey(key, _popupVisible);
@@ -243,8 +269,8 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
                     MoveSelection(-1);
                     break;
                 case QuickInsertAction.CommitSelected:
-                    if (_popupVisible && _resultCount > 0)
-                        Insert(_results[_selected], d.DeleteCount, after: null);
+                    if (_popupVisible && _selected < RowCount)
+                        Choose(_selected, d.DeleteCount);
                     else
                         EndSession();
                     break;
@@ -317,8 +343,11 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     private bool QuickInsertAllowedHere(EngineConfig config) =>
         !_context.Elevated && !_context.IsSelf && config.ModeFor(_context.ProcessName) != QuickInsertMode.Off;
 
-    /// <summary>"Hide emoji" in this app: only the user's own snippets and images are offered.</summary>
-    private bool HideEmojiHere => _config.ModeFor(_context.ProcessName) == QuickInsertMode.HideEmoji;
+    /// <summary>
+    /// "Hide emoji" in this app: only the user's own snippets and images are offered. Not when the user asked for
+    /// Quick Insert with the shortcut: then everything is.
+    /// </summary>
+    private bool HideEmojiHere => !_picker.FromShortcut && _config.ModeFor(_context.ProcessName) == QuickInsertMode.HideEmoji;
 
     /// <summary>Drops emoji results in "Hide emoji" apps; Quick Insert then appears only when something of yours matches.</summary>
     private int FilterForApp(int count)
@@ -351,30 +380,125 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             EnsurePasswordKnown();
         }
 
+        if (_picker.AwaitingQuery)
+            ArmRecents();
+
         if (!_picker.HasQuery)
         {
+            // From the shortcut, an empty query shows recents (or just the search line).
+            if (_picker.FromShortcut)
+            {
+                ShowRecents();
+                return;
+            }
+
             _resultCount = 0;
+            _hasCreateRow = false;
+            _showingRecents = false;
             Publish();
             return;
         }
 
+        _showingRecents = false;
         _resultCount = FilterForApp(_data.Search.Search(_picker.Token, _results));
+        _hasCreateRow = OffersCreate();
         _selected = 0;
         Publish();
     }
 
+    /// <summary>Rows on screen: the results, plus "Create snippet" when it is offered.</summary>
+    private int RowCount => _resultCount + (_hasCreateRow ? 1 : 0);
+
+    /// <summary>
+    /// "Create snippet :name" when Snippets is on, the query is a valid name of 2+ characters, and none of the user's
+    /// snippets or images has exactly that name.
+    /// </summary>
+    private bool OffersCreate()
+    {
+        var config = _config;
+        var token = _picker.Token;
+        return config.SnippetsEnabled && config.OfferCreateSnippet && token.Length >= 2
+            && QuickInsertSession.IsValidName(token)
+            && _data.Search.FindExact(token) is not { Kind: ResultKind.Snippet };
+    }
+
+    // ------------------------------------------------------------------ recents
+
+    /// <summary>One-shot timer, armed only right after a trigger: a pause opens recents. Nothing runs otherwise.</summary>
+    private void ArmRecents()
+    {
+        if (!_config.ShowRecents || _recentsTimer != 0 || _recents.Count == 0)
+            return;
+        _recentsTimer = User32.SetTimer(0, 0, (uint)_config.RecentsDelayMs, 0);
+    }
+
+    private void DisarmRecents()
+    {
+        if (_recentsTimer == 0)
+            return;
+        User32.KillTimer(0, _recentsTimer);
+        _recentsTimer = 0;
+    }
+
+    private void OnRecentsTimer()
+    {
+        DisarmRecents();
+        if (!_picker.AwaitingQuery)
+            return;
+        _picker.OpenedEarly();
+        ShowRecents();
+    }
+
+    /// <summary>The most used items across every enabled kind, most used first.</summary>
+    private void ShowRecents()
+    {
+        var hideEmoji = HideEmojiHere;
+        var count = 0;
+        foreach (var r in _recents)
+        {
+            if (count == RecentsShown)
+                break;
+            if (hideEmoji && r.Result.Kind == ResultKind.Emoji)
+                continue;
+            _results[count++] = r.Result;
+        }
+
+        _resultCount = count;
+        _hasCreateRow = false;
+        _showingRecents = true;
+        _selected = 0;
+        Publish();
+    }
+
+    private const int RecentsShown = 8;
+
+    /// <summary>A pick counts right away: it moves up in recents for as long as this data is in use.</summary>
+    private void BumpRecent(SearchResult picked)
+    {
+        var i = _recents.FindIndex(r => r.Result.Kind == picked.Kind && r.Result.Index == picked.Index);
+        var item = i >= 0 ? _recents[i] with { Score = _recents[i].Score + 1 } : new RecentItem(picked with { Tier = MatchTier.Exact, Score = 0 }, 1);
+        if (i >= 0)
+            _recents.RemoveAt(i);
+        var at = 0;
+        while (at < _recents.Count && _recents[at].Score >= item.Score)
+            at++;
+        _recents.Insert(at, item);
+    }
+
     private void MoveSelection(int delta)
     {
-        if (_resultCount == 0)
+        var rows = RowCount;
+        if (rows == 0)
             return;
-        _selected = (_selected + delta + _resultCount) % _resultCount;
+        _selected = (_selected + delta + rows) % rows;
         Publish();
     }
 
     /// <summary>Shows, updates or hides the popup to match the current state.</summary>
     private void Publish()
     {
-        var visible = _picker.HasQuery && _resultCount > 0 && _anchorKnown && _context.IsSafe;
+        var shown = _picker.HasQuery || _showingRecents || _picker.FromShortcut;
+        var visible = shown && (RowCount > 0 || _picker.FromShortcut) && _anchorKnown && _context.IsSafe;
         if (!visible)
         {
             if (_popupVisible)
@@ -386,7 +510,11 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         lock (_frame.Gate)
         {
             _frame.Version++;
-            _frame.Count = _resultCount;
+            _frame.Count = RowCount;
+            _frame.CreateRow = _hasCreateRow;
+            _frame.Recents = _showingRecents;
+            _frame.FromShortcut = _picker.FromShortcut;
+            _frame.AnchorIsWindow = _anchorIsWindow;
             Array.Copy(_results, _frame.Results, _resultCount);
             _frame.Selected = _selected;
             var token = _picker.Token;
@@ -409,9 +537,36 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             _popup.Hide();
         _popupVisible = false;
         _resultCount = 0;
+        _hasCreateRow = false;
+        _showingRecents = false;
+        DisarmRecents();
         _caretRequested = false;
         _anchorKnown = false;
+        _anchorIsWindow = false;
         ApplyPendingData();
+    }
+
+    /// <summary>Acts on row <paramref name="row"/>: a result, or "Create snippet".</summary>
+    private void Choose(int row, int deleteCount)
+    {
+        if (row < _resultCount)
+            Insert(_results[row], deleteCount, after: null);
+        else if (_hasCreateRow && row == _resultCount)
+            CreateSnippet(deleteCount);
+        else
+            EndSession();
+    }
+
+    /// <summary>Removes the typed token and hands the name to the app, which opens the New snippet dialog.</summary>
+    private void CreateSnippet(int deleteCount)
+    {
+        var name = _picker.CommittedToken.Length > 0 ? _picker.CommittedToken.ToString() : _picker.Token.ToString();
+        var window = _context.Foreground;
+        EndSession();
+        _picker.NotifyInserted();
+        if (deleteCount > 0)
+            StartInjection(new InsertionJob(deleteCount, "", null, null, MethodFor(_context.ProcessName), _keyTimestamp, _context.PacedEditor));
+        CreateSnippetRequested?.Invoke(name, window);
     }
 
     private void Insert(SearchResult result, int deleteCount, Boundary? after)
@@ -423,10 +578,10 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             text = emoji.Emoji(result.Index, _config.SkinTone).ToString();
             key = Frecency.EmojiKey(emoji.Emoji(result.Index));
         }
-        else if (result.Kind == ResultKind.Snippet && result.Index < data.Snippets.Length)
+        else if (result.Kind == ResultKind.Snippet && result.Index < data.UserItems.Length && data.UserItems[result.Index] is { Snippet: { } snippet } item)
         {
-            template = data.Snippets[result.Index].Text;
-            key = Frecency.SnippetKey(data.Snippets[result.Index].Id);
+            template = snippet.Text;
+            key = item.FrecencyKey;
         }
         else
         {
@@ -439,6 +594,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         _picker.NotifyInserted();
         StartInjection(new InsertionJob(deleteCount, text, template, after, MethodFor(_context.ProcessName), _keyTimestamp, _context.PacedEditor));
         data.Search.BumpFrecency(result.Kind, result.Index);
+        BumpRecent(result);
         Picked?.Invoke(key);
     }
 
@@ -499,12 +655,12 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
                 // a list the popup hasn't drawn yet (a key typed in the same frame) picks nothing: the user saw a
                 // different row there.
                 var row = g.RowHeight > 0 ? g.FirstVisible + ((point.Y - g.Window.Top - g.ListTop) / g.RowHeight) : -1;
-                if (g.Version == _frame.Version && row >= 0 && row < _resultCount && point.Y >= g.Window.Top + g.ListTop)
+                if (g.Version == _frame.Version && row >= 0 && row < RowCount && point.Y >= g.Window.Top + g.ListTop)
                 {
-                    var token = _picker.Token.Length;
-                    _picker.Reset();
+                    var delete = _picker.FromShortcut ? 0 : 1 + _picker.Token.Length;
                     _shorthands.NotifyInserted();
-                    Insert(_results[row], 1 + token, after: null);
+                    Choose(row, delete);
+                    _picker.Reset();
                 }
 
                 _swallowNextMouseUp = true;
@@ -611,6 +767,13 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         {
             _anchor = r.Caret;
             _anchorKnown = r.Method != CaretMethod.None;
+            _anchorIsWindow = false;
+            // From the shortcut without a caret (no text field focused): the bottom center of the window.
+            if (!_anchorKnown && _picker.FromShortcut && User32.GetWindowRect(_context.Foreground, out var window))
+            {
+                _anchor = window;
+                _anchorKnown = _anchorIsWindow = true;
+            }
         }
 
         if (_picker.IsActive)
@@ -652,7 +815,45 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             case WmCancel:
                 ResetForNewFocus();
                 break;
+            case WmShortcut:
+                OpenFromShortcutNow();
+                break;
+            case WmInsertTemplate:
+                while (_templatesToInsert.TryDequeue(out var template))
+                    InsertTemplateNow(template);
+                break;
+            case User32.WM_TIMER when wParam == _recentsTimer && _recentsTimer != 0:
+                OnRecentsTimer();
+                break;
         }
+    }
+
+    private void OpenFromShortcutNow()
+    {
+        if (!_config.QuickInsertEnabled || !_hook.KeyboardHookInstalled)
+            return;
+        if (User32.GetForegroundWindow() != _context.Foreground)
+            ResetForNewFocus();
+        if (_context.Elevated || _context.IsSelf || _context.Password == Tristate.Yes)
+            return;
+        if (_picker.IsActive)
+            EndSession();
+        _picker.Reset();
+        _picker.StartFromShortcut();
+        OnQueryChanged();
+        UpdateMouseHook();
+    }
+
+    /// <summary>Inserts a template at the caret with nothing to erase (a snippet created from Quick Insert).</summary>
+    private void InsertTemplateNow(string template)
+    {
+        if (User32.GetForegroundWindow() != _context.Foreground)
+            ResetForNewFocus();
+        if (!_context.IsSafe || _context.Elevated)
+            return;
+        _picker.NotifyInserted();
+        _shorthands.NotifyInserted();
+        StartInjection(new InsertionJob(0, null, template, null, MethodFor(_context.ProcessName), Stopwatch.GetTimestamp(), _context.PacedEditor));
     }
 
     private void ApplyConfig(EngineConfig config)
@@ -677,7 +878,9 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             return;
         Volatile.Write(ref _data, data);
         _shorthands.SetRules(data.Rules);
-        Log.Info($"search data updated: emoji {(data.Emoji is null ? "off" : "on")}, {data.Snippets.Length} snippets, {data.Rules.Length} replacements");
+        _recents.Clear();
+        _recents.AddRange(data.Recents);
+        Log.Info($"search data updated: emoji {(data.Emoji is null ? "off" : "on")}, {data.UserItems.Length} snippets and images, {data.Rules.Length} replacements");
     }
 
     // ------------------------------------------------------------------ watchdog
