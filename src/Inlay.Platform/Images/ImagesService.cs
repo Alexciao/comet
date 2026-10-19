@@ -142,7 +142,7 @@ internal sealed class ImagesService : IDisposable
         };
     }
 
-    /// <summary>A folder item's newest image (for "Newest in Screenshots · 2 min ago" and its thumbnail), or null.</summary>
+    /// <summary>A folder item's newest image (its thumbnail, and what Newest inserts), or null.</summary>
     public ImageFile? Newest(ImageItem item) =>
         item.Kind == ImageEntryKind.Folder && item.Cache is { } cache ? FolderResolve.Newest(cache.Index.Files, item.Types) : item.File;
 

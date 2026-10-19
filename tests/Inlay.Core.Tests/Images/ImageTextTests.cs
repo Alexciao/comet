@@ -40,10 +40,9 @@ public sealed class ImageTextTests
     [Fact]
     public void Folder_rows()
     {
-        Assert.Equal("Newest in Screenshots · 2 min ago", ImageText.Folder(FolderMode.Newest, ImageText.FolderName("{Screenshots}"), Now.AddMinutes(-2), Now, En));
-        Assert.Equal("Newest in Screenshots", ImageText.Folder(FolderMode.Newest, "Screenshots", null, Now, En));
-        Assert.Equal("Random from Cats", ImageText.Folder(FolderMode.Random, ImageText.FolderName(@"D:\Pictures\Cats\"), null, Now, En));
-        Assert.Equal("Pick from Camera Roll", ImageText.Folder(FolderMode.Pick, ImageText.FolderName("{cameraroll}"), Now, Now, En));
+        Assert.Equal("Latest in Screenshots", ImageText.Folder(FolderMode.Newest, ImageText.FolderName("{Screenshots}")));
+        Assert.Equal("Random in Memes", ImageText.Folder(FolderMode.Random, ImageText.FolderName(@"D:\Pictures\Memes\")));
+        Assert.Equal("Pick from Camera Roll", ImageText.Folder(FolderMode.Pick, ImageText.FolderName("{cameraroll}")));
         Assert.Equal("Collection · Reactions · 24 images", ImageText.Collection("Reactions", 24, En));
     }
 }

@@ -56,6 +56,23 @@ public static class SnippetTemplate
         return problems;
     }
 
+    /// <summary>
+    /// What a snippet would insert, for showing it before it is picked: placeholders known now (dates, times,
+    /// weekdays) are resolved, <c>{cursor}</c> disappears, and <c>{clipboard}</c> stays as written (the clipboard
+    /// isn't read just to show a preview).
+    /// </summary>
+    public static string Preview(string template, DateTime now, CultureInfo culture) =>
+        Expand(template, new PreviewEnvironment(now, culture)).Text;
+
+    private sealed class PreviewEnvironment(DateTime now, CultureInfo culture) : ISnippetEnvironment
+    {
+        public DateTime Now => now;
+
+        public CultureInfo Culture => culture;
+
+        public string ClipboardText() => "{clipboard}";
+    }
+
     /// <summary>Expands placeholders for insertion right now.</summary>
     public static SnippetExpansion Expand(string template, ISnippetEnvironment env)
     {

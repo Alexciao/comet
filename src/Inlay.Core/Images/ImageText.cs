@@ -3,7 +3,10 @@ using Inlay.Core.Settings;
 
 namespace Inlay.Core.Images;
 
-/// <summary>Secondary text for image rows in Quick Insert and Settings ("GIF · 1.2 MB", "Newest in Screenshots · 2 min ago").</summary>
+/// <summary>
+/// Text about images: one image's type and size ("GIF, 240 × 180"), a folder entry's source ("Latest in
+/// Screenshots"), and Settings details ("GIF · 1.2 MB").
+/// </summary>
 public static class ImageText
 {
     private const string Dot = " · ";
@@ -15,6 +18,15 @@ public static class ImageText
         ("{CameraRoll}", "Camera Roll"),
         ("{Pictures}", "Pictures"),
     ];
+
+    /// <summary>
+    /// The caption of a single image or collection item in Quick Insert: "GIF, 240 × 180", or "GIF" while the size
+    /// isn't known.
+    /// </summary>
+    public static string Row(ImageType type, int width, int height, IFormatProvider? culture = null) =>
+        width > 0 && height > 0
+            ? string.Format(culture ?? CultureInfo.CurrentCulture, "{0}, {1} × {2}", ImageTypes.DisplayName(type), width, height)
+            : ImageTypes.DisplayName(type);
 
     /// <summary>"GIF · 1.2 MB".</summary>
     public static string Describe(ImageType type, long size, IFormatProvider? culture = null) =>
@@ -52,13 +64,13 @@ public static class ImageText
     }
 
     /// <summary>
-    /// A Folder entry's row: "Newest in Screenshots · 2 min ago", "Random from Cats", "Pick from Screenshots".
-    /// <paramref name="newest"/> is the local time of the newest image (null when unknown or the folder is empty).
+    /// A Folder entry's caption: where its image comes from ("Latest in Screenshots", "Random in Memes", "Pick from
+    /// Images"). Dimensions are left out: the image changes, the folder is what the entry is about.
     /// </summary>
-    public static string Folder(FolderMode mode, string folderName, DateTime? newest, DateTime now, IFormatProvider? culture = null) => mode switch
+    public static string Folder(FolderMode mode, string folderName) => mode switch
     {
-        FolderMode.Newest => newest is { } t ? $"Newest in {folderName}{Dot}{Relative(t, now, culture)}" : $"Newest in {folderName}",
-        FolderMode.Random => $"Random from {folderName}",
+        FolderMode.Newest => $"Latest in {folderName}",
+        FolderMode.Random => $"Random in {folderName}",
         _ => $"Pick from {folderName}",
     };
 

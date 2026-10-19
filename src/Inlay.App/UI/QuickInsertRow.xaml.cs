@@ -6,9 +6,9 @@ using Microsoft.UI.Xaml.Media;
 namespace Inlay.App.UI;
 
 /// <summary>
-/// One Quick Insert row, created once and updated in place: no containers are created while typing. Two stacked
-/// lines — the code with the matched part emphasized, and a caption (an emoji's name, a snippet's first line, an
-/// image's details) — beside a glyph slot, all within the fixed row height.
+/// One Quick Insert row, created once and updated in place: no containers are created while typing. The code, with
+/// the matched part emphasized, beside a glyph slot; below it a smaller caption only when it adds something (a
+/// snippet's preview, an image's type and size). Same height either way; a one-line row centers its code.
 /// </summary>
 public sealed partial class QuickInsertRow : UserControl
 {
@@ -46,10 +46,10 @@ public sealed partial class QuickInsertRow : UserControl
     }
 
     /// <summary>
-    /// An emoji row. The emoji is drawn from a pre-rendered <paramref name="bitmap"/> when available (cheap),
-    /// otherwise as text.
+    /// An emoji row: one line, the emoji and its code. The emoji is drawn from a pre-rendered
+    /// <paramref name="bitmap"/> when available (cheap), otherwise as text.
     /// </summary>
-    public void ShowEmoji(string emoji, ImageSource? bitmap, string trigger, string shortcode, (int Start, int Length) match, string caption)
+    public void ShowEmoji(string emoji, ImageSource? bitmap, string trigger, string shortcode, (int Start, int Length) match)
     {
         if (bitmap is not null)
         {
@@ -63,19 +63,19 @@ public sealed partial class QuickInsertRow : UserControl
         }
 
         SetCode(trigger, shortcode, match);
-        SetCaption(caption);
+        SetCaption("");
     }
 
-    /// <summary>A symbol row: the symbol as text, its code, and its name.</summary>
-    public void ShowSymbol(string symbol, string trigger, string code, (int Start, int Length) match, string caption)
+    /// <summary>A symbol row: one line, the symbol as text and its code.</summary>
+    public void ShowSymbol(string symbol, string trigger, string code, (int Start, int Length) match)
     {
         SymbolText.Text = symbol;
         ShowSlot(Slot.Symbol);
         SetCode(trigger, code, match);
-        SetCaption(caption);
+        SetCaption("");
     }
 
-    /// <summary>A snippet row: icon, the name, then the first line of its text.</summary>
+    /// <summary>A snippet row: icon, the name, then a one-line preview of what it inserts.</summary>
     public void ShowSnippet(string trigger, string name, string preview, (int Start, int Length) match)
     {
         GlyphIcon.Glyph = SnippetGlyph;
@@ -86,7 +86,7 @@ public sealed partial class QuickInsertRow : UserControl
 
     /// <summary>
     /// An image row: the thumbnail where an emoji would be (an image icon until it arrives, so nothing moves), the
-    /// name, and the details ("GIF · 1.2 MB", "Newest in Screenshots · 2 min ago").
+    /// name, and the type and size ("GIF, 240 × 180").
     /// </summary>
     public void ShowImage(ImageSource? thumbnail, string trigger, string name, (int Start, int Length) match, string caption)
     {

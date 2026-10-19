@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Inlay.Core.Search;
+using Inlay.Core.Snippets;
 using Inlay.Platform;
 using Inlay.Platform.Engine;
 using Inlay.Platform.Native;
@@ -135,7 +136,7 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
     /// </summary>
     internal void WarmUp()
     {
-        _rows[0].ShowEmoji("😀", null, ":", "warm_up", (0, 4), "Warm up");
+        _rows[0].ShowEmoji("😀", null, ":", "warm_up", (0, 4));
         _rows[0].Visibility = Visibility.Visible;
         var (w, h) = PhysicalSize(1, 1);
         User32.SetWindowPos(_hwnd, User32.HWND_TOPMOST, 0, 0, w, h, User32.SWP_NOACTIVATE | User32.SWP_SHOWWINDOW);
@@ -308,17 +309,13 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
             var bitmap = _emojiBitmaps.Get(text, Root.XamlRoot?.RasterizationScale ?? _scale);
             if (bitmap is null)
                 _misses++;
-            row.ShowEmoji(text, bitmap, _trigger, shortcode, Highlighter.Find(shortcode, query), Caption(emoji.Name(r.Index)));
+            row.ShowEmoji(text, bitmap, _trigger, shortcode, Highlighter.Find(shortcode, query));
         }
         else if (r.Kind == ResultKind.Snippet && r.Index < _data.UserItems.Length && _data.UserItems[r.Index] is { Snippet: { } s })
         {
             row.ShowSnippet(_trigger, s.Name, Preview(s.Text), Highlighter.Find(s.Name, query));
         }
     }
-
-    /// <summary>"Face with tears of joy": a name in sentence case for the caption line.</summary>
-    private static string Caption(ReadOnlySpan<char> name) =>
-        name.IsEmpty ? "" : string.Concat(char.ToUpperInvariant(name[0]).ToString(), name[1..]);
 
     /// <summary>The search line (from the shortcut) shows the query; its caret blinks only while it is visible.</summary>
     private void ShowSearchLine()
@@ -342,9 +339,13 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
     /// <summary>Height of the search line when it is shown (rows start below it).</summary>
     private double HeaderEpx => _fromShortcut ? QuickInsertRow.RowHeight : 0;
 
-    /// <summary>First line of the snippet text, whitespace collapsed (the row ellipsizes it).</summary>
-    private static string Preview(string text)
+    /// <summary>
+    /// The first line of what the snippet inserts now (dates and times resolved; the row ellipsizes it), with " …"
+    /// when more lines follow.
+    /// </summary>
+    private static string Preview(string template)
     {
+        var text = SnippetTemplate.Preview(template, DateTime.Now, System.Globalization.CultureInfo.CurrentCulture);
         var span = text.AsSpan().Trim();
         var newline = span.IndexOfAny('\r', '\n');
         var first = newline < 0 ? span : span[..newline];
