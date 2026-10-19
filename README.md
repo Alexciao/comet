@@ -11,11 +11,6 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![Windows 11](https://img.shields.io/badge/Windows-11-0078D4)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.gif">
-  <img src="docs/images/hero-light.gif" width="640" alt="In Edge, typing :email inserts an email address, :screenshot pastes the latest screenshot, :fire inserts 🔥, and a shorthand expands as it is typed">
-</picture>
-
 </div>
 
 Inlay sits in your tray and works in every text field on Windows. Type `:email` and your address is in. Type
@@ -41,11 +36,6 @@ One menu for everything you insert. Type `:` and a couple of letters in any text
 the caret with your snippets, your images, emoji and symbols. Keep typing to filter. Search forgives typos
 (`:thnmbs`) and abbreviations (`:hrt`), and learns what you use, so your usual picks rise to the top. Each row shows
 the code on one line and a caption under it.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/quick-insert-dark.gif">
-  <img src="docs/images/quick-insert-light.gif" width="520" alt="Quick Insert open at the caret with snippets, images and emoji in one list">
-</picture>
 
 | Key | Does |
 |---|---|
@@ -83,11 +73,6 @@ The trigger character can be changed. Settings always shows the one you use; thi
 Text you type often, saved under a name: `:email` becomes your address, `:sig` your signature. Placeholders fill in
 when the snippet is inserted.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/snippets-dark.gif">
-  <img src="docs/images/snippets-light.gif" width="520" alt="Typing :email inserts a saved email address">
-</picture>
-
 | Placeholder | Inserts |
 |---|---|
 | `{date}`, `{time}` | today's date, the current time |
@@ -102,11 +87,6 @@ when the snippet is inserted.
 
 Your own images and GIFs, under names you choose. `:lgtm` pastes your LGTM GIF. `:screenshot` pastes your newest
 screenshot. Rows in the menu show a thumbnail, and a larger preview appears beside it.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/images-dark.gif">
-  <img src="docs/images/images-light.gif" width="520" alt="Typing :lgtm shows a GIF preview and pastes it into a chat">
-</picture>
 
 There are three kinds:
 
@@ -134,11 +114,6 @@ use them: with an empty list or the feature off, Inlay watches no folders and ma
 GitHub and Slack shortcodes, Unicode names and everyday words: `:fire` gets you 🔥, and `:love` and `:lol` work
 too. Your default skin tone is applied for you.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/emoji-dark.gif">
-  <img src="docs/images/emoji-light.gif" width="520" alt="Typing :fire and :deg in Notepad inserts 🔥 and °">
-</picture>
-
 **Symbols** are part of Emoji: about 300 of them, covering arrows, math, degrees and units, currency, typography
 (dashes, quotes, ©, ™), fractions, superscripts and subscripts, check marks, keyboard symbols (⌘ ⇧ ⏎) and Greek
 letters. You can turn them off on the Emoji page.
@@ -162,11 +137,6 @@ Abbreviations that expand as you type, without opening anything. Finish the word
 becomes `be right back `. The expansion follows how you typed it (`Btw` → `By the way`, `BTW` → `BY THE WAY`)
 unless *Match case exactly* is on, and the space, Enter or punctuation you typed is kept. **Backspace** right after
 an expansion undoes it. Each app can be excluded.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/shorthands-dark.gif">
-  <img src="docs/images/shorthands-light.gif" width="520" alt="Typing brb and a space turns it into be right back">
-</picture>
 
 ### Everything else
 
