@@ -588,7 +588,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         if (result.Kind == ResultKind.Emoji && data.Emoji is { } emoji)
         {
             text = emoji.Emoji(result.Index, _config.SkinTone).ToString();
-            key = Frecency.EmojiKey(emoji.Emoji(result.Index));
+            key = emoji.IsSymbol(result.Index) ? Frecency.SymbolKey(emoji.Emoji(result.Index)) : Frecency.EmojiKey(emoji.Emoji(result.Index));
         }
         else if (result.Kind == ResultKind.Snippet && result.Index < data.UserItems.Length && data.UserItems[result.Index] is { Snippet: { } snippet } item)
         {

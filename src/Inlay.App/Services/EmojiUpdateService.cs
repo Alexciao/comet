@@ -26,7 +26,7 @@ internal sealed class EmojiUpdateService : IDisposable
     private readonly Action _dataReplaced;
     private readonly Lock _fontGate = new();
     private EmojiUpdateState _state;
-    private EmojiData? _fontCheckedFor;
+    private WeakReference<EmojiData>? _fontCheckedFor;
     private bool[]? _fontVisible;
 
     public EmojiUpdateService(DispatcherQueue dispatcher, EngineDataFactory factory, Func<AppSettings> settings, Func<bool> paused, Action dataReplaced)
@@ -95,24 +95,22 @@ internal sealed class EmojiUpdateService : IDisposable
     {
         lock (_fontGate)
         {
-            if (ReferenceEquals(_fontCheckedFor, data))
+            if (_fontCheckedFor?.TryGetTarget(out var checkedFor) == true && ReferenceEquals(checkedFor, data))
                 return _fontVisible;
-            _fontCheckedFor = data;
+            _fontCheckedFor = new WeakReference<EmojiData>(data); // weak: Emoji turned off lets the data go (L6)
             _fontVisible = null;
         }
 
         _ = Task.Run(() =>
         {
             var started = Stopwatch.GetTimestamp();
-            var sequences = new string[data.Count];
-            for (var i = 0; i < sequences.Length; i++)
-                sequences[i] = data.Emoji(i).ToString();
-            var visible = EmojiFontCheck.Check(sequences);
+            // Emoji against Segoe UI Emoji, symbols against the text fonts.
+            var visible = EmojiFontCheck.Check(data);
             var differs = visible is null ? 0 : Enumerable.Range(0, visible.Length).Count(i => visible[i] != data.RenderedOnReferenceFont(i));
-            Log.Info($"font check: {visible?.Count(v => v) ?? 0} of {data.Count} emoji drawable by {EmojiFontCheck.FontFamily}, {differs} differ from the data ({Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0} ms)");
+            Log.Info($"font check: {visible?.Count(v => v) ?? 0} of {data.Count} emoji and symbols drawable, {differs} differ from the data ({Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0} ms)");
             lock (_fontGate)
             {
-                if (!ReferenceEquals(_fontCheckedFor, data))
+                if (_fontCheckedFor?.TryGetTarget(out var current) != true || !ReferenceEquals(current, data))
                     return;
                 _fontVisible = visible;
             }

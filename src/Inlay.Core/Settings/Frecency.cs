@@ -20,6 +20,12 @@ public sealed class Frecency
 
     public static string EmojiKey(ReadOnlySpan<char> emoji) => emoji.ToString().Replace("️", "", StringComparison.Ordinal);
 
+    /// <summary>
+    /// A symbol's key: its character plus VS15 (text presentation), so the 13 symbols that share a character with an
+    /// emoji (♥, ©, ™, ↔…) keep their own score.
+    /// </summary>
+    public static string SymbolKey(ReadOnlySpan<char> symbol) => EmojiKey(symbol) + "\uFE0E";
+
     public static string SnippetKey(string snippetId) => "snippet:" + snippetId;
 
     public void Record(string key, DateTimeOffset now)

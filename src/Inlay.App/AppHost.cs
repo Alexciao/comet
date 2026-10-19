@@ -145,8 +145,7 @@ internal sealed class AppHost : IDisposable
         if (parts.HasFlag(SettingsParts.Settings))
         {
             ApplyShortcut();
-            if (!_settings.Settings.Features.Emoji)
-                _shortcodeChecker = null; // Emoji is off: let go of the dataset (L6)
+            _shortcodeChecker = null; // rebuilt on demand: Emoji may be off (let the data go, L6) or Symbols changed
         }
         if (parts.HasFlag(SettingsParts.Settings))
             StartupRegistration.Apply(_settings.Settings.StartAtLogin);
@@ -216,9 +215,9 @@ internal sealed class AppHost : IDisposable
         var frecent = _settings.FrecencyScores()
             .OrderByDescending(f => f.Score)
             .Select(f => _dataFactory.EmojiIndexOf(f.Key))
-            .Where(i => i >= 0);
+            .Where(i => i >= 0 && !data.IsSymbol(i)); // symbols are text, not pre-rendered bitmaps
         var popular = Enumerable.Range(0, data.Count)
-            .Where(i => data.Popularity(i) <= PrefetchPopularRank && data.RenderedOnReferenceFont(i))
+            .Where(i => !data.IsSymbol(i) && data.Popularity(i) <= PrefetchPopularRank && data.RenderedOnReferenceFont(i))
             .OrderBy(data.Popularity);
         _popup.Prefetch(frecent.Concat(popular).Distinct().Select(i => data.Emoji(i, tone).ToString()));
     }
@@ -289,7 +288,7 @@ internal sealed class AppHost : IDisposable
     /// <summary>True when <paramref name="name"/> is also an emoji shortcode (warned about in the snippet dialog).</summary>
     internal bool IsEmojiShortcode(string name)
     {
-        _shortcodeChecker ??= new SearchEngine(_dataFactory.CurrentEmoji ?? EmojiData.LoadEmbedded(), null);
+        _shortcodeChecker ??= new SearchEngine(_dataFactory.CurrentEmoji ?? EmojiData.LoadEmbedded(), null, includeSymbols: _settings.Settings.Features.Symbols);
         return _shortcodeChecker.FindExact(name) is not null;
     }
 

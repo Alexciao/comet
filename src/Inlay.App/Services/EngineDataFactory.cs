@@ -67,7 +67,7 @@ internal sealed class EngineDataFactory
             : [];
         UserItem[] userItems = [.. snippetDefs.Select(UserItem.From)];
         var snippetIndex = new SnippetIndex([.. userItems.Select(i => (i.Name, i.Snippet?.Text ?? i.Image?.Keywords ?? ""))]);
-        var search = new SearchEngine(emoji, snippetIndex);
+        var search = new SearchEngine(emoji, snippetIndex, includeSymbols: settings.Features.Symbols);
 
         if (emoji is not null && Visibility?.Invoke(emoji) is { } visible)
         {
@@ -120,7 +120,7 @@ internal sealed class EngineDataFactory
     {
         var map = new Dictionary<string, int>(data.Count, StringComparer.Ordinal);
         for (var i = 0; i < data.Count; i++)
-            map.TryAdd(Frecency.EmojiKey(data.Emoji(i)), i);
+            map.TryAdd(data.IsSymbol(i) ? Frecency.SymbolKey(data.Emoji(i)) : Frecency.EmojiKey(data.Emoji(i)), i);
         return map;
     }
 }

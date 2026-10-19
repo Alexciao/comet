@@ -302,7 +302,13 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
 
     private void Fill(QuickInsertRow row, SearchResult r, ReadOnlySpan<char> query)
     {
-        if (r.Kind == ResultKind.Emoji && _data.Emoji is { } emoji)
+        if (r.Kind == ResultKind.Emoji && _data.Emoji is { } data && data.IsSymbol(r.Index))
+        {
+            // Symbols are text in the UI font (with Windows' font fallback), not color emoji bitmaps.
+            var code = data.Shortcode(r.Index, r.Slot).ToString();
+            row.ShowSymbol(data.Emoji(r.Index).ToString(), _trigger, code, Highlighter.Find(code, query));
+        }
+        else if (r.Kind == ResultKind.Emoji && _data.Emoji is { } emoji)
         {
             var shortcode = emoji.Shortcode(r.Index, r.Slot).ToString();
             var text = emoji.Emoji(r.Index, _skinTone).ToString();
