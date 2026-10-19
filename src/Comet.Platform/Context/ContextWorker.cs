@@ -43,8 +43,14 @@ internal sealed class ContextWorker : IDisposable
         _thread.Start();
     }
 
-    public void Request(ContextRequestKind kind, FocusContext context) =>
+    public void Request(ContextRequestKind kind, FocusContext context)
+    {
+        Volatile.Write(ref _latestGeneration, Math.Max(Volatile.Read(ref _latestGeneration), context.Generation));
         _queue.TryAdd(new ContextRequest(kind, context, Environment.TickCount64));
+    }
+
+    // Requests for a focus that has moved on are skipped, so a hung app can't pile up work behind it.
+    private int _latestGeneration;
 
     private void Run()
     {
@@ -53,6 +59,8 @@ internal sealed class ContextWorker : IDisposable
         {
             foreach (var request in _queue.GetConsumingEnumerable())
             {
+                if (request.Context.Generation < Volatile.Read(ref _latestGeneration))
+                    continue;
                 try
                 {
                     _deliver(request.Kind == ContextRequestKind.Password ? Password(request) : Caret(request));
@@ -175,7 +183,8 @@ internal sealed class ContextWorker : IDisposable
     public void Dispose()
     {
         _queue.CompleteAdding();
-        _thread.Join(TimeSpan.FromSeconds(1));
-        _queue.Dispose();
+        // A thread still busy (UI Automation into a hung app) would throw on a disposed queue: leave it to the GC.
+        if (_thread.Join(TimeSpan.FromSeconds(1)))
+            _queue.Dispose();
     }
 }

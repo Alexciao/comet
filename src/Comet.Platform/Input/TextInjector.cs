@@ -564,8 +564,10 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
     public void Dispose()
     {
         _queue.CompleteAdding();
-        _thread.Join(TimeSpan.FromSeconds(2));
-        _queue.Dispose();
-        _ready.Dispose();
+        if (_thread.Join(TimeSpan.FromSeconds(2)))
+        {
+            _queue.Dispose();
+            _ready.Dispose();
+        }
     }
 }

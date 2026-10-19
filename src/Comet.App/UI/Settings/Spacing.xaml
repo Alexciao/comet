@@ -24,6 +24,7 @@
     <x:Double x:Key="SettingsContentMaxWidth">1000</x:Double>
     <Thickness x:Key="SettingsPagePadding">16,0,24,32</Thickness>
     <Thickness x:Key="SettingsPageTitleMargin">12,6,24,20</Thickness>
+    <Thickness x:Key="SettingsStatusPadding">16,0,24,0</Thickness>
 
     <Style x:Key="SettingsSectionHeaderTextBlockStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
         <Setter Property="Margin" Value="1,30,0,6" />

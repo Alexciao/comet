@@ -140,19 +140,26 @@ public sealed partial class AutoReplacePage : SettingsPage, ICardHost<Replacemen
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
                 return;
 
-            if (existing is null)
+            // The list may have been reloaded (a hand edit, an import) while the dialog was open: edit what is there now.
+            var target = existing is null ? null : Entries.Find(r => r.Id == existing.Id);
+            if (target is null)
             {
-                Entries.Add(new AutoReplaceDefinition { Abbreviation = dialog.Abbreviation, Replacement = dialog.Replacement, MatchCase = dialog.MatchCase });
-                ShowStatus(InfoBarSeverity.Success, $"Added {dialog.Abbreviation}. It expands when you finish the word.", canUndo: false);
+                target = new AutoReplaceDefinition { Abbreviation = dialog.Abbreviation, Replacement = dialog.Replacement, MatchCase = dialog.MatchCase };
+                Entries.Add(target);
+                if (existing is null)
+                    ShowStatus(InfoBarSeverity.Success, $"Added {dialog.Abbreviation}. It expands when you finish the word.", canUndo: false);
             }
             else
             {
-                existing.Abbreviation = dialog.Abbreviation;
-                existing.Replacement = dialog.Replacement;
-                existing.MatchCase = dialog.MatchCase;
+                target.Abbreviation = dialog.Abbreviation;
+                target.Replacement = dialog.Replacement;
+                target.MatchCase = dialog.MatchCase;
             }
 
             Store.SaveAutoReplace();
+            var index = Items.ToList().FindIndex(i => ReferenceEquals(i.Definition, target));
+            if (index >= 0 && List.GetOrCreateElement(index) is Control card)
+                card.Focus(FocusState.Programmatic);
         }
         finally
         {
@@ -186,8 +193,14 @@ public sealed partial class AutoReplacePage : SettingsPage, ICardHost<Replacemen
     {
         if (_deleted is { } d)
         {
-            Entries.Insert(Math.Min(d.Index, Entries.Count), d.Item);
             _deleted = null;
+            if (Entries.Any(r => string.Equals(r.Abbreviation, d.Item.Abbreviation, StringComparison.OrdinalIgnoreCase)))
+            {
+                ShowStatus(InfoBarSeverity.Warning, $"{d.Item.Abbreviation} is already in the list, so the deleted entry wasn't restored.", canUndo: false);
+                return;
+            }
+
+            Entries.Insert(Math.Min(d.Index, Entries.Count), d.Item);
             Store.SaveAutoReplace();
         }
 

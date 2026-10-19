@@ -307,6 +307,7 @@ internal sealed class AppHost : IDisposable
     {
         if (_settingsWindow == window)
             _settingsWindow = null;
+        _closedWindows.RemoveAll(w => !w.IsAlive);
         _closedWindows.Add(new WeakReference(window));
         _releaseTimer ??= CreateReleaseTimer();
         _releaseTimer.Stop();
@@ -434,6 +435,7 @@ internal sealed class AppHost : IDisposable
         _appUpdates?.Dispose();
         _releaseTimer?.Stop();
         _tray?.Dispose();
+        _settingsWindow?.SavePlacement();
         _settingsWindow?.Close();
         _settings?.Dispose();
         WtsApi32.WTSUnRegisterSessionNotification(_messages.Handle);

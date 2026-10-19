@@ -16,6 +16,13 @@ public sealed partial class EmojiPage : SettingsPage
 
     protected override void OnAttached() => Load();
 
+    protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        // Picks made since the page was last shown don't raise a settings change.
+        ClearButton.IsEnabled = Store.HasFrecency;
+    }
+
     private protected override void OnSettingsChanged(SettingsParts parts)
     {
         if (parts.HasFlag(SettingsParts.Settings))

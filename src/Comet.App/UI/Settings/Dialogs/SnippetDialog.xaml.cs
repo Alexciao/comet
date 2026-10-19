@@ -31,6 +31,8 @@ public sealed partial class SnippetDialog : ContentDialog
             PlaceholderMenu.Items.Add(item);
         }
 
+        // A multi-line text box handles Enter itself; see it anyway, for Ctrl+Enter.
+        TextBox.AddHandler(KeyDownEvent, new KeyEventHandler(OnTextKeyDown), handledEventsToo: true);
         NameBox.Text = editing?.Name ?? "";
         TextBox.Text = editing?.Text ?? "";
         Validate();

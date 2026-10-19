@@ -30,7 +30,7 @@
                 AcceptsReturn="True"
                 AutomationProperties.Name="Text"
                 Header="Text"
-                KeyDown="OnTextKeyDown"
+
                 ScrollViewer.VerticalScrollBarVisibility="Auto"
                 TextChanged="OnChanged"
                 TextWrapping="Wrap" />

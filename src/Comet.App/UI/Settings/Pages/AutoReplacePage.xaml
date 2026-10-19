@@ -35,22 +35,31 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <TextBlock Style="{StaticResource SettingsPageTitleTextBlockStyle}" Text="Auto-replace" />
 
-        <ScrollViewer x:Name="Scroller" Grid.Row="1">
+        <!-- Above the list, not in it: an Undo must be visible wherever the list is scrolled. -->
+        <Grid Grid.Row="1" Padding="{StaticResource SettingsStatusPadding}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MaxWidth="{StaticResource SettingsContentMaxWidth}" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <InfoBar x:Name="StatusBar" x:Load="False" IsOpen="False">
+                <InfoBar.ActionButton>
+                    <Button x:Name="UndoButton" Click="OnUndo" Content="Undo" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+        </Grid>
+
+        <ScrollViewer x:Name="Scroller" Grid.Row="2">
             <Grid Padding="{StaticResource SettingsPagePadding}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" MaxWidth="{StaticResource SettingsContentMaxWidth}" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
-                    <InfoBar x:Name="StatusBar" x:Load="False" IsOpen="False">
-                        <InfoBar.ActionButton>
-                            <Button x:Name="UndoButton" Click="OnUndo" Content="Undo" />
-                        </InfoBar.ActionButton>
-                    </InfoBar>
 
                     <toolkit:SettingsCard Header="Auto-replace" Description="Expand abbreviations as you type: finish the word and it becomes the replacement">
                         <toolkit:SettingsCard.HeaderIcon>

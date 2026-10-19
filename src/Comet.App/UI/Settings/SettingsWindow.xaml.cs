@@ -64,10 +64,21 @@ public sealed partial class SettingsWindow : Window
         AppWindow.Closing += OnClosing;
         Closed += OnClosed;
 
-        Nav.SelectedItem = ItemFor(_host.Settings.UiState.SettingsPage) ?? EmojiItem;
+        try
+        {
+            Nav.SelectedItem = ItemFor(_host.Settings.UiState.SettingsPage) ?? EmojiItem;
+        }
+        catch
+        {
+            Close(); // unsubscribes everything above, so a page that fails to build doesn't leave a window behind
+            throw;
+        }
     }
 
     internal AppHost Host => _host;
+
+    /// <summary>Raised before the window closes: pages commit what is still being typed.</summary>
+    internal event Action? Closing;
 
     /// <summary>
     /// The open Settings window, for its pages. Deliberately not passed as the navigation parameter: the frame's
@@ -201,7 +212,7 @@ public sealed partial class SettingsWindow : Window
         var area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
         RectInt32 rect;
         if (state.SettingsWindow is { Width: > 0, Height: > 0 } saved
-            && DisplayArea.GetFromPoint(new PointInt32(saved.X + 40, saved.Y + 20), DisplayAreaFallback.None) is { } savedArea)
+            && DisplayArea.GetFromRect(new RectInt32(saved.X, saved.Y, saved.Width, saved.Height), DisplayAreaFallback.None) is { } savedArea)
         {
             // Position in physical pixels, size in DIPs (scaled by the monitor the window lands on).
             area = savedArea;
@@ -238,8 +249,10 @@ public sealed partial class SettingsWindow : Window
         return ShCore.GetDpiForMonitor(monitor, 0, out var dpi, out _) == 0 ? dpi / 96.0 : 1.0;
     }
 
-    private void SavePlacement()
+    /// <summary>Remembers size, position and page (on close, and when Comet quits with the window open).</summary>
+    internal void SavePlacement()
     {
+        Closing?.Invoke();
         var state = _host.Settings.UiState;
         var presenter = AppWindow.Presenter as OverlappedPresenter;
         state.SettingsMaximized = presenter?.State == OverlappedPresenterState.Maximized;

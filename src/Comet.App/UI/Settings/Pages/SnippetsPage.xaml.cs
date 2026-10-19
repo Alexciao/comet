@@ -126,6 +126,14 @@ public sealed partial class SnippetsPage : SettingsPage, ICardHost<SnippetItem>
     {
     }
 
+    /// <summary>After an edit the card is a new element: give it the keyboard focus the old one had.</summary>
+    private void FocusCard(SnippetDefinition definition)
+    {
+        var index = Items.ToList().FindIndex(i => ReferenceEquals(i.Definition, definition));
+        if (index >= 0 && List.GetOrCreateElement(index) is Control card)
+            card.Focus(FocusState.Programmatic);
+    }
+
     private async Task EditAsync(SnippetDefinition? existing)
     {
         // One dialog at a time (a second ShowAsync while one is open throws).
@@ -139,18 +147,23 @@ public sealed partial class SnippetsPage : SettingsPage, ICardHost<SnippetItem>
             if (await dialog.ShowAsync() != ContentDialogResult.Primary && !dialog.SavedWithShortcut)
                 return;
 
-            if (existing is null)
+            // The list may have been reloaded (a hand edit, an import) while the dialog was open: edit what is there now.
+            var target = existing is null ? null : Snippets.Find(s => s.Id == existing.Id);
+            if (target is null)
             {
-                Snippets.Add(new SnippetDefinition { Name = dialog.SnippetName, Text = dialog.SnippetText });
-                ShowStatus(InfoBarSeverity.Success, $"Added {dialog.SnippetName}. Type :{dialog.SnippetName} in any app.", canUndo: false);
+                target = new SnippetDefinition { Name = dialog.SnippetName, Text = dialog.SnippetText };
+                Snippets.Add(target);
+                if (existing is null)
+                    ShowStatus(InfoBarSeverity.Success, $"Added {dialog.SnippetName}. Type :{dialog.SnippetName} in any app.", canUndo: false);
             }
             else
             {
-                existing.Name = dialog.SnippetName;
-                existing.Text = dialog.SnippetText;
+                target.Name = dialog.SnippetName;
+                target.Text = dialog.SnippetText;
             }
 
             Store.SaveSnippets();
+            FocusCard(target);
         }
         finally
         {
@@ -184,8 +197,14 @@ public sealed partial class SnippetsPage : SettingsPage, ICardHost<SnippetItem>
     {
         if (_deleted is { } d)
         {
-            Snippets.Insert(Math.Min(d.Index, Snippets.Count), d.Item);
             _deleted = null;
+            if (Snippets.Any(s => string.Equals(s.Name, d.Item.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                ShowStatus(InfoBarSeverity.Warning, $"There's already a snippet named {d.Item.Name}, so the deleted one wasn't restored.", canUndo: false);
+                return;
+            }
+
+            Snippets.Insert(Math.Min(d.Index, Snippets.Count), d.Item);
             Store.SaveSnippets();
         }
 

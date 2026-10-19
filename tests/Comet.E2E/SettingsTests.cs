@@ -127,7 +127,7 @@ public sealed class SettingsTests : IDisposable
         Invoke(Find("Save", ControlType.Button));
         Wait.Until(() => Snippets().SequenceEqual(["website"]), s_wait, "the snippet to be saved");
 
-        PressCard("website");
+        PressCard("website, a placeholder isn't written correctly"); // the {unknown} placeholder is read out with the name
         Dialog("Edit snippet");
         SetText(Find("Name", ControlType.Edit), "site");
         Invoke(Find("Save", ControlType.Button));

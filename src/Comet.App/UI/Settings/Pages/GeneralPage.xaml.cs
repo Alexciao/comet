@@ -24,6 +24,7 @@ public sealed partial class GeneralPage : SettingsPage
 
     protected override void OnAttached()
     {
+        OwnerWindow.Closing += ApplyTrigger; // a character typed but not yet confirmed still counts
         ShowProblems();
         OnAppUpdateChanged();
         Load();
@@ -146,7 +147,9 @@ public sealed partial class GeneralPage : SettingsPage
             return;
         }
 
-        var value = (int)Math.Clamp(Math.Round(args.NewValue), 1, AppSettings.MaxMinimumCharacters);
+        var value = (int)Math.Clamp(Math.Round(args.NewValue, MidpointRounding.AwayFromZero), 1, AppSettings.MaxMinimumCharacters);
+        if (value != args.NewValue)
+            sender.Value = value; // show what is stored (2.5 → 3), so the spin buttons step from there
         if (value == Settings.MinimumCharacters)
             return;
         Settings.MinimumCharacters = value;

@@ -111,8 +111,14 @@ internal sealed class EmojiBitmapCache
             Canvas.SetLeft(frame, -4 * PopupRow.EmojiBox); // outside the visible area; rendering doesn't need it on screen
             _stage.Children.Add(frame);
             var bitmap = new RenderTargetBitmap();
-            await bitmap.RenderAsync(frame);
-            _stage.Children.Remove(frame);
+            try
+            {
+                await bitmap.RenderAsync(frame);
+            }
+            finally
+            {
+                _stage.Children.Remove(frame); // also when rendering fails (device lost): never leave it on stage
+            }
             if (_scale == 0)
                 _scale = _stage.XamlRoot?.RasterizationScale ?? 1;
             if (_bitmaps.Count >= Capacity)

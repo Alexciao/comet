@@ -49,6 +49,9 @@ public sealed partial class SnippetItem
 
     public string MoreOptionsName => $"More options for {Name}";
 
+    /// <summary>The card's name for screen readers, including the warning the icon shows.</summary>
+    public string AccessibleName => HasWarning ? $"{Name}, a placeholder isn't written correctly" : Name;
+
     /// <summary>A placeholder is malformed (it would be inserted as typed): the card shows a warning icon.</summary>
     public bool HasWarning { get; }
 
@@ -151,6 +154,9 @@ public sealed partial class AppItem : INotifyPropertyChanged
     public string RemoveName => $"Remove {Program.DisplayName}";
 
     public void Remove() => _remove?.Invoke(this);
+
+    /// <summary>What a list item without a name of its own is read as (the Add app dialog's rows).</summary>
+    public override string ToString() => DisplayName;
 
     public ImageSource? Icon
     {
