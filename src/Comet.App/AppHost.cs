@@ -353,6 +353,8 @@ internal sealed class AppHost : IDisposable
 
     private const int ReleasePasses = 3;
 
+    private const uint WmEndSession = 0x0016;
+
     private bool OnMessage(uint message, nuint wParam, nint lParam)
     {
         if (_popup.HandleMessage(message) || _tray.HandleMessage(message, wParam, lParam))
@@ -366,6 +368,12 @@ internal sealed class AppHost : IDisposable
             case Program.WmQuit:
                 Shutdown();
                 return true;
+            case WmEndSession when wParam != 0:
+                // Signing out or shutting down: the process ends right after this returns, without Shutdown().
+                Log.Info("Windows is ending the session");
+                _settings.SaveFrecency();
+                _settings.Flush();
+                return false;
             case User32.WM_POWERBROADCAST when (uint)wParam is PowrProf.PBT_APMRESUMEAUTOMATIC or PowrProf.PBT_APMRESUMESUSPEND:
                 Log.Info("resumed from sleep");
                 AfterWake();

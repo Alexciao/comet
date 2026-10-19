@@ -41,7 +41,8 @@ public sealed class AppSettings
     public AppSettings Normalize()
     {
         Features ??= new();
-        if (string.IsNullOrEmpty(TriggerCharacter) || char.IsWhiteSpace(TriggerCharacter[0]) || char.IsLetterOrDigit(TriggerCharacter[0]))
+        // One UTF-16 unit that isn't a letter, digit or space (the hook sees typed characters one unit at a time).
+        if (string.IsNullOrEmpty(TriggerCharacter) || char.IsWhiteSpace(TriggerCharacter[0]) || char.IsLetterOrDigit(TriggerCharacter[0]) || char.IsSurrogate(TriggerCharacter[0]))
             TriggerCharacter = ":";
         else if (TriggerCharacter.Length > 1)
             TriggerCharacter = TriggerCharacter[..1];
@@ -49,7 +50,7 @@ public sealed class AppSettings
         SkinTone = Math.Clamp(SkinTone, 0, 5);
         PickerExcludedApps = Clean(PickerExcludedApps);
         AutoReplaceExcludedApps = Clean(AutoReplaceExcludedApps);
-        InsertionMethods = new Dictionary<string, string>(InsertionMethods ?? [], StringComparer.OrdinalIgnoreCase);
+        InsertionMethods = Cleanup.CaseInsensitive(InsertionMethods);
         return this;
     }
 
@@ -205,6 +206,7 @@ public sealed class BackupFile
 
 [JsonSourceGenerationOptions(
     WriteIndented = true,
+    PropertyNameCaseInsensitive = true,
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip,
     AllowTrailingCommas = true,

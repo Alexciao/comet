@@ -31,7 +31,7 @@ public sealed class Screenshots : IDisposable
         Directory.CreateDirectory(s_folder);
         if (withEntries)
         {
-            _comet.WithSnippets(("website", "https://example.com/"), ("addr", "Via Roma 1\nSpringfield 12345"), ("sig", "Best regards,\n— {date:d MMMM yyyy}"))
+            _comet.WithSnippets(("website", "https://example.com/"), ("addr", "1 Example Street\nSpringfield 12345"), ("sig", "Best regards,\n{date:d MMMM yyyy}"))
                 .WithAutoReplace(("cmq", "comunque"), ("pk", "perché"), ("ty", "thank you"));
         }
 

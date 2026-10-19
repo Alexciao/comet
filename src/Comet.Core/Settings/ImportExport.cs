@@ -45,9 +45,10 @@ public static class ImportExport
         int added = 0, replaced = 0;
         foreach (var s in file.Snippets ?? [])
         {
-            if (string.IsNullOrWhiteSpace(s.Name))
+            // The same rules as the Add snippet dialog: an imported name must be one you could have typed there.
+            if (s is null || EntryValidation.HasErrors(EntryValidation.ValidateSnippet(s.Name ?? "", s.Text ?? "", [], null)))
                 continue;
-            var name = s.Name.Trim();
+            var name = s.Name!.Trim();
             var item = new SnippetDefinition { Name = name, Text = s.Text ?? "" };
             var index = existing.FindIndex(e => string.Equals(e.Name, name, StringComparison.OrdinalIgnoreCase));
             if (index >= 0)
@@ -73,9 +74,9 @@ public static class ImportExport
         int added = 0, replaced = 0;
         foreach (var r in file.Entries ?? [])
         {
-            if (string.IsNullOrWhiteSpace(r.Abbreviation))
+            if (r is null || EntryValidation.HasErrors(EntryValidation.ValidateAutoReplace(r.Abbreviation ?? "", r.Replacement ?? "", [])))
                 continue;
-            var abbreviation = r.Abbreviation.Trim();
+            var abbreviation = r.Abbreviation!.Trim();
             var item = new AutoReplaceDefinition { Abbreviation = abbreviation, Replacement = r.Replacement ?? "", MatchCase = r.MatchCase, Enabled = r.Enabled };
             var index = existing.FindIndex(e => string.Equals(e.Abbreviation, abbreviation, StringComparison.OrdinalIgnoreCase));
             if (index >= 0)

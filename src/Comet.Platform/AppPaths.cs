@@ -17,9 +17,26 @@ internal static class AppPaths
     /// </summary>
     public static string DataDirectory => s_dataDirectory ??= IsScratch
         ? Environment.GetEnvironmentVariable("COMET_DATA_DIR")!
-        : IsPortable
+        : IsPortable && Writable(Path.Combine(AppContext.BaseDirectory, "Data"))
             ? Path.Combine(AppContext.BaseDirectory, "Data")
             : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Comet");
+
+    /// <summary>A portable copy unzipped somewhere read-only (Program Files, a locked share) keeps its data in the usual place.</summary>
+    private static bool Writable(string directory)
+    {
+        try
+        {
+            Directory.CreateDirectory(directory);
+            var probe = Path.Combine(directory, ".write-test");
+            File.WriteAllText(probe, "");
+            File.Delete(probe);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>Running against a scratch data folder (tests, measurements): leave per-user machine state alone.</summary>
     public static bool IsScratch => Environment.GetEnvironmentVariable("COMET_DATA_DIR") is { Length: > 0 };

@@ -40,6 +40,9 @@ internal sealed class SettingsService : IDisposable
     private readonly Lock _frecencyGate = new();
     private readonly Lock _writerGate = new();
     private SettingsParts _dirty;
+
+    /// <summary>Files that couldn't be read at startup (locked): never written until a read succeeds.</summary>
+    private SettingsParts _unread;
     private bool _uiStateDirty;
     private bool _reloading;
     private Task _writer = Task.CompletedTask;
@@ -110,20 +113,35 @@ internal sealed class SettingsService : IDisposable
 
     private void LoadAll()
     {
-        Settings = Track(_settingsStore.Load(), "settings.json").Normalize();
-        Snippets = Track(_snippetsStore.Load(), "snippets.json").Snippets ?? [];
-        AutoReplace = Track(_autoReplaceStore.Load(), "autoreplace.json").Entries ?? [];
+        var settings = _settingsStore.Load();
+        Settings = Track(settings, "settings.json", SettingsParts.Settings).Normalize();
+        // A portable copy doesn't add itself to the Run key unless asked to (it may be on someone else's PC).
+        if (settings.Status == LoadStatus.Missing && AppPaths.IsPortable)
+            Settings.StartAtLogin = false;
+        Snippets = Cleanup.Snippets(Track(_snippetsStore.Load(), "snippets.json", SettingsParts.Snippets).Snippets);
+        AutoReplace = Cleanup.Replacements(Track(_autoReplaceStore.Load(), "autoreplace.json", SettingsParts.AutoReplace).Entries);
         Frecency = new Frecency(_frecencyStore.Load().Value);
         UiState = _uiStateStore.Load().Value;
-        UiState.AppPaths = new Dictionary<string, string>(UiState.AppPaths ?? [], StringComparer.OrdinalIgnoreCase);
+        UiState.AppPaths = Cleanup.CaseInsensitive(UiState.AppPaths);
+        if (_unread != SettingsParts.None)
+            _reloadTimer.Start(); // try the locked files again shortly
     }
 
-    private T Track<T>(LoadResult<T> result, string file)
+    private T Track<T>(LoadResult<T> result, string file, SettingsParts part)
     {
         if (result.Status is LoadStatus.Corrupt or LoadStatus.RecoveredFromBackup)
         {
             Problems.Add((file, result.Status, result.CorruptCopyPath));
             Log.Warn($"{file} was unreadable ({result.Status}); copy kept at {result.CorruptCopyPath}");
+        }
+        else if (result.Status == LoadStatus.Unreadable)
+        {
+            _unread |= part;
+            Log.Warn($"{file} is locked by another program; it won't be written until it can be read");
+        }
+        else if (result.Status == LoadStatus.FromNewerVersion)
+        {
+            Log.Warn($"{file} was written by a newer Comet; the original was kept at {result.CorruptCopyPath}");
         }
 
         return result.Value;
@@ -154,8 +172,8 @@ internal sealed class SettingsService : IDisposable
     public void Restore(BackupFile backup)
     {
         Settings = (backup.Settings ?? new AppSettings()).Normalize();
-        Snippets = backup.Snippets ?? [];
-        AutoReplace = backup.AutoReplace ?? [];
+        Snippets = Cleanup.Snippets(backup.Snippets);
+        AutoReplace = Cleanup.Replacements(backup.AutoReplace);
         MarkDirty(SettingsParts.All);
         Changed?.Invoke(SettingsParts.All);
     }
@@ -181,6 +199,7 @@ internal sealed class SettingsService : IDisposable
     /// <summary>Snapshots the changed files on the UI thread (cheap) and hands them to the background writer.</summary>
     private void WriteDirty()
     {
+        _dirty &= ~_unread; // never overwrite a file that couldn't be read
         if (_dirty.HasFlag(SettingsParts.Settings))
             Enqueue(_settingsStore.Write, _settingsStore.Serialize(Settings));
         if (_dirty.HasFlag(SettingsParts.Snippets))
@@ -293,34 +312,48 @@ internal sealed class SettingsService : IDisposable
         }
 
         _reloading = true;
+        var unread = _unread;
         _ = Task.Run(() =>
         {
-            LoadResult<AppSettings>? settings = _settingsStore.ChangedOnDisk() ? _settingsStore.Load() : null;
-            LoadResult<SnippetsFile>? snippets = _snippetsStore.ChangedOnDisk() ? _snippetsStore.Load() : null;
-            LoadResult<AutoReplaceFile>? autoReplace = _autoReplaceStore.ChangedOnDisk() ? _autoReplaceStore.Load() : null;
-            _dispatcher.TryEnqueue(() => ApplyReload(settings, snippets, autoReplace));
+            LoadResult<AppSettings>? settings = null;
+            LoadResult<SnippetsFile>? snippets = null;
+            LoadResult<AutoReplaceFile>? autoReplace = null;
+            try
+            {
+                // No repair: a half-saved or mistyped hand edit must not replace what is in memory.
+                settings = ChangedOrUnread(_settingsStore, unread, SettingsParts.Settings) ? _settingsStore.Load(repair: false) : null;
+                snippets = ChangedOrUnread(_snippetsStore, unread, SettingsParts.Snippets) ? _snippetsStore.Load(repair: false) : null;
+                autoReplace = ChangedOrUnread(_autoReplaceStore, unread, SettingsParts.AutoReplace) ? _autoReplaceStore.Load(repair: false) : null;
+            }
+            finally
+            {
+                _dispatcher.TryEnqueue(() => ApplyReload(settings, snippets, autoReplace));
+            }
         });
     }
+
+    private static bool ChangedOrUnread<T>(JsonStore<T> store, SettingsParts unread, SettingsParts part)
+        where T : class, new() => unread.HasFlag(part) || store.ChangedOnDisk();
 
     private void ApplyReload(LoadResult<AppSettings>? settings, LoadResult<SnippetsFile>? snippets, LoadResult<AutoReplaceFile>? autoReplace)
     {
         _reloading = false;
         var parts = SettingsParts.None;
-        if (settings is { } s)
+        if (Usable(settings, "settings.json", SettingsParts.Settings) is { } s)
         {
-            Settings = Track(s, "settings.json").Normalize();
+            Settings = s.Normalize();
             parts |= SettingsParts.Settings;
         }
 
-        if (snippets is { } sn)
+        if (Usable(snippets, "snippets.json", SettingsParts.Snippets) is { } sn)
         {
-            Snippets = Track(sn, "snippets.json").Snippets ?? [];
+            Snippets = Cleanup.Snippets(sn.Snippets);
             parts |= SettingsParts.Snippets;
         }
 
-        if (autoReplace is { } ar)
+        if (Usable(autoReplace, "autoreplace.json", SettingsParts.AutoReplace) is { } ar)
         {
-            AutoReplace = Track(ar, "autoreplace.json").Entries ?? [];
+            AutoReplace = Cleanup.Replacements(ar.Entries);
             parts |= SettingsParts.AutoReplace;
         }
 
@@ -331,6 +364,23 @@ internal sealed class SettingsService : IDisposable
             Log.Info($"reloaded hand-edited settings: {parts}");
             Changed?.Invoke(parts);
         }
+    }
+
+    /// <summary>The reloaded value when the file was actually read; null keeps what is in memory.</summary>
+    private T? Usable<T>(LoadResult<T>? result, string file, SettingsParts part)
+        where T : class
+    {
+        if (result is not { } r)
+            return null;
+        if (!r.HasContent)
+        {
+            if (r.Status == LoadStatus.Corrupt)
+                Log.Warn($"{file} was edited but can't be read; keeping the settings in use until it can");
+            return null;
+        }
+
+        _unread &= ~part;
+        return Track(r, file, part);
     }
 
     public void Dispose()
