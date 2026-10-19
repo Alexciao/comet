@@ -1,0 +1,29 @@
+<ContentDialog
+    x:Class="Inlay.App.UI.Settings.Dialogs.WhatsNewDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="using:Inlay.App.UI"
+    Title="Update available"
+    CloseButtonText="Not now"
+    DefaultButton="Primary"
+    PrimaryButtonText="Download"
+    Style="{StaticResource DefaultContentDialogStyle}">
+
+    <ContentDialog.Resources>
+        <StaticResource x:Key="ContentDialogMaxWidth" ResourceKey="SettingsDialogWidth" />
+        <!-- Keeps the text clear of the scroll bar. -->
+        <Thickness x:Key="WhatsNewNotesPadding">0,0,16,0</Thickness>
+    </ContentDialog.Resources>
+
+    <StackPanel Width="{StaticResource SettingsDialogContentWidth}" Spacing="{StaticResource SettingsDialogFieldSpacing}">
+        <TextBlock x:Name="VersionText" Style="{StaticResource BodyStrongTextBlockStyle}" TextWrapping="Wrap" />
+        <!-- The notes scroll on their own, at most about 60% of the window tall (set in code from the window size). -->
+        <ScrollViewer x:Name="NotesScroller" Padding="{StaticResource WhatsNewNotesPadding}">
+            <ui:ReleaseNotesView
+                x:Name="NotesView"
+                AutomationProperties.Name="Release notes"
+                HeadingFontSize="{StaticResource SubtitleTextBlockFontSize}"
+                SubheadingFontSize="{StaticResource BodyStrongTextBlockFontSize}" />
+        </ScrollViewer>
+    </StackPanel>
+</ContentDialog>

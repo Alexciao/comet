@@ -1,28 +1,29 @@
 namespace Inlay.Core.Updates;
 
 /// <summary>
-/// When a weekly check (emoji data, new Inlay versions) runs: rarely, quietly, never in the first minutes after
-/// login. Both checks use this with one one-shot timer each; nothing polls.
+/// When an update check (emoji data, new Inlay versions) runs: once at every launch, shortly after startup, then
+/// once a day while Inlay keeps running. Both checks use this with one one-shot timer each; nothing polls.
 /// </summary>
 public static class UpdateSchedule
 {
-    /// <summary>At most one check per interval.</summary>
-    public static readonly TimeSpan Interval = TimeSpan.FromDays(7);
+    /// <summary>After the launch check, at most one check per interval.</summary>
+    public static readonly TimeSpan Interval = TimeSpan.FromDays(1);
 
-    /// <summary>Nothing happens in the first minutes after start, so login stays quiet.</summary>
-    public static readonly TimeSpan StartupDelay = TimeSpan.FromMinutes(2);
+    /// <summary>The launch check waits this long, so sign-in and the first popup stay quiet.</summary>
+    public static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// How long to wait before the next check: when the last one is a full interval old, but never earlier than
-    /// <see cref="StartupDelay"/> after the app started.
+    /// How long to wait before the next check. Until one has run in this launch: <see cref="StartupDelay"/> after
+    /// the app started, however recent the last check. After that: a full interval after the last check (wall
+    /// clock, so time asleep counts).
     /// </summary>
-    public static TimeSpan NextCheckIn(DateTimeOffset now, DateTimeOffset? lastChecked, TimeSpan sinceStart)
+    public static TimeSpan NextCheckIn(DateTimeOffset now, DateTimeOffset? lastChecked, TimeSpan sinceStart, bool checkedThisLaunch)
     {
-        var due = lastChecked is { } last ? last + Interval : now;
+        if (!checkedThisLaunch)
+            return sinceStart < StartupDelay ? StartupDelay - sinceStart : TimeSpan.Zero;
+        var due = (lastChecked ?? now) + Interval;
         if (due > now + Interval)
             due = now + Interval; // a clock that went backwards must not postpone checks indefinitely
-        var earliest = now + (sinceStart < StartupDelay ? StartupDelay - sinceStart : TimeSpan.Zero);
-        var at = due > earliest ? due : earliest;
-        return at - now;
+        return due > now ? due - now : TimeSpan.Zero;
     }
 }

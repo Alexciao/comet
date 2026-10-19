@@ -2,7 +2,6 @@ using System.Text;
 using Inlay.Core.Emoji;
 using Inlay.Core.Search;
 using Inlay.Core.Settings;
-using Inlay.Core.Updates;
 
 namespace Inlay.Core.Tests.Emoji;
 
@@ -170,9 +169,7 @@ public sealed class EmojiPackTests
         Assert.Equal("🪿", data.Emoji(exact.Value.Index).ToString());
     }
 
-    // ---------------------------------------------------------------- schedule
-
-    private static readonly DateTimeOffset s_now = new(2026, 10, 17, 9, 0, 0, TimeSpan.Zero);
+    // ---------------------------------------------------------------- policy (the schedule: Updates/UpdateScheduleTests)
 
     [Fact]
     public void Updates_need_emoji_on_not_paused_and_the_toggle_on()
@@ -185,29 +182,5 @@ public sealed class EmojiPackTests
         s.UpdateEmojiAutomatically = true;
         s.Features.Emoji = false;
         Assert.False(EmojiUpdatePolicy.Enabled(s, paused: false));
-    }
-
-    [Fact]
-    public void The_first_check_waits_two_minutes_after_start()
-    {
-        Assert.Equal(TimeSpan.FromMinutes(2), UpdateSchedule.NextCheckIn(s_now, lastChecked: null, sinceStart: TimeSpan.Zero));
-        Assert.Equal(TimeSpan.FromSeconds(90), UpdateSchedule.NextCheckIn(s_now, null, TimeSpan.FromSeconds(30)));
-        Assert.Equal(TimeSpan.Zero, UpdateSchedule.NextCheckIn(s_now, null, TimeSpan.FromHours(1)));
-    }
-
-    [Fact]
-    public void Checks_happen_at_most_once_every_seven_days()
-    {
-        var hour = TimeSpan.FromHours(1);
-        Assert.Equal(TimeSpan.FromDays(7) - hour, UpdateSchedule.NextCheckIn(s_now, s_now - hour, TimeSpan.FromDays(1)));
-        Assert.Equal(TimeSpan.Zero, UpdateSchedule.NextCheckIn(s_now, s_now - TimeSpan.FromDays(8), TimeSpan.FromDays(1)));
-        // Overdue at login: still not before the startup delay.
-        Assert.Equal(TimeSpan.FromMinutes(2), UpdateSchedule.NextCheckIn(s_now, s_now - TimeSpan.FromDays(30), TimeSpan.Zero));
-    }
-
-    [Fact]
-    public void A_last_check_in_the_future_does_not_postpone_beyond_one_interval()
-    {
-        Assert.Equal(TimeSpan.FromDays(7), UpdateSchedule.NextCheckIn(s_now, s_now + TimeSpan.FromDays(365), TimeSpan.FromDays(1)));
     }
 }

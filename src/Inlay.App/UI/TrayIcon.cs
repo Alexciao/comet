@@ -1,25 +1,32 @@
+using Inlay.Core.Pausing;
 using Inlay.Platform.Native;
-using Microsoft.Win32;
 
 namespace Inlay.App.UI;
 
 /// <summary>
-/// The notification-area icon: left-click opens Settings; the right-click menu has Settings, Pause/Resume, the
-/// update notice when a newer Inlay exists, and Quit. The glyph follows the taskbar theme and is dimmed while
-/// paused; the tooltip says the status ("Inlay — Paused"). The icon is re-added when Explorer restarts.
+/// The notification-area icon: left-click opens Settings; the right-click menu has Settings, Pause ▸ (15 minutes,
+/// an hour, until resumed) or Resume, the update notice when a newer Inlay exists, and Quit. The full-color icon
+/// (the same on light and dark taskbars) is dimmed while paused; the tooltip says the status ("Inlay — Paused
+/// until 17:45"). The icon is re-added when Explorer restarts.
 /// </summary>
 internal sealed unsafe class TrayIcon : IDisposable
 {
     public const uint WmTray = User32.WM_APP + 50;
     private const uint IconId = 1;
     private const int SM_CXSMICON = 49;
+    private const uint MF_POPUP = 0x0010;
     private const int CmdSettings = 1;
-    private const int CmdPause = 2;
+    private const int CmdResume = 2;
     private const int CmdQuit = 3;
     private const int CmdUpdate = 4;
+    private const int CmdPauseFifteenMinutes = 5;
+    private const int CmdPauseOneHour = 6;
+    private const int CmdPauseUntilResumed = 7;
 
     private readonly nint _hwnd;
     private nint _icon;
+    private int _iconSize;
+    private bool _iconPaused;
     private bool _added;
     private bool _paused;
     private string _status = "Active";
@@ -38,12 +45,22 @@ internal sealed unsafe class TrayIcon : IDisposable
 
     public event Action? OpenSettings;
 
+    /// <summary>Pause ▸ chosen: for this long, or until resumed when null.</summary>
+    public event Action<TimeSpan?>? PauseRequested;
+
+    public event Action? ResumeRequested;
+
+    /// <summary>
+    /// The old on/off pause event, raised only while nothing handles <see cref="PauseRequested"/> and
+    /// <see cref="ResumeRequested"/>. Remove once AppHost uses those.
+    /// </summary>
     public event Action<bool>? PauseChanged;
 
     public event Action? Quit;
 
     public event Action? OpenUpdatePage;
 
+    /// <summary>Paused: the dimmed icon, and Resume instead of Pause ▸ in the menu.</summary>
     public bool Paused
     {
         get => _paused;
@@ -54,7 +71,10 @@ internal sealed unsafe class TrayIcon : IDisposable
         }
     }
 
-    /// <summary>"Active", "Paused" or "All features off", shown in the tooltip.</summary>
+    /// <summary>"Resume (paused until 17:45)" or "Resume": the menu item while paused.</summary>
+    public string ResumeText { get; set; } = "Resume";
+
+    /// <summary>"Active", "Paused until 17:45", "Paused" or "All features off", shown in the tooltip.</summary>
     public string Status
     {
         get => _status;
@@ -87,11 +107,12 @@ internal sealed unsafe class TrayIcon : IDisposable
         var data = Data();
         Shell32.Shell_NotifyIconW(Shell32.NIM_DELETE, ref data);
         _added = false;
+        _iconSize = 0; // the taskbar may be on another monitor now: reload at its DPI
         Show();
         Platform.Log.Info($"taskbar recreated: tray icon {(_added ? "re-added" : "could not be added")}");
     }
 
-    /// <summary>Taskbar theme or DPI changed: reload the glyph.</summary>
+    /// <summary>DPI, pause or status changed: reload the icon if needed and refresh the tooltip.</summary>
     public void Update()
     {
         if (!_added)
@@ -131,10 +152,24 @@ internal sealed unsafe class TrayIcon : IDisposable
     private void ShowMenu(int x, int y)
     {
         var menu = User32.CreatePopupMenu();
+        var pause = (nint)0;
         try
         {
             User32.AppendMenuW(menu, User32.MF_STRING, CmdSettings, "Settings");
-            User32.AppendMenuW(menu, User32.MF_STRING, CmdPause, _paused ? "Resume" : "Pause");
+            if (_paused)
+            {
+                User32.AppendMenuW(menu, User32.MF_STRING, CmdResume, ResumeText);
+            }
+            else
+            {
+                pause = User32.CreatePopupMenu();
+                User32.AppendMenuW(pause, User32.MF_STRING, CmdPauseFifteenMinutes, "For 15 minutes");
+                User32.AppendMenuW(pause, User32.MF_STRING, CmdPauseOneHour, "For 1 hour");
+                User32.AppendMenuW(pause, User32.MF_STRING, CmdPauseUntilResumed, "Until I resume");
+                if (User32.AppendMenuW(menu, MF_POPUP, (nuint)pause, "Pause"))
+                    pause = 0; // destroyed with the menu from now on
+            }
+
             if (UpdateVersion is { } version)
                 User32.AppendMenuW(menu, User32.MF_STRING, CmdUpdate, $"Update available ({version})");
             User32.AppendMenuW(menu, User32.MF_SEPARATOR, 0, null);
@@ -148,8 +183,20 @@ internal sealed unsafe class TrayIcon : IDisposable
                 case CmdSettings:
                     OpenSettings?.Invoke();
                     break;
-                case CmdPause:
-                    PauseChanged?.Invoke(!_paused);
+                case CmdPauseFifteenMinutes:
+                    RequestPause(PauseState.FifteenMinutes);
+                    break;
+                case CmdPauseOneHour:
+                    RequestPause(PauseState.OneHour);
+                    break;
+                case CmdPauseUntilResumed:
+                    RequestPause(null);
+                    break;
+                case CmdResume:
+                    if (ResumeRequested is { } resume)
+                        resume();
+                    else
+                        PauseChanged?.Invoke(false);
                     break;
                 case CmdQuit:
                     Quit?.Invoke();
@@ -162,7 +209,17 @@ internal sealed unsafe class TrayIcon : IDisposable
         finally
         {
             User32.DestroyMenu(menu);
+            if (pause != 0)
+                User32.DestroyMenu(pause);
         }
+    }
+
+    private void RequestPause(TimeSpan? duration)
+    {
+        if (PauseRequested is { } pause)
+            pause(duration);
+        else
+            PauseChanged?.Invoke(true);
     }
 
     private NOTIFYICONDATAW Data()
@@ -177,22 +234,39 @@ internal sealed unsafe class TrayIcon : IDisposable
             hIcon = _icon,
         };
         var tip = $"Inlay — {_status}";
-        tip.AsSpan().CopyTo(new Span<char>(data.szTip, 127));
+        tip.AsSpan(0, Math.Min(tip.Length, 127)).CopyTo(new Span<char>(data.szTip, 127));
         return data;
     }
 
+    /// <summary>
+    /// Loads Tray.ico (or the dimmed TrayPaused.ico) from the Assets folder next to the exe, at the small-icon size
+    /// for the taskbar's DPI: Shell_NotifyIcon wants an icon drawn for that size, not one Windows scales, or it
+    /// turns blurry at 125% and 150%. LoadIconWithScaleDown picks the closest larger image and scales it down.
+    /// </summary>
     private void LoadIcon()
     {
-        // The size for the taskbar's DPI (the primary monitor's): Shell_NotifyIcon wants an icon drawn for it,
-        // not one Windows scales, or the glyph turns blurry at 125% and 150%.
         var size = User32.GetSystemMetricsForDpi(SM_CXSMICON, TaskbarDpi());
-        var name = (TaskbarIsLight() ? "TrayLight" : "TrayDark") + (_paused ? "Paused.ico" : ".ico");
-        var icon = IconFromResource(name, size);
-        if (icon == 0)
+        if (_icon != 0 && size == _iconSize && _paused == _iconPaused)
             return;
+        var name = _paused ? "TrayPaused.ico" : "Tray.ico";
+        var path = Path.Combine(AppContext.BaseDirectory, "Assets", name);
+        var hr = Comctl32.LoadIconWithScaleDown(0, path, size, size, out var icon);
+        if (hr < 0)
+        {
+            // At the system's large-icon size (the taskbar at twice the DPI Windows started with) it looks for a
+            // resource instead of the file; LoadImage reads the file's image of that size.
+            icon = User32.LoadImageW(0, path, User32.IMAGE_ICON, size, size, User32.LR_LOADFROMFILE);
+        }
+
+        if (icon == 0)
+        {
+            Platform.Log.Warn($"tray icon {name} not loaded (0x{hr:X8})");
+            return;
+        }
+
         if (_icon != 0)
             User32.DestroyIcon(_icon);
-        _icon = icon;
+        (_icon, _iconSize, _iconPaused) = (icon, size, _paused);
     }
 
     private static uint TaskbarDpi()
@@ -200,43 +274,6 @@ internal sealed unsafe class TrayIcon : IDisposable
         var taskbar = User32.FindWindowW("Shell_TrayWnd", null);
         var dpi = taskbar == 0 ? 0 : User32.GetDpiForWindow(taskbar);
         return dpi != 0 ? dpi : User32.GetDpiForSystem();
-    }
-
-    private static bool TaskbarIsLight()
-    {
-        using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-        return key?.GetValue("SystemUsesLightTheme") is int v && v == 1;
-    }
-
-    /// <summary>Picks the closest image (≥ size when available) from an embedded .ico and creates an HICON.</summary>
-    private static nint IconFromResource(string name, int size)
-    {
-        using var stream = typeof(TrayIcon).Assembly.GetManifestResourceStream(name);
-        if (stream is null)
-            return 0;
-        var bytes = new byte[stream.Length];
-        stream.ReadExactly(bytes);
-        var count = BitConverter.ToInt16(bytes, 4);
-        int best = -1, bestSize = int.MaxValue;
-        for (var i = 0; i < count; i++)
-        {
-            var entry = 6 + (i * 16);
-            var s = bytes[entry] == 0 ? 256 : bytes[entry];
-            var better = best < 0 || (s >= size && (bestSize < size || s < bestSize)) || (bestSize < size && s > bestSize);
-            if (better)
-            {
-                best = i;
-                bestSize = s;
-            }
-        }
-
-        if (best < 0)
-            return 0;
-        var e = 6 + (best * 16);
-        var length = BitConverter.ToInt32(bytes, e + 8);
-        var offset = BitConverter.ToInt32(bytes, e + 12);
-        fixed (byte* p = &bytes[offset])
-            return User32.CreateIconFromResourceEx(p, (uint)length, true, 0x00030000, size, size, 0);
     }
 
     public void Dispose()
