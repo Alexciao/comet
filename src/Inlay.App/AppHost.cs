@@ -34,7 +34,7 @@ internal sealed class AppHost : IDisposable
     private GlobalShortcut _shortcut = null!;
     private const int QuickInsertHotKeyId = 1; // GlobalShortcut also uses id + 1 to test a combination
     private SettingsWindow? _settingsWindow;
-    private bool _paused;
+    private readonly PauseService _pause;
     private int _rebuildVersion;
     private bool _shutDown;
     private SearchEngine? _shortcodeChecker;
@@ -49,6 +49,8 @@ internal sealed class AppHost : IDisposable
         _app = app;
         _options = options;
         _dispatcher = DispatcherQueue.GetForCurrentThread();
+        _pause = new PauseService(_dispatcher);
+        _pause.Changed += OnPauseChanged;
     }
 
     internal SettingsService Settings => _settings;
@@ -57,7 +59,7 @@ internal sealed class AppHost : IDisposable
 
     internal EngineDataFactory DataFactory => _dataFactory;
 
-    internal bool Paused => _paused;
+    internal bool Paused => _pause.IsPaused;
 
     /// <summary>Raised on the UI thread when Inlay is paused or resumed (tray or Settings).</summary>
     internal event Action<bool>? PausedChanged;
@@ -73,8 +75,8 @@ internal sealed class AppHost : IDisposable
     public void Start()
     {
         _settings = new SettingsService(_dispatcher);
-        _updates = new EmojiUpdateService(_dispatcher, _dataFactory, () => _settings.Settings, () => _paused, OnEmojiDataReplaced);
-        _appUpdates = new AppUpdateService(_dispatcher, () => _settings.Settings, () => _paused, OnAppUpdateChanged);
+        _updates = new EmojiUpdateService(_dispatcher, _dataFactory, () => _settings.Settings, () => _pause.IsPaused, OnEmojiDataReplaced);
+        _appUpdates = new AppUpdateService(_dispatcher, () => _settings.Settings, () => _pause.IsPaused, OnAppUpdateChanged);
 
         _popup = new QuickInsertWindow();
         _messages = new MessageWindow(Program.MessageWindowClass, OnMessage);
@@ -92,7 +94,8 @@ internal sealed class AppHost : IDisposable
 
         _tray = new TrayIcon(_messages.Handle);
         _tray.OpenSettings += OpenSettings;
-        _tray.PauseChanged += SetPaused;
+        _tray.PauseRequested += _pause.Pause;
+        _tray.ResumeRequested += _pause.Resume;
         _tray.Quit += Shutdown;
         _tray.OpenUpdatePage += OpenUpdatePage;
         _tray.Status = Status();
@@ -109,7 +112,7 @@ internal sealed class AppHost : IDisposable
             OpenSettings();
     }
 
-    private EngineConfig Config() => EngineConfig.From(_settings.Settings, _paused);
+    private EngineConfig Config() => EngineConfig.From(_settings.Settings, _pause.IsPaused);
 
     private EngineData BuildData() =>
         _dataFactory.Build(_settings.Settings, [.. _settings.Snippets], [.. _settings.Shorthands], _settings.FrecencyScores());
@@ -117,7 +120,7 @@ internal sealed class AppHost : IDisposable
     /// <summary>Registers the Quick Insert shortcut from the settings; none while paused or with Quick Insert off.</summary>
     private void ApplyShortcut()
     {
-        var active = !_paused && Config().QuickInsertEnabled;
+        var active = !_pause.IsPaused && Config().QuickInsertEnabled;
         var status = _shortcut.Set(active ? Shortcut.FromSetting(_settings.Settings.QuickInsertShortcut) : Shortcut.None);
         if (status is ShortcutRegistration.InUse or ShortcutRegistration.Failed)
             Log.Warn($"Quick Insert shortcut {_settings.Settings.QuickInsertShortcut}: {status}");
@@ -189,7 +192,7 @@ internal sealed class AppHost : IDisposable
     internal string Status()
     {
         var f = _settings.Settings.Features;
-        return _paused ? "Paused" : !f.Emoji && !f.Snippets && !f.Images && !f.Shorthands ? "All features off" : "Active";
+        return _pause.IsPaused ? _pause.Status : !f.Emoji && !f.Snippets && !f.Images && !f.Shorthands ? "All features off" : "Active";
     }
 
     /// <summary>A new emoji pack or font check result: rebuild the search data in the background, at low priority.</summary>
@@ -264,22 +267,24 @@ internal sealed class AppHost : IDisposable
         });
     }
 
-    internal void SetPaused(bool paused)
+    /// <summary>Pauses everything for <paramref name="duration"/>, or until resumed (null). Not saved: a restart resumes.</summary>
+    internal void Pause(TimeSpan? duration) => _pause.Pause(duration);
+
+    internal void Resume() => _pause.Resume();
+
+    private void OnPauseChanged()
     {
-        if (paused == _paused)
-            return;
-        _paused = paused;
+        var paused = _pause.IsPaused;
+        _tray.ResumeText = _pause.ResumeText;
         _tray.Paused = paused;
         _tray.Status = Status();
         _engine.SetConfig(Config());
         ApplyShortcut();
         _updates.Schedule();
         _appUpdates.Schedule();
-        Log.Info(paused ? "paused" : "resumed");
+        Log.Info(paused ? $"paused{(_pause.Until is { } u ? $" until {u:u}" : "")}" : "resumed");
         PausedChanged?.Invoke(paused);
     }
-
-    internal void TogglePause() => SetPaused(!_paused);
 
     /// <summary>True when <paramref name="name"/> is also an emoji shortcode (warned about in the snippet dialog).</summary>
     internal bool IsEmojiShortcode(string name)
@@ -420,6 +425,8 @@ internal sealed class AppHost : IDisposable
 
     private const uint WmEndSession = 0x0016;
 
+    private const uint WmTimeChange = 0x001E;
+
     private bool OnMessage(uint message, nuint wParam, nint lParam)
     {
         if (_popup.HandleMessage(message) || _tray.HandleMessage(message, wParam, lParam))
@@ -465,9 +472,11 @@ internal sealed class AppHost : IDisposable
                 _engine.Cancel();
                 _tray.Update();
                 return false;
-            case User32.WM_SETTINGCHANGE:
-                // Taskbar light/dark switch: swap the tray glyph.
-                _tray.Update();
+            case WmTimeChange:
+                // The clock or time zone changed: a timed pause and the daily checks follow the wall clock.
+                _pause.Recheck();
+                _updates.Schedule();
+                _appUpdates.Schedule();
                 return false;
         }
 
@@ -477,6 +486,7 @@ internal sealed class AppHost : IDisposable
     /// <summary>After sleep or unlock: forget any session and make sure Windows didn't drop the hook.</summary>
     private void AfterWake()
     {
+        _pause.Recheck(); // a pause that ran out during sleep ends now
         _engine.Cancel();
         _engine.KickWatchdog(force: true);
         _tray.Update();
@@ -499,6 +509,7 @@ internal sealed class AppHost : IDisposable
 
     public void Dispose()
     {
+        _pause.Dispose();
         _shortcut?.Dispose();
         _engine?.Dispose();
         _updates?.Dispose();

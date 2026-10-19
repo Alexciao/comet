@@ -37,7 +37,10 @@
     <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Assets\Tray*.ico" LogicalName="%(Filename)%(Extension)" />
+    <!-- Loaded with LoadIconWithScaleDown from next to the exe, at the taskbar's small-icon size. -->
+    <Content Include="Assets\Tray.ico;Assets\TrayPaused.ico" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The installed version's notes for Settings › General › About: this version's CHANGELOG section. -->
+    <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="ReleaseNotes.md" Condition="Exists('..\..\CHANGELOG.md')" />
     <Content Include="Assets\Inlay.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Inlay.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\AppIcon*.png" CopyToOutputDirectory="PreserveNewest" />

@@ -77,6 +77,9 @@ internal static class AppPaths
 
     public static Uri LicenseUrl { get; } = new($"https://github.com/{Repository}/blob/main/LICENSE");
 
+    /// <summary>Every release, newest first (Settings › General › About).</summary>
+    public static Uri ReleasesUrl { get; } = new($"https://github.com/{Repository}/releases");
+
     /// <summary>GitHub's API for the newest published (non-prerelease, non-draft) release.</summary>
     public static Uri LatestReleaseApi { get; } = new($"https://api.github.com/repos/{Repository}/releases/latest");
 

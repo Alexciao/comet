@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Inlay.App.UI.Settings"
     xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
+    xmlns:ui="using:Inlay.App.UI"
     NavigationCacheMode="Required">
 
     <Grid>
@@ -21,9 +22,12 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
                     <InfoBar x:Name="UpdateBar" x:Load="False" IsClosable="True" IsOpen="False" Severity="Informational">
-                        <InfoBar.ActionButton>
-                            <Button Click="OnDownloadUpdate" Content="Download" Style="{StaticResource AccentButtonStyle}" />
-                        </InfoBar.ActionButton>
+                        <InfoBar.Content>
+                            <StackPanel Margin="0,0,0,16" Orientation="Horizontal" Spacing="8">
+                                <Button Click="OnDownloadUpdate" Content="Download" Style="{StaticResource AccentButtonStyle}" />
+                                <Button Click="OnWhatsNew" Content="See what's new" />
+                            </StackPanel>
+                        </InfoBar.Content>
                     </InfoBar>
                     <InfoBar x:Name="ProblemsBar" x:Load="False" IsOpen="False" Severity="Warning" />
                     <InfoBar x:Name="StatusBar" x:Load="False" IsOpen="False" />
@@ -85,6 +89,18 @@
                             </toolkit:SettingsCard>
                             <toolkit:SettingsCard Header="Logs" Description="Events and timings only, never what you type">
                                 <Button Click="OnOpenLogs" Content="Open logs folder" />
+                            </toolkit:SettingsCard>
+                            <!-- The installed version's notes, embedded at build time (never the fetched ones). -->
+                            <toolkit:SettingsCard x:Name="NotesCard" ContentAlignment="Vertical" HorizontalContentAlignment="Stretch">
+                                <ui:ReleaseNotesView
+                                    x:Name="InstalledNotes"
+                                    HeadingFontSize="{StaticResource BodyStrongTextBlockFontSize}"
+                                    SubheadingFontSize="{StaticResource BodyStrongTextBlockFontSize}" />
+                            </toolkit:SettingsCard>
+                            <toolkit:SettingsCard Header="View all releases" Click="OnOpenReleases" IsClickEnabled="True">
+                                <toolkit:SettingsCard.ActionIcon>
+                                    <FontIcon Glyph="&#xE8A7;" />
+                                </toolkit:SettingsCard.ActionIcon>
                             </toolkit:SettingsCard>
                         </toolkit:SettingsExpander.Items>
                     </toolkit:SettingsExpander>

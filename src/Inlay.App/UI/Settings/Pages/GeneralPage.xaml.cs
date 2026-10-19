@@ -30,6 +30,15 @@ public sealed partial class GeneralPage : SettingsPage
         {
             FindName(nameof(LaterSections));
             VersionText.Text = $"Version {AppPaths.Version}";
+            if (ReleaseNotes.Installed is { } notes)
+            {
+                NotesCard.Header = $"What's new in {AppPaths.Version}";
+                InstalledNotes.Notes = notes;
+            }
+            else
+            {
+                NotesCard.Visibility = Visibility.Collapsed; // a local build has no notes of its own
+            }
             RepositoryCard.Description = AppPaths.RepositoryUrl.Host + AppPaths.RepositoryUrl.AbsolutePath;
             Load();
         });
@@ -50,9 +59,9 @@ public sealed partial class GeneralPage : SettingsPage
         if (LaterSections is not null)
         {
             EmojiUpdatesToggle.IsOn = Settings.UpdateEmojiAutomatically;
-            EmojiUpdatesCard.Description = Host.EmojiDataDescription();
+            EmojiUpdatesCard.Description = $"Checks quietly at launch and once a day · {Host.EmojiDataDescription()}";
             AppUpdatesToggle.IsOn = Settings.NotifyAppUpdates;
-            AppUpdatesCard.Description = $"Checks GitHub once a week; nothing is installed for you · Last checked {AppHost.FormatDate(Host.AppUpdateLastChecked)}";
+            AppUpdatesCard.Description = $"Checks quietly at launch and once a day · Last checked {AppHost.FormatDate(Host.AppUpdateLastChecked)}";
         }
 
         _loading = false;
@@ -69,7 +78,7 @@ public sealed partial class GeneralPage : SettingsPage
 
         UpdateBar ??= (InfoBar)FindName(nameof(UpdateBar));
         UpdateBar.Title = $"Inlay {release.DisplayVersion} is available";
-        UpdateBar.Message = $"You have version {AppPaths.Version}.";
+        UpdateBar.Message = $"You have version {AppPaths.Version}";
         UpdateBar.IsOpen = true;
     }
 
@@ -185,6 +194,29 @@ public sealed partial class GeneralPage : SettingsPage
     private static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n} {noun}s";
 
     private void OnOpenRepository(object sender, RoutedEventArgs e) => AppHost.OpenInBrowser(AppPaths.RepositoryUrl);
+
+    private void OnOpenReleases(object sender, RoutedEventArgs e) => AppHost.OpenInBrowser(AppPaths.ReleasesUrl);
+
+    private void OnWhatsNew(object sender, RoutedEventArgs e) => _ = ShowWhatsNewAsync();
+
+    /// <summary>
+    /// The newer version's notes (fetched with the update check) in a dialog over Settings. Also opened from the
+    /// tray's "Update available" item.
+    /// </summary>
+    internal async Task ShowWhatsNewAsync()
+    {
+        if (_dialogOpen || XamlRoot is null || Host.AvailableUpdate is not { } release)
+            return;
+        _dialogOpen = true;
+        try
+        {
+            await new WhatsNewDialog(release, XamlRoot).ShowAsync();
+        }
+        finally
+        {
+            _dialogOpen = false;
+        }
+    }
 
     private void OnOpenLicense(object sender, RoutedEventArgs e) => AppHost.OpenInBrowser(AppPaths.LicenseUrl);
 

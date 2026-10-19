@@ -50,12 +50,6 @@ internal sealed unsafe class TrayIcon : IDisposable
 
     public event Action? ResumeRequested;
 
-    /// <summary>
-    /// The old on/off pause event, raised only while nothing handles <see cref="PauseRequested"/> and
-    /// <see cref="ResumeRequested"/>. Remove once AppHost uses those.
-    /// </summary>
-    public event Action<bool>? PauseChanged;
-
     public event Action? Quit;
 
     public event Action? OpenUpdatePage;
@@ -184,19 +178,16 @@ internal sealed unsafe class TrayIcon : IDisposable
                     OpenSettings?.Invoke();
                     break;
                 case CmdPauseFifteenMinutes:
-                    RequestPause(PauseState.FifteenMinutes);
+                    PauseRequested?.Invoke(PauseState.FifteenMinutes);
                     break;
                 case CmdPauseOneHour:
-                    RequestPause(PauseState.OneHour);
+                    PauseRequested?.Invoke(PauseState.OneHour);
                     break;
                 case CmdPauseUntilResumed:
-                    RequestPause(null);
+                    PauseRequested?.Invoke(null);
                     break;
                 case CmdResume:
-                    if (ResumeRequested is { } resume)
-                        resume();
-                    else
-                        PauseChanged?.Invoke(false);
+                    ResumeRequested?.Invoke();
                     break;
                 case CmdQuit:
                     Quit?.Invoke();
@@ -212,14 +203,6 @@ internal sealed unsafe class TrayIcon : IDisposable
             if (pause != 0)
                 User32.DestroyMenu(pause);
         }
-    }
-
-    private void RequestPause(TimeSpan? duration)
-    {
-        if (PauseRequested is { } pause)
-            pause(duration);
-        else
-            PauseChanged?.Invoke(true);
     }
 
     private NOTIFYICONDATAW Data()
