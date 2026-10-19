@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.22000.0</SupportedOSPlatformVersion>
+    <RootNamespace>Inlay.App</RootNamespace>
+    <AssemblyName>Inlay</AssemblyName>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- Generates and publishes the resource index (Inlay.pri) and compiled XAML for this unpackaged app. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <SelfContained>true</SelfContained>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\Inlay.ico</ApplicationIcon>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <!-- Native AOT for release builds; Debug uses the JIT so Rider can debug normally. -->
+    <PublishAot>true</PublishAot>
+    <!-- XML docs are for the build (IDE0005 needs them), not for users. -->
+    <PublishDocumentationFiles>false</PublishDocumentationFiles>
+    <IsAotCompatible>true</IsAotCompatible>
+    <OptimizationPreference>Speed</OptimizationPreference>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <StackTraceSupport>true</StackTraceSupport>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inlay.Core\Inlay.Core.csproj" />
+    <ProjectReference Include="..\Inlay.Platform\Inlay.Platform.csproj" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Loaded with LoadIconWithScaleDown from next to the exe, at the taskbar's small-icon size. -->
+    <Content Include="Assets\Tray.ico;Assets\TrayPaused.ico" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The installed version's notes for Settings › General › About: this version's CHANGELOG section. -->
+    <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="ReleaseNotes.md" Condition="Exists('..\..\CHANGELOG.md')" />
+    <Content Include="Assets\Inlay.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Inlay.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\AppIcon*.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

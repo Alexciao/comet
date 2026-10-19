@@ -1,0 +1,42 @@
+<ContentDialog
+    x:Class="Inlay.App.UI.Settings.Dialogs.ShorthandDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary"
+    PrimaryButtonText="Save"
+    Style="{StaticResource DefaultContentDialogStyle}">
+
+    <ContentDialog.Resources>
+        <StaticResource x:Key="ContentDialogMaxWidth" ResourceKey="SettingsDialogWidth" />
+    </ContentDialog.Resources>
+
+    <StackPanel Width="{StaticResource SettingsDialogContentWidth}" Spacing="{StaticResource SettingsDialogFieldSpacing}">
+        <StackPanel>
+            <TextBox
+                x:Name="AbbreviationBox"
+                AutomationProperties.Name="Shorthand"
+                Header="Shorthand"
+                TextChanged="OnChanged" />
+            <TextBlock x:Name="AbbreviationError" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+            <TextBlock x:Name="AbbreviationWarning" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+        </StackPanel>
+
+        <StackPanel>
+            <TextBox
+                x:Name="ReplacementBox"
+                AutomationProperties.Name="Expands to"
+                Header="Expands to"
+                TextChanged="OnChanged" />
+            <TextBlock x:Name="ReplacementError" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+            <TextBlock x:Name="ReplacementWarning" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+        </StackPanel>
+
+        <CheckBox x:Name="MatchCaseBox" Content="Match case exactly" />
+        <TextBlock
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Text="When it's off, capitals follow how you typed the shorthand"
+            TextWrapping="Wrap" />
+    </StackPanel>
+</ContentDialog>

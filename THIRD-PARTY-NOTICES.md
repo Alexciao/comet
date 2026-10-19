@@ -1,8 +1,8 @@
 # Third-party notices
 
-Comet includes or is built from the following projects. Their licenses apply to their parts.
+Inlay includes or is built from the following projects. Their licenses apply to their parts.
 
-## Emoji data (compiled into Comet's emoji data)
+## Emoji data (compiled into Inlay's emoji data)
 | Project | Used for | License |
 |---|---|---|
 | [emojibase](https://github.com/milesj/emojibase) (emojibase-data) | names, keywords, skin tones, shortcodes | MIT — `data/sources/LICENSE-emojibase` |
@@ -11,7 +11,7 @@ Comet includes or is built from the following projects. Their licenses apply to 
 | [Unicode CLDR](https://cldr.unicode.org/) annotations (via emojibase) | names and keywords | [Unicode License v3](https://www.unicode.org/license.txt) |
 | Unicode emoji frequency ranking | popularity order | [Unicode License v3](https://www.unicode.org/license.txt) |
 
-## Libraries shipped with Comet
+## Libraries shipped with Inlay
 | Project | License |
 |---|---|
 | [Windows App SDK](https://github.com/microsoft/WindowsAppSDK) (WinUI 3) | MIT |

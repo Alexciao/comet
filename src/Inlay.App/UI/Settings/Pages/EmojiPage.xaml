@@ -1,0 +1,53 @@
+<local:SettingsPage
+    x:Class="Inlay.App.UI.Settings.Pages.EmojiPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Inlay.App.UI.Settings"
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
+    NavigationCacheMode="Required">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <TextBlock Style="{StaticResource SettingsPageTitleTextBlockStyle}" Text="Emoji" />
+
+        <ScrollViewer Grid.Row="1">
+            <Grid Padding="{StaticResource SettingsPagePadding}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MaxWidth="{StaticResource SettingsContentMaxWidth}" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <toolkit:SettingsCard Header="Emoji" Description="Show emoji in Quick Insert">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE76E;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <ToggleSwitch OffContent="Off" OnContent="On" x:Name="FeatureToggle" AutomationProperties.Name="Emoji" Toggled="OnFeatureToggled" />
+                    </toolkit:SettingsCard>
+
+                    <toolkit:SettingsCard x:Name="SymbolsCard" Header="Symbols" Description="Show arrows, math, currency and other symbols in Quick Insert">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8D2;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <ToggleSwitch OffContent="Off" OnContent="On" x:Name="SymbolsToggle" AutomationProperties.Name="Symbols" Toggled="OnSymbolsToggled" />
+                    </toolkit:SettingsCard>
+                    <toolkit:SettingsCard Header="Default skin tone" Description="Used for emoji that come in more than one skin tone">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE790;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <ComboBox x:Name="SkinToneBox" AutomationProperties.Name="Default skin tone" SelectionChanged="OnSkinToneChanged">
+                            <ComboBoxItem Content="✋  Default" />
+                            <ComboBoxItem Content="✋🏻  Light" />
+                            <ComboBoxItem Content="✋🏼  Medium-light" />
+                            <ComboBoxItem Content="✋🏽  Medium" />
+                            <ComboBoxItem Content="✋🏾  Medium-dark" />
+                            <ComboBoxItem Content="✋🏿  Dark" />
+                        </ComboBox>
+                    </toolkit:SettingsCard>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</local:SettingsPage>

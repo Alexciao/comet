@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- Inlay, hand-tuned for 16 px: no socket or facets, whole-pixel caret. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22B5A7"/>
+      <stop offset="1" stop-color="#0A7470"/>
+    </linearGradient>
+  </defs>
+  <rect width="16" height="16" rx="3.5" fill="url(#tile)"/>
+  <path d="M2 8 L6.5 3.5 L11 8 Z" fill="#FFFFFF"/>
+  <path d="M2 8 L11 8 L6.5 12.5 Z" fill="#D4F2ED"/>
+  <rect x="12" y="3" width="2" height="10" fill="#FFFFFF"/>
+</svg>

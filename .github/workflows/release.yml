@@ -46,7 +46,7 @@ jobs:
         run: |
           $v = "${{ github.ref_name }}".TrimStart('v')
           "VERSION=$v" | Out-File $env:GITHUB_ENV -Append
-          "Comet $v"
+          "Inlay $v"
 
       - name: Inno Setup
         shell: pwsh
@@ -80,11 +80,11 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: comet-${{ matrix.arch }}
+          name: inlay-${{ matrix.arch }}
           path: |
-            artifacts/installer/Comet-Setup-${{ matrix.arch }}.exe
-            artifacts/installer/Comet-Portable-${{ matrix.arch }}.zip
-            artifacts/installer/Comet-Symbols-${{ matrix.arch }}.zip
+            artifacts/installer/Inlay-Setup-${{ matrix.arch }}.exe
+            artifacts/installer/Inlay-Portable-${{ matrix.arch }}.zip
+            artifacts/installer/Inlay-Symbols-${{ matrix.arch }}.zip
 
   release:
     needs: build
@@ -92,18 +92,36 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
+
       - uses: actions/download-artifact@v4
         with:
           path: assets
           merge-multiple: true
 
+      # The release body is this version's CHANGELOG section (the same text the app shows in Settings), followed by
+      # GitHub's generated list of changes. No section, no release: the notes must exist before tagging.
+      - name: Release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && (/^## \[/ || /^\[[^]]+\]: /) { exit }
+            on { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section for $version"; exit 1; }
+          cat notes.md
+
       - name: Checksums
         working-directory: assets
-        run: sha256sum Comet-Setup-*.exe Comet-Portable-*.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
+        run: sha256sum Inlay-Setup-*.exe Inlay-Portable-*.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
 
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" --title "Comet ${GITHUB_REF_NAME#v}" --generate-notes --latest \
-            assets/Comet-Setup-x64.exe assets/Comet-Portable-x64.zip assets/Comet-Setup-arm64.exe assets/Comet-Portable-arm64.zip assets/SHA256SUMS.txt
+          gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" --title "Inlay ${GITHUB_REF_NAME#v}" --notes-file notes.md --generate-notes --latest \
+            assets/Inlay-Setup-x64.exe assets/Inlay-Portable-x64.zip assets/Inlay-Setup-arm64.exe assets/Inlay-Portable-arm64.zip assets/SHA256SUMS.txt

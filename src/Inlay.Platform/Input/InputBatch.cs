@@ -1,0 +1,202 @@
+using Inlay.Core.Shorthands;
+using Inlay.Platform.Hook;
+using Inlay.Platform.Native;
+
+namespace Inlay.Platform.Input;
+
+/// <summary>
+/// Builds the <c>INPUT</c> array for one insertion so it reaches the app as a single <c>SendInput</c> batch:
+/// backspaces for the typed token, the text, caret moves for <c>{cursor}</c>, then the boundary key.
+/// Virtual keys carry their scan codes (some apps read those rather than the virtual key).
+/// </summary>
+internal sealed class InputBatch
+{
+    private const uint MAPVK_VK_TO_VSC = 0;
+
+    private readonly List<INPUT> _inputs = new(64);
+
+    /// <summary>Modifiers the user was holding when the batch started (released for it, pressed again after).</summary>
+    private readonly List<(ushort Vk, ushort Scan, bool Extended)> _released = new(4);
+
+    private static readonly (ushort Vk, ushort Scan, bool Extended)[] s_modifiers =
+    [
+        (VirtualKey.VK_LSHIFT, 0x2A, false),
+        (VirtualKey.VK_RSHIFT, 0x36, false),
+        (VirtualKey.VK_LCONTROL, LeftCtrlScan, false),
+        (VirtualKey.VK_RCONTROL, LeftCtrlScan, true),
+        (VirtualKey.VK_LMENU, 0x38, false),
+        (VirtualKey.VK_RMENU, 0x38, true),
+    ];
+
+    public int Count => _inputs.Count;
+
+    public ReadOnlySpan<INPUT> Inputs => System.Runtime.InteropServices.CollectionsMarshal.AsSpan(_inputs);
+
+    public InputBatch Key(ushort vk, nuint signature = InputSignature.Inlay, bool extended = false)
+    {
+        var flags = extended ? User32.KEYEVENTF_EXTENDEDKEY : 0;
+        var scan = (ushort)User32.MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC, 0);
+        Add(vk, scan, flags, signature);
+        Add(vk, scan, flags | User32.KEYEVENTF_KEYUP, signature);
+        return this;
+    }
+
+    /// <summary>
+    /// The user is usually still holding Shift from typing the closing ":" (Shift+period on many layouts), or
+    /// AltGr (Ctrl+Alt) when the trigger is an AltGr character, when an insertion starts; their key-up is held
+    /// until it finishes. Held modifiers would turn caret moves into selections, Backspace into Ctrl+Backspace and
+    /// Ctrl+V into Ctrl+Shift+V, so they are released for the batch and pressed again at the end.
+    /// </summary>
+    public InputBatch ReleaseModifiers()
+    {
+        _released.Clear();
+        foreach (var m in s_modifiers)
+        {
+            if ((User32.GetAsyncKeyState(m.Vk) & 0x8000) == 0)
+                continue;
+            _released.Add(m);
+            Add(m.Vk, m.Scan, User32.KEYEVENTF_KEYUP | (m.Extended ? User32.KEYEVENTF_EXTENDEDKEY : 0), InputSignature.Inlay);
+        }
+
+        return this;
+    }
+
+    /// <summary>Puts back the modifiers released by <see cref="ReleaseModifiers"/> (the user's own key-ups arrive later).</summary>
+    public InputBatch RestoreModifiers()
+    {
+        foreach (var m in _released)
+            Add(m.Vk, m.Scan, m.Extended ? User32.KEYEVENTF_EXTENDEDKEY : 0, InputSignature.Inlay);
+        _released.Clear();
+        return this;
+    }
+
+    /// <summary>Left Shift down, Left: selects one character back. Shift stays down until <see cref="ReleaseLeftShift"/>.</summary>
+    public InputBatch ShiftLeftHeld()
+    {
+        Add(VirtualKey.VK_LSHIFT, 0x2A, 0, InputSignature.Inlay);
+        Add(VirtualKey.VK_LEFT, 0x4B, User32.KEYEVENTF_EXTENDEDKEY, InputSignature.Inlay);
+        Add(VirtualKey.VK_LEFT, 0x4B, User32.KEYEVENTF_EXTENDEDKEY | User32.KEYEVENTF_KEYUP, InputSignature.Inlay);
+        return this;
+    }
+
+    public InputBatch ReleaseLeftShift()
+    {
+        Add(VirtualKey.VK_LSHIFT, 0x2A, User32.KEYEVENTF_KEYUP, InputSignature.Inlay);
+        return this;
+    }
+
+    public InputBatch Backspaces(int count)
+    {
+        for (var i = 0; i < count; i++)
+            Key(VirtualKey.VK_BACK);
+        return this;
+    }
+
+    public InputBatch Lefts(int count)
+    {
+        for (var i = 0; i < count; i++)
+            Key(VirtualKey.VK_LEFT, extended: true);
+        return this;
+    }
+
+    /// <summary>
+    /// Types text as UTF-16 units with <c>KEYEVENTF_UNICODE</c>. Surrogate pairs go as two consecutive units
+    /// (Windows reassembles them into one WM_CHAR pair), so skin tones and ZWJ families arrive intact.
+    /// Newlines are typed as Shift+Enter — a line break in editors, text areas and terminals, and "new line"
+    /// rather than "send" in chat apps — and tabs as the Tab key.
+    /// </summary>
+    public InputBatch Text(ReadOnlySpan<char> text)
+    {
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            switch (c)
+            {
+                case '\r':
+                    if (i + 1 < text.Length && text[i + 1] == '\n')
+                        continue;
+                    LineBreak();
+                    break;
+                case '\n':
+                    LineBreak();
+                    break;
+                case '\t':
+                    Key(VirtualKey.VK_TAB);
+                    break;
+                default:
+                    Add(0, c, User32.KEYEVENTF_UNICODE, InputSignature.Inlay);
+                    Add(0, c, User32.KEYEVENTF_UNICODE | User32.KEYEVENTF_KEYUP, InputSignature.Inlay);
+                    break;
+            }
+        }
+
+        return this;
+    }
+
+    private void LineBreak()
+    {
+        Add(VirtualKey.VK_LSHIFT, 0x2A, 0, InputSignature.Inlay);
+        Key(VirtualKey.VK_RETURN);
+        Add(VirtualKey.VK_LSHIFT, 0x2A, User32.KEYEVENTF_KEYUP, InputSignature.Inlay);
+    }
+
+    /// <summary>The key that ended the word, as it was pressed: Shift+Enter stays a new line in chat apps, Shift+Tab goes back.</summary>
+    public InputBatch Boundary(Boundary boundary)
+    {
+        if (boundary.Kind == BoundaryKind.Char)
+            return Text([boundary.Char]);
+        if (boundary.Shift)
+            Add(VirtualKey.VK_LSHIFT, 0x2A, 0, InputSignature.Inlay);
+        Key((ushort)(boundary.Kind == BoundaryKind.Enter ? VirtualKey.VK_RETURN : VirtualKey.VK_TAB));
+        if (boundary.Shift)
+            Add(VirtualKey.VK_LSHIFT, 0x2A, User32.KEYEVENTF_KEYUP, InputSignature.Inlay);
+        return this;
+    }
+
+    /// <summary>Ctrl down, V down, V up. Ctrl stays down until <see cref="ReleaseCtrl"/>.</summary>
+    public InputBatch PressCtrlV()
+    {
+        var vScan = (ushort)User32.MapVirtualKeyExW(VirtualKey.VK_V, MAPVK_VK_TO_VSC, 0);
+        Add(VirtualKey.VK_LCONTROL, LeftCtrlScan, 0, InputSignature.Inlay);
+        Add(VirtualKey.VK_V, vScan, 0, InputSignature.Inlay);
+        Add(VirtualKey.VK_V, vScan, User32.KEYEVENTF_KEYUP, InputSignature.Inlay);
+        return this;
+    }
+
+    public InputBatch ReleaseCtrl()
+    {
+        Add(VirtualKey.VK_LCONTROL, LeftCtrlScan, User32.KEYEVENTF_KEYUP, InputSignature.Inlay);
+        return this;
+    }
+
+    private const ushort LeftCtrlScan = 0x1D;
+
+    /// <summary>Re-sends a key the user typed while an insertion was in flight.</summary>
+    public InputBatch Replay(in KBDLLHOOKSTRUCT k, bool keyUp)
+    {
+        var flags = ((k.flags & User32.LLKHF_EXTENDED) != 0 ? User32.KEYEVENTF_EXTENDEDKEY : 0) | (keyUp ? User32.KEYEVENTF_KEYUP : 0);
+        Add((ushort)k.vkCode, (ushort)k.scanCode, flags, InputSignature.Replay);
+        return this;
+    }
+
+    public InputBatch Clear()
+    {
+        _inputs.Clear();
+        return this;
+    }
+
+    private void Add(ushort vk, ushort scan, uint flags, nuint signature) =>
+        _inputs.Add(new INPUT
+        {
+            type = User32.INPUT_KEYBOARD,
+            u = new INPUTUNION { ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags, dwExtraInfo = signature } },
+        });
+
+    public unsafe uint Send()
+    {
+        if (_inputs.Count == 0)
+            return 0;
+        fixed (INPUT* p = Inputs)
+            return User32.SendInput((uint)_inputs.Count, p, sizeof(INPUT));
+    }
+}

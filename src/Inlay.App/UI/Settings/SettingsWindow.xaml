@@ -1,0 +1,102 @@
+<Window
+    x:Class="Inlay.App.UI.Settings.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Inlay Settings">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TitleBar
+            x:Name="AppTitleBar"
+            Height="{StaticResource SettingsTitleBarHeight}"
+            Title="Inlay"
+            IsBackButtonVisible="False"
+            IsPaneToggleButtonVisible="False"
+            PaneToggleRequested="OnPaneToggleRequested">
+            <TitleBar.IconSource>
+                <ImageIconSource ImageSource="ms-appx:///Assets/AppIcon16.png" />
+            </TitleBar.IconSource>
+        </TitleBar>
+
+        <NavigationView
+            x:Name="Nav"
+            Grid.Row="1"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="False"
+            IsSettingsVisible="False"
+            OpenPaneLength="{StaticResource SettingsPaneLength}"
+            PaneDisplayMode="Auto"
+            DisplayModeChanged="OnDisplayModeChanged"
+            SelectionChanged="OnSelectionChanged">
+            <NavigationView.Resources>
+                <!-- Seamless, as in Windows Settings: the Mica shows through behind the content. -->
+                <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+                <Thickness x:Key="NavigationViewContentGridBorderThickness">0</Thickness>
+                <!-- Windows Settings' navigation icons are 20 px. -->
+                <x:Double x:Key="NavigationViewItemOnLeftIconBoxHeight">20</x:Double>
+            </NavigationView.Resources>
+
+            <NavigationView.PaneHeader>
+                <Grid x:Name="PaneHeader" Padding="{StaticResource SettingsPaneHeaderPadding}" ColumnSpacing="{StaticResource SettingsToolbarSpacing}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Image Width="{StaticResource SettingsPaneIconSize}" Height="{StaticResource SettingsPaneIconSize}" Source="ms-appx:///Assets/AppIcon48.png" AutomationProperties.AccessibilityView="Raw" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource BodyStrongTextBlockStyle}" Text="Inlay" />
+                        <TextBlock
+                            x:Name="StatusText"
+                            AutomationProperties.AutomationId="Status"
+                            Style="{StaticResource CaptionTextBlockStyle}"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Grid>
+            </NavigationView.PaneHeader>
+
+            <!-- General, then Quick Insert and its sources, then Shorthands. Nothing in the footer. -->
+            <NavigationView.MenuItems>
+                <NavigationViewItem x:Name="GeneralItem" Content="General" Tag="general">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="QuickInsertItem" Content="Quick Insert" Tag="quickinsert">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE765;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="SnippetsItem" Content="Snippets" Tag="snippets">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE70B;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="ImagesItem" Content="Images" Tag="images">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xEB9F;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="EmojiItem" Content="Emoji" Tag="emoji">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE76E;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="ShorthandsItem" Content="Shorthands" Tag="shorthands">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8AC;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <Frame x:Name="ContentFrame" />
+        </NavigationView>
+    </Grid>
+</Window>

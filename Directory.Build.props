@@ -2,7 +2,7 @@
   <!-- The version comes from the git tag (release.yml passes it); local builds are 0.0.0. -->
   <PropertyGroup>
     <Version>0.0.0</Version>
-    <Product>Comet</Product>
+    <Product>Inlay</Product>
     <Company>Alex Corazza</Company>
     <Copyright>© Alex Corazza</Copyright>
   </PropertyGroup>

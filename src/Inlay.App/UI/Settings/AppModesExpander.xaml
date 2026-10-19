@@ -1,0 +1,45 @@
+<UserControl
+    x:Class="Inlay.App.UI.Settings.AppModesExpander"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Inlay.App.UI.Settings"
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls">
+
+    <!-- As in Windows Settings › Apps › Startup: icon, name, path, and the app's setting on the right. -->
+    <toolkit:SettingsExpander
+        x:Name="Expander"
+        Description="Choose what Quick Insert shows in specific apps"
+        Header="Apps"
+        ItemsSource="{x:Bind Apps}">
+        <toolkit:SettingsExpander.HeaderIcon>
+            <FontIcon Glyph="&#xE71D;" />
+        </toolkit:SettingsExpander.HeaderIcon>
+        <Button x:Name="AddButton" Click="OnAdd" Content="Add app" />
+        <toolkit:SettingsExpander.ItemTemplate>
+            <DataTemplate x:DataType="local:AppModeItem">
+                <toolkit:SettingsCard Description="{x:Bind App.Location, Mode=OneWay}" Header="{x:Bind App.DisplayName, Mode=OneWay}">
+                    <toolkit:SettingsCard.HeaderIcon>
+                        <ImageIcon Source="{x:Bind App.Icon, Mode=OneWay}" />
+                    </toolkit:SettingsCard.HeaderIcon>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <ComboBox
+                            MinWidth="160"
+                            AutomationProperties.Name="{x:Bind ModeName, Mode=OneWay}"
+                            SelectedIndex="{x:Bind ModeIndex, Mode=TwoWay}">
+                            <x:String>Show everything</x:String>
+                            <x:String>Hide emoji</x:String>
+                            <x:String>Off</x:String>
+                        </ComboBox>
+                        <Button
+                            AutomationProperties.Name="{x:Bind App.RemoveName, Mode=OneWay}"
+                            Click="{x:Bind Remove}"
+                            Style="{StaticResource SubtleButtonStyle}"
+                            ToolTipService.ToolTip="Remove">
+                            <FontIcon Glyph="&#xE74D;" />
+                        </Button>
+                    </StackPanel>
+                </toolkit:SettingsCard>
+            </DataTemplate>
+        </toolkit:SettingsExpander.ItemTemplate>
+    </toolkit:SettingsExpander>
+</UserControl>
