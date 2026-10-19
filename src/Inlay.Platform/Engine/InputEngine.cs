@@ -425,6 +425,8 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         _showingRecents = false;
         _resultCount = FilterForApp(_data.Search.Search(_picker.Token, _results));
         _hasCreateRow = OffersCreate();
+        if (_hasCreateRow && _resultCount == PopupFrame.MaxResults)
+            _resultCount--; // the frame holds MaxResults rows in all, "Create snippet" included
         _selected = 0;
         _pick = 0;
         Publish();
@@ -902,7 +904,11 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         if (User32.GetForegroundWindow() != _context.Foreground)
             ResetForNewFocus();
         if (!_context.IsSafe || _context.Elevated)
+        {
+            Log.Info($"snippet not inserted: the focused field isn't safe (password {_context.Password}, elevated {_context.Elevated})");
             return;
+        }
+
         _picker.NotifyInserted();
         _shorthands.NotifyInserted();
         StartInjection(new InsertionJob(0, null, template, null, MethodFor(_context.ProcessName), Stopwatch.GetTimestamp(), _context.PacedEditor));

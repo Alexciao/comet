@@ -110,7 +110,7 @@ public sealed partial class SettingsWindow : Window
         if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter)
             presenter.Restore();
         Activate();
-        User32.SetForegroundWindow(_hwnd);
+        User32.ForceForeground(_hwnd);
     }
 
     /// <summary>
@@ -197,7 +197,7 @@ public sealed partial class SettingsWindow : Window
         AppWindow.Title = WindowTitle;
         Dwm.SetInt(_hwnd, Dwm.DWMWA_CLOAK, 0);
         _shown = true;
-        User32.SetForegroundWindow(_hwnd);
+        User32.ForceForeground(_hwnd);
         Log.Info($"settings shown in {Stopwatch.GetElapsedTime(_openedAt).TotalMilliseconds:F0} ms");
     }
 

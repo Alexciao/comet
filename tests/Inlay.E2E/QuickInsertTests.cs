@@ -222,7 +222,7 @@ public sealed class QuickInsertTests(QuickInsertTargets targets) : IClassFixture
         Keyboard.Press(Keyboard.VK_RETURN);
 
         // Settings opens with the New snippet dialog; its text box has the focus.
-        var settings = Wait.For(() => Native.WindowsOf(_inlay.ProcessId).FirstOrDefault(h => Native.WindowText(h) == "Inlay" && Native.IsWindowVisible(h) && Native.GetForegroundWindow() == h), h => h != 0, TimeSpan.FromSeconds(10), "Settings in front");
+        var settings = Wait.For(() => Native.WindowsOf(_inlay.ProcessId).FirstOrDefault(h => Native.WindowText(h) == "Inlay Settings" && Native.GetForegroundWindow() == h), h => h != 0, TimeSpan.FromSeconds(10), "Settings in front");
         Thread.Sleep(500); // the dialog's open animation
         Keyboard.Target = settings;
         var guard = Keyboard.TargetGuard;
@@ -239,7 +239,8 @@ public sealed class QuickInsertTests(QuickInsertTargets targets) : IClassFixture
         }
 
         Assert.Equal("Best, Kind regards", Expect(notepad, "Best, Kind regards"));
-        Assert.Contains("zqxsig", File.ReadAllText(Path.Combine(_inlay.DataDirectory, "snippets.json")), StringComparison.Ordinal);
+        var snippets = Path.Combine(_inlay.DataDirectory, "snippets.json");
+        Wait.Until(() => File.Exists(snippets) && File.ReadAllText(snippets).Contains("zqxsig", StringComparison.Ordinal), s_settle, "the snippet saved"); // written ~300 ms later
     }
 
     [Fact]
@@ -260,7 +261,7 @@ public sealed class QuickInsertTests(QuickInsertTargets targets) : IClassFixture
 
         Keyboard.Type(";degre");
         _inlay!.WaitForPopup();
-        var texts = Automation.Instance.FromHandle(_inlay.VisiblePopup()).FindAllDescendants().Select(e => e.Name).ToList();
+        var texts = Automation.Instance.FromHandle(_inlay.VisiblePopup()).FindAllDescendants().Select(e => e.Properties.Name.ValueOrDefault ?? "").ToList();
         Assert.Contains(texts, t => t.StartsWith(";degree", StringComparison.Ordinal));
         Assert.DoesNotContain(texts, t => t.StartsWith(":degree", StringComparison.Ordinal));
 

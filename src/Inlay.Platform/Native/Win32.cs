@@ -338,6 +338,39 @@ internal static partial class User32
     public static partial uint GetWindowThreadProcessId(nint hWnd, out uint lpdwProcessId);
 
     [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool AttachThreadInput(uint idAttach, uint idAttachTo, [MarshalAs(UnmanagedType.Bool)] bool fAttach);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool BringWindowToTop(nint hWnd);
+
+    /// <summary>
+    /// Brings <paramref name="hwnd"/> (one of ours) to the front even when another app has the foreground: Windows'
+    /// foreground lock otherwise only flashes it in the taskbar. Used in answer to the user's own action (Quick
+    /// Insert's "Create snippet"), by sharing the foreground thread's input state for the moment of the switch.
+    /// </summary>
+    public static void ForceForeground(nint hwnd)
+    {
+        var foreground = GetForegroundWindow();
+        if (foreground == hwnd)
+            return;
+        var theirs = foreground == 0 ? 0 : GetWindowThreadProcessId(foreground, out _);
+        var ours = Kernel32.GetCurrentThreadId();
+        var attached = theirs != 0 && theirs != ours && AttachThreadInput(ours, theirs, true);
+        try
+        {
+            BringWindowToTop(hwnd);
+            SetForegroundWindow(hwnd);
+        }
+        finally
+        {
+            if (attached)
+                AttachThreadInput(ours, theirs, false);
+        }
+    }
+
+    [LibraryImport("user32.dll")]
     public static partial nint GetKeyboardLayout(uint idThread);
 
     [LibraryImport("user32.dll")]

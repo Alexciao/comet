@@ -362,9 +362,10 @@ internal sealed class AppHost : IDisposable
         if (_settingsWindow is not { } settings)
             return;
         var snippet = await settings.CreateSnippetAsync(name).ConfigureAwait(true);
+        Log.Info($"create snippet: {(snippet is null ? "cancelled" : "saved")}, returning focus");
         if (window == 0 || !User32.IsWindow(window))
             return;
-        User32.SetForegroundWindow(window); // allowed: Settings is in the foreground
+        User32.ForceForeground(window);
         if (snippet is null)
             return;
         // Insert once the window really has focus again (focus moves asynchronously); give up after a second.
@@ -376,9 +377,22 @@ internal sealed class AppHost : IDisposable
             return;
         }
 
+        // Saved with Ctrl+Enter: Ctrl may still be down, and typing with it held would send shortcuts instead.
+        for (var waited = 0; ModifiersDown() && waited < 1000; waited += 20)
+            await Task.Delay(20).ConfigureAwait(true);
+        // The window is in front, but it puts keyboard focus back into its text field a moment later (Notepad's editor
+        // measured: ~100 ms); keys sent before that are lost.
+        await Task.Delay(FocusSettleMs).ConfigureAwait(true);
+
         _settings.RecordPick(Inlay.Core.Settings.Frecency.SnippetKey(snippet.Id));
         _engine.InsertSnippet(snippet.Text);
     }
+
+    private const int FocusSettleMs = 200;
+
+    private static bool ModifiersDown() =>
+        (User32.GetAsyncKeyState(0x11) & 0x8000) != 0 || (User32.GetAsyncKeyState(0x12) & 0x8000) != 0 || (User32.GetAsyncKeyState(0x10) & 0x8000) != 0
+        || (User32.GetAsyncKeyState(0x5B) & 0x8000) != 0 || (User32.GetAsyncKeyState(0x5C) & 0x8000) != 0; // Ctrl, Alt, Shift, Win
 
     /// <summary>Opens Settings, creating the window if it isn't open (it is destroyed when closed).</summary>
     internal void OpenSettings()
