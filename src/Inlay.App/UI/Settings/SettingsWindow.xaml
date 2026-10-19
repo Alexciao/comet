@@ -79,6 +79,11 @@
                         <FontIcon Glyph="&#xE70B;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem x:Name="ImagesItem" Content="Images" Tag="images">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xEB9F;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem x:Name="EmojiItem" Content="Emoji" Tag="emoji">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE76E;" />
