@@ -2,9 +2,32 @@ using System.Text.Json;
 
 namespace Comet.Core.Settings;
 
-/// <summary>Import/export of the snippet and auto-replace lists (same JSON format as the data files).</summary>
+/// <summary>Import/export of the snippet and auto-replace lists (same JSON format as the data files) and of full backups.</summary>
 public static class ImportExport
 {
+    /// <summary>Settings, snippets and replacements in one file (Settings › General › Backup).</summary>
+    public static string ExportBackup(AppSettings settings, IEnumerable<SnippetDefinition> snippets, IEnumerable<AutoReplaceDefinition> entries) =>
+        JsonSerializer.Serialize(new BackupFile { Kind = BackupFile.BackupKind, Settings = settings, Snippets = [.. snippets], AutoReplace = [.. entries] }, CometJsonContext.Default.BackupFile);
+
+    /// <summary>
+    /// Reads a backup. Missing parts come back empty (or as defaults for the settings); values a hand edit broke
+    /// are clamped; entries without a name or abbreviation are dropped.
+    /// </summary>
+    /// <exception cref="FormatException">The file isn't a Comet backup.</exception>
+    public static BackupFile ImportBackup(string json)
+    {
+        var file = Parse(json, CometJsonContext.Default.BackupFile);
+        if (!string.Equals(file.Kind, BackupFile.BackupKind, StringComparison.Ordinal))
+            throw new FormatException("The file isn't a Comet backup.");
+        if (file.SchemaVersion > BackupFile.CurrentVersion)
+            throw new FormatException("The backup was made by a newer version of Comet.");
+        file.Settings = (file.Settings ?? new AppSettings()).Normalize();
+        file.Snippets = [.. (file.Snippets ?? []).Where(s => !string.IsNullOrWhiteSpace(s?.Name)).Select(s => new SnippetDefinition { Name = s.Name.Trim(), Text = s.Text ?? "" }).DistinctBy(s => s.Name, StringComparer.OrdinalIgnoreCase)];
+        file.AutoReplace = [.. (file.AutoReplace ?? []).Where(r => !string.IsNullOrWhiteSpace(r?.Abbreviation))
+            .Select(r => new AutoReplaceDefinition { Abbreviation = r.Abbreviation.Trim(), Replacement = r.Replacement ?? "", MatchCase = r.MatchCase, Enabled = r.Enabled }).DistinctBy(r => r.Abbreviation, StringComparer.OrdinalIgnoreCase)];
+        return file;
+    }
+
     public static string ExportSnippets(IEnumerable<SnippetDefinition> snippets) =>
         JsonSerializer.Serialize(new SnippetsFile { Snippets = [.. snippets] }, CometJsonContext.Default.SnippetsFile);
 

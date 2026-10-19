@@ -49,8 +49,14 @@ public sealed class JsonStore<T> where T : class, new()
 
     public string BackupPath => Path + ".bak";
 
-    /// <summary>Content hash of the last read or write, so the file watcher can ignore our own saves.</summary>
-    public string? LastContentHash { get; private set; }
+    private volatile string? _lastContentHash;
+    private readonly Lock _writeGate = new();
+
+    /// <summary>
+    /// Content hash of the last read or write, so the file watcher can ignore our own saves. Set before a write
+    /// starts, so a watcher event raised mid-write is never mistaken for a hand edit.
+    /// </summary>
+    public string? LastContentHash => _lastContentHash;
 
     public LoadResult<T> Load()
     {
@@ -70,7 +76,7 @@ public sealed class JsonStore<T> where T : class, new()
 
         if (TryParse(json, out var value, out var migrated))
         {
-            LastContentHash = Hash(json);
+            _lastContentHash = Hash(json);
             if (migrated)
                 Save(value);
             return new LoadResult<T>(value, migrated ? LoadStatus.Migrated : LoadStatus.Loaded, null);
@@ -146,10 +152,25 @@ public sealed class JsonStore<T> where T : class, new()
         }
     }
 
-    /// <summary>Writes atomically: a crash mid-save leaves either the old or the new file, never half of one.</summary>
-    public void Save(T value)
+    /// <summary>Serializes and writes atomically (see <see cref="Write"/>).</summary>
+    public void Save(T value) => Write(Serialize(value));
+
+    /// <summary>The file content for <paramref name="value"/>. Cheap; lets callers snapshot on one thread and write on another.</summary>
+    public string Serialize(T value) => JsonSerializer.Serialize(value, _typeInfo);
+
+    /// <summary>
+    /// Writes atomically: a crash mid-save leaves either the old or the new file, never half of one. Thread-safe;
+    /// concurrent writes are serialized.
+    /// </summary>
+    public void Write(string json)
     {
-        var json = JsonSerializer.Serialize(value, _typeInfo);
+        lock (_writeGate)
+            WriteCore(json);
+    }
+
+    private void WriteCore(string json)
+    {
+        _lastContentHash = Hash(json);
         var dir = System.IO.Path.GetDirectoryName(Path);
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
@@ -179,8 +200,6 @@ public sealed class JsonStore<T> where T : class, new()
         {
             File.Move(tmp, Path);
         }
-
-        LastContentHash = Hash(json);
     }
 
     /// <summary>True when the file on disk differs from what we last read or wrote (a hand edit).</summary>

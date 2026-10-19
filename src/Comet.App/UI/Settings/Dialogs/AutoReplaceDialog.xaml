@@ -1,0 +1,44 @@
+<ContentDialog
+    x:Class="Comet.App.UI.Settings.Dialogs.AutoReplaceDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary"
+    PrimaryButtonText="Save"
+    Style="{StaticResource DefaultContentDialogStyle}">
+
+    <ContentDialog.Resources>
+        <StaticResource x:Key="ContentDialogMaxWidth" ResourceKey="SettingsDialogWidth" />
+    </ContentDialog.Resources>
+
+    <StackPanel Width="{StaticResource SettingsDialogContentWidth}" Spacing="{StaticResource SettingsDialogFieldSpacing}">
+        <StackPanel>
+            <TextBox
+                x:Name="AbbreviationBox"
+                AutomationProperties.Name="Abbreviation"
+                Header="Abbreviation"
+                PlaceholderText="For example, btw"
+                TextChanged="OnChanged" />
+            <TextBlock x:Name="AbbreviationError" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+            <TextBlock x:Name="AbbreviationWarning" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+        </StackPanel>
+
+        <StackPanel>
+            <TextBox
+                x:Name="ReplacementBox"
+                AutomationProperties.Name="Replacement"
+                Header="Replacement"
+                PlaceholderText="For example, by the way"
+                TextChanged="OnChanged" />
+            <TextBlock x:Name="ReplacementError" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+            <TextBlock x:Name="ReplacementWarning" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+        </StackPanel>
+
+        <CheckBox x:Name="MatchCaseBox" Content="Match case exactly" />
+        <TextBlock
+            Style="{StaticResource CaptionTextBlockStyle}"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Text="Without it, the replacement follows how you typed the abbreviation: btw → by the way, Btw → By the way, BTW → BY THE WAY."
+            TextWrapping="Wrap" />
+    </StackPanel>
+</ContentDialog>

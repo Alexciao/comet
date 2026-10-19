@@ -2,6 +2,7 @@ using System.Text;
 using Comet.Core.Emoji;
 using Comet.Core.Search;
 using Comet.Core.Settings;
+using Comet.Core.Updates;
 
 namespace Comet.Core.Tests.Emoji;
 
@@ -189,24 +190,24 @@ public sealed class EmojiPackTests
     [Fact]
     public void The_first_check_waits_two_minutes_after_start()
     {
-        Assert.Equal(TimeSpan.FromMinutes(2), EmojiUpdatePolicy.NextCheckIn(s_now, lastChecked: null, sinceStart: TimeSpan.Zero));
-        Assert.Equal(TimeSpan.FromSeconds(90), EmojiUpdatePolicy.NextCheckIn(s_now, null, TimeSpan.FromSeconds(30)));
-        Assert.Equal(TimeSpan.Zero, EmojiUpdatePolicy.NextCheckIn(s_now, null, TimeSpan.FromHours(1)));
+        Assert.Equal(TimeSpan.FromMinutes(2), UpdateSchedule.NextCheckIn(s_now, lastChecked: null, sinceStart: TimeSpan.Zero));
+        Assert.Equal(TimeSpan.FromSeconds(90), UpdateSchedule.NextCheckIn(s_now, null, TimeSpan.FromSeconds(30)));
+        Assert.Equal(TimeSpan.Zero, UpdateSchedule.NextCheckIn(s_now, null, TimeSpan.FromHours(1)));
     }
 
     [Fact]
     public void Checks_happen_at_most_once_every_seven_days()
     {
         var hour = TimeSpan.FromHours(1);
-        Assert.Equal(TimeSpan.FromDays(7) - hour, EmojiUpdatePolicy.NextCheckIn(s_now, s_now - hour, TimeSpan.FromDays(1)));
-        Assert.Equal(TimeSpan.Zero, EmojiUpdatePolicy.NextCheckIn(s_now, s_now - TimeSpan.FromDays(8), TimeSpan.FromDays(1)));
+        Assert.Equal(TimeSpan.FromDays(7) - hour, UpdateSchedule.NextCheckIn(s_now, s_now - hour, TimeSpan.FromDays(1)));
+        Assert.Equal(TimeSpan.Zero, UpdateSchedule.NextCheckIn(s_now, s_now - TimeSpan.FromDays(8), TimeSpan.FromDays(1)));
         // Overdue at login: still not before the startup delay.
-        Assert.Equal(TimeSpan.FromMinutes(2), EmojiUpdatePolicy.NextCheckIn(s_now, s_now - TimeSpan.FromDays(30), TimeSpan.Zero));
+        Assert.Equal(TimeSpan.FromMinutes(2), UpdateSchedule.NextCheckIn(s_now, s_now - TimeSpan.FromDays(30), TimeSpan.Zero));
     }
 
     [Fact]
     public void A_last_check_in_the_future_does_not_postpone_beyond_one_interval()
     {
-        Assert.Equal(TimeSpan.FromDays(7), EmojiUpdatePolicy.NextCheckIn(s_now, s_now + TimeSpan.FromDays(365), TimeSpan.FromDays(1)));
+        Assert.Equal(TimeSpan.FromDays(7), UpdateSchedule.NextCheckIn(s_now, s_now + TimeSpan.FromDays(365), TimeSpan.FromDays(1)));
     }
 }

@@ -40,4 +40,40 @@ public sealed class ImportExportTests
     [Fact]
     public void Entries_without_names_are_skipped() =>
         Assert.Equal((0, 0), ImportExport.ImportSnippets("""{"snippets":[{"name":"  ","text":"x"}]}""", []));
+
+    [Fact]
+    public void Backup_round_trips_settings_snippets_and_replacements()
+    {
+        var settings = new AppSettings { SkinTone = 3, TriggerCharacter = ";", NotifyAppUpdates = false, PickerExcludedApps = ["code.exe"] };
+        var json = ImportExport.ExportBackup(settings, [new SnippetDefinition { Name = "sig", Text = "Regards" }], [new AutoReplaceDefinition { Abbreviation = "cmq", Replacement = "comunque", Enabled = false }]);
+
+        var backup = ImportExport.ImportBackup(json);
+
+        Assert.Equal(3, backup.Settings!.SkinTone);
+        Assert.Equal(";", backup.Settings.TriggerCharacter);
+        Assert.False(backup.Settings.NotifyAppUpdates);
+        Assert.Equal(["code.exe"], backup.Settings.PickerExcludedApps);
+        Assert.Equal("Regards", Assert.Single(backup.Snippets!).Text);
+        Assert.False(Assert.Single(backup.AutoReplace!).Enabled);
+    }
+
+    [Fact]
+    public void Backup_import_clamps_broken_values_and_drops_unnamed_or_duplicate_entries()
+    {
+        const string json = """
+            { "kind": "comet-backup", "settings": { "minimumCharacters": 40 },
+              "snippets": [ { "name": " sig ", "text": "a" }, { "name": "SIG", "text": "b" }, { "name": "", "text": "c" } ] }
+            """;
+        var backup = ImportExport.ImportBackup(json);
+        Assert.Equal(AppSettings.MaxMinimumCharacters, backup.Settings!.MinimumCharacters);
+        Assert.Equal("sig", Assert.Single(backup.Snippets!).Name);
+        Assert.Empty(backup.AutoReplace!);
+    }
+
+    [Theory]
+    [InlineData("""{"snippets":[]}""")] // a snippet export, not a backup
+    [InlineData("""{"kind":"comet-backup","schemaVersion":99}""")] // from a newer Comet
+    [InlineData("nope")]
+    public void Backup_import_rejects_other_files(string json) =>
+        Assert.Throws<FormatException>(() => ImportExport.ImportBackup(json));
 }

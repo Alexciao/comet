@@ -9,7 +9,16 @@ public enum Severity
     Error,
 }
 
-public readonly record struct ValidationMessage(Severity Severity, string Text);
+/// <summary>The dialog field a message belongs to (it is shown under that field).</summary>
+public enum ValidationField
+{
+    Name,
+    Text,
+    Abbreviation,
+    Replacement,
+}
+
+public readonly record struct ValidationMessage(Severity Severity, ValidationField Field, string Text);
 
 /// <summary>Live validation for the Add/Edit dialogs. Errors block saving; warnings only inform.</summary>
 public static class EntryValidation
@@ -21,20 +30,20 @@ public static class EntryValidation
         var messages = new List<ValidationMessage>();
         var trimmed = name.Trim();
         if (trimmed.Length == 0)
-            messages.Add(new(Severity.Error, "Give the snippet a name."));
+            messages.Add(new(Severity.Error, ValidationField.Name, "Give the snippet a name."));
         else if (trimmed.Any(char.IsWhiteSpace))
-            messages.Add(new(Severity.Error, "Names can't contain spaces. Use - or _ instead."));
+            messages.Add(new(Severity.Error, ValidationField.Name, "Names can't contain spaces. Use - or _ instead."));
         else if (trimmed.Any(c => !(char.IsLetterOrDigit(c) || c is '_' or '-' or '+')))
-            messages.Add(new(Severity.Error, "Names can only contain letters, digits, - and _."));
+            messages.Add(new(Severity.Error, ValidationField.Name, "Names can only contain letters, digits, - and _."));
         else if (otherNames.Any(n => string.Equals(n.Trim(), trimmed, StringComparison.OrdinalIgnoreCase)))
-            messages.Add(new(Severity.Error, $"There's already a snippet named “{trimmed}”."));
+            messages.Add(new(Severity.Error, ValidationField.Name, $"There's already a snippet named “{trimmed}”."));
         else if (isEmojiShortcode?.Invoke(trimmed) == true)
-            messages.Add(new(Severity.Warning, $"“:{trimmed}:” is also an emoji; the snippet will be picked instead."));
+            messages.Add(new(Severity.Warning, ValidationField.Name, $"“:{trimmed}:” is also an emoji; the snippet will be picked instead."));
 
         if (text.Length == 0)
-            messages.Add(new(Severity.Error, "The snippet has no text."));
+            messages.Add(new(Severity.Error, ValidationField.Text, "The snippet has no text."));
         foreach (var p in SnippetTemplate.Validate(text))
-            messages.Add(new(Severity.Warning, $"{p.Message} It will be inserted as typed."));
+            messages.Add(new(Severity.Warning, ValidationField.Text, $"{p.Message} It will be inserted as typed."));
         return messages;
     }
 
@@ -43,18 +52,18 @@ public static class EntryValidation
         var messages = new List<ValidationMessage>();
         var a = abbreviation.Trim();
         if (a.Length == 0)
-            messages.Add(new(Severity.Error, "Type the abbreviation."));
+            messages.Add(new(Severity.Error, ValidationField.Abbreviation, "Type the abbreviation."));
         else if (a.Any(char.IsWhiteSpace))
-            messages.Add(new(Severity.Error, "Abbreviations can't contain spaces."));
+            messages.Add(new(Severity.Error, ValidationField.Abbreviation, "Abbreviations can't contain spaces."));
         else if (a.Any(c => TextClass.IsClosingPunctuation(c) || TextClass.IsOpeningPunctuation(c)))
-            messages.Add(new(Severity.Error, "Abbreviations can't contain punctuation that ends or starts a word, such as . , ; : ! ? ( ) or quotes."));
+            messages.Add(new(Severity.Error, ValidationField.Abbreviation, "Abbreviations can't contain punctuation that ends or starts a word, such as . , ; : ! ? ( ) or quotes."));
         else if (otherAbbreviations.Any(o => string.Equals(o.Trim(), a, StringComparison.OrdinalIgnoreCase)))
-            messages.Add(new(Severity.Error, $"“{a}” is already in the list."));
+            messages.Add(new(Severity.Error, ValidationField.Abbreviation, $"“{a}” is already in the list."));
         else if (CommonWords.Contains(a))
-            messages.Add(new(Severity.Warning, $"“{a}” is a common word, so it will expand very often."));
+            messages.Add(new(Severity.Warning, ValidationField.Abbreviation, $"“{a}” is a common word, so it will expand very often."));
 
         if (replacement.Length == 0)
-            messages.Add(new(Severity.Error, "Type the replacement."));
+            messages.Add(new(Severity.Error, ValidationField.Replacement, "Type the replacement."));
         return messages;
     }
 

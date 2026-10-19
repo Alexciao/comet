@@ -1,0 +1,141 @@
+<local:SettingsPage
+    x:Class="Comet.App.UI.Settings.Pages.AutoReplacePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Comet.App.UI.Settings"
+    xmlns:toolkit="using:CommunityToolkit.WinUI.Controls"
+    NavigationCacheMode="Required">
+
+    <Page.Resources>
+        <DataTemplate x:Key="ReplacementTemplate" x:DataType="local:ReplacementItem">
+            <toolkit:SettingsCard
+                AutomationProperties.Name="{x:Bind Header}"
+                Click="OnCardClick"
+                Description="{x:Bind Description}"
+                Header="{x:Bind Header}"
+                IsActionIconVisible="False"
+                IsClickEnabled="True">
+                <toolkit:SettingsCard.HeaderIcon>
+                    <FontIcon Glyph="&#xE8AC;" />
+                </toolkit:SettingsCard.HeaderIcon>
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource SettingsToolbarSpacing}">
+                    <ToggleSwitch OffContent="Off" OnContent="On" AutomationProperties.Name="{x:Bind ToggleName}" IsOn="{x:Bind IsOn}" Toggled="OnEntryToggled" />
+                    <Button
+                        AutomationProperties.Name="{x:Bind MoreOptionsName}"
+                        Click="OnMoreClick"
+                        Style="{StaticResource SubtleButtonStyle}"
+                        ToolTipService.ToolTip="More options">
+                        <FontIcon Glyph="&#xE712;" />
+                    </Button>
+                </StackPanel>
+            </toolkit:SettingsCard>
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <TextBlock Style="{StaticResource SettingsPageTitleTextBlockStyle}" Text="Auto-replace" />
+
+        <ScrollViewer x:Name="Scroller" Grid.Row="1">
+            <Grid Padding="{StaticResource SettingsPagePadding}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MaxWidth="{StaticResource SettingsContentMaxWidth}" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <InfoBar x:Name="StatusBar" x:Load="False" IsOpen="False">
+                        <InfoBar.ActionButton>
+                            <Button x:Name="UndoButton" Click="OnUndo" Content="Undo" />
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+
+                    <toolkit:SettingsCard Header="Auto-replace" Description="Expand abbreviations as you type: finish the word and it becomes the replacement">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8AC;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <ToggleSwitch OffContent="Off" OnContent="On" x:Name="FeatureToggle" AutomationProperties.Name="Auto-replace" Toggled="OnFeatureToggled" />
+                    </toolkit:SettingsCard>
+
+                    <toolkit:SettingsCard x:Name="AddCard" Header="Add a replacement" Description="Backspace right after an expansion undoes it">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE710;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <Button Click="OnAdd" Content="Add replacement" Style="{StaticResource AccentButtonStyle}" />
+                    </toolkit:SettingsCard>
+
+                    <Grid Margin="{StaticResource SettingsListToolbarMargin}" ColumnSpacing="{StaticResource SettingsToolbarSpacing}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MaxWidth="{StaticResource SettingsSearchBoxWidth}" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <AutoSuggestBox
+                            x:Name="SearchBox"
+
+                            AutomationProperties.Name="Search replacements"
+                            PlaceholderText="Search replacements"
+                            QueryIcon="Find"
+                            TextChanged="OnSearchChanged" />
+                        <TextBlock
+                            x:Name="CountText"
+                            Grid.Column="2"
+                            VerticalAlignment="Center"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <Button
+                            Grid.Column="3"
+                            AutomationProperties.Name="More options"
+                            Style="{StaticResource SubtleButtonStyle}"
+                            ToolTipService.ToolTip="More options">
+                            <FontIcon Glyph="&#xE712;" />
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                    <MenuFlyoutItem Click="OnImport" Text="Import…">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xE8B5;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                    <MenuFlyoutItem x:Name="ExportAllItem" Click="OnExportAll" Text="Export all…">
+                                        <MenuFlyoutItem.Icon>
+                                            <FontIcon Glyph="&#xEDE1;" />
+                                        </MenuFlyoutItem.Icon>
+                                    </MenuFlyoutItem>
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+                    </Grid>
+
+                    <ItemsRepeater x:Name="List" VerticalCacheLength="{StaticResource SettingsListCacheLength}" ItemTemplate="{StaticResource ReplacementTemplate}" ItemsSource="{x:Bind Items}">
+                        <ItemsRepeater.Layout>
+                            <StackLayout Spacing="{StaticResource SettingsCardSpacing}" />
+                        </ItemsRepeater.Layout>
+                    </ItemsRepeater>
+
+                    <TextBlock
+                        x:Name="NoMatches"
+                        x:Load="False"
+                        Padding="{StaticResource SettingsEmptyStatePadding}"
+                        HorizontalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="No replacements match your search." />
+
+                    <StackPanel
+                        x:Name="EmptyState"
+                        x:Load="False"
+                        Padding="{StaticResource SettingsEmptyStatePadding}"
+                        HorizontalAlignment="Center"
+                        Spacing="{StaticResource SettingsToolbarSpacing}">
+                        <TextBlock HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="You haven't added any replacements yet." />
+                        <Button HorizontalAlignment="Center" Click="OnAdd" Content="Add your first replacement" Style="{StaticResource AccentButtonStyle}" />
+                    </StackPanel>
+
+                    <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Apps" />
+                    <local:ExcludedAppsExpander x:Name="ExcludedApps" Description="Abbreviations aren't expanded in these apps" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</local:SettingsPage>

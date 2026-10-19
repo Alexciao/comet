@@ -83,6 +83,13 @@ internal static unsafe class ProcessInfo
     /// <summary>Executable file name in lowercase ("notepad.exe"), or "" when it can't be read.</summary>
     public static string Name(uint pid)
     {
+        var path = ImagePath(pid);
+        return path[(path.LastIndexOf('\\') + 1)..].ToLowerInvariant();
+    }
+
+    /// <summary>Full path of the process's executable, or "" when it can't be read.</summary>
+    public static string ImagePath(uint pid)
+    {
         var handle = Kernel32.OpenProcess(Kernel32.PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
         if (handle == 0)
             return "";
@@ -90,11 +97,7 @@ internal static unsafe class ProcessInfo
         {
             char* buffer = stackalloc char[1024];
             uint size = 1024;
-            if (!Kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ref size))
-                return "";
-            var path = new ReadOnlySpan<char>(buffer, (int)size);
-            var slash = path.LastIndexOf('\\');
-            return path[(slash + 1)..].ToString().ToLowerInvariant();
+            return Kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ref size) ? new string(buffer, 0, (int)size) : "";
         }
         finally
         {

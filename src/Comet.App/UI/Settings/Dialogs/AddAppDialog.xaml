@@ -1,0 +1,69 @@
+<ContentDialog
+    x:Class="Comet.App.UI.Settings.Dialogs.AddAppDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Comet.App.UI.Settings"
+    Title="Add an app"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary"
+    IsPrimaryButtonEnabled="False"
+    PrimaryButtonText="Add"
+    Style="{StaticResource DefaultContentDialogStyle}">
+
+    <ContentDialog.Resources>
+        <StaticResource x:Key="ContentDialogMaxWidth" ResourceKey="SettingsDialogWidth" />
+    </ContentDialog.Resources>
+
+    <StackPanel Width="{StaticResource SettingsDialogContentWidth}" Spacing="{StaticResource SettingsToolbarSpacing}">
+        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Choose an app that's open, or browse for its program file." TextWrapping="Wrap" />
+        <Grid ColumnSpacing="{StaticResource SettingsToolbarSpacing}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <AutoSuggestBox
+                x:Name="SearchBox"
+                AutomationProperties.Name="Search apps"
+                PlaceholderText="Search apps"
+                QueryIcon="Find"
+                TextChanged="OnSearchChanged" />
+            <Button Grid.Column="1" Click="OnBrowse" Content="Browse…" />
+        </Grid>
+        <Grid Height="{StaticResource SettingsAppListHeight}">
+            <ListView
+                x:Name="AppList"
+                AutomationProperties.Name="Open apps"
+                DoubleTapped="OnDoubleTapped"
+                ItemsSource="{x:Bind Shown}"
+                SelectionChanged="OnSelectionChanged"
+                SelectionMode="Single">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="local:AppItem">
+                        <Grid ColumnSpacing="{StaticResource SettingsToolbarSpacing}" Padding="{StaticResource SettingsAppRowPadding}" AutomationProperties.Name="{x:Bind DisplayName}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Viewbox Width="{StaticResource SettingsAppIconSize}" Height="{StaticResource SettingsAppIconSize}" VerticalAlignment="Center">
+                                <ImageIcon Source="{x:Bind Icon, Mode=OneWay}" />
+                            </Viewbox>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind DisplayName}" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Location}" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+            <ProgressRing x:Name="LoadingRing" IsActive="True" />
+            <TextBlock
+                x:Name="Empty"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="No open apps match. Use Browse… to pick a program file."
+                TextWrapping="Wrap"
+                Visibility="Collapsed" />
+        </Grid>
+    </StackPanel>
+</ContentDialog>

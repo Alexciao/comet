@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using Comet.Core.Emoji;
 using Comet.Core.Settings;
 using Windows.Networking.Connectivity;
@@ -35,12 +34,6 @@ public sealed class EmojiUpdater
     public const string PackFileName = "emoji-data.bin";
     public const string ManifestFileName = "manifest.json";
 
-    /// <summary>
-    /// Where packs are published: the fixed <c>emoji-data</c> release of the repository (see BLOCKERS.md).
-    /// <c>COMET_EMOJI_UPDATE_URL</c> overrides it (tests serve packs from a local HTTP server).
-    /// </summary>
-    public const string DefaultEndpoint = "https://github.com/Alexciao/comet/releases/download/emoji-data/";
-
     private readonly HttpClient _http;
     private readonly Uri _base;
     private readonly string _directory;
@@ -54,8 +47,12 @@ public sealed class EmojiUpdater
         _appVersion = appVersion;
     }
 
+    /// <summary>
+    /// Where packs are published: the fixed <c>emoji-data</c> pre-release of the repository.
+    /// <c>COMET_EMOJI_UPDATE_URL</c> overrides it (tests serve packs from a local HTTP server).
+    /// </summary>
     public static Uri Endpoint =>
-        new(Environment.GetEnvironmentVariable("COMET_EMOJI_UPDATE_URL") is { Length: > 0 } url ? url : DefaultEndpoint);
+        Environment.GetEnvironmentVariable("COMET_EMOJI_UPDATE_URL") is { Length: > 0 } url ? new(url) : AppPaths.EmojiDataEndpoint;
 
     public string PackPath => Path.Combine(_directory, PackFileName);
 
@@ -70,17 +67,14 @@ public sealed class EmojiUpdater
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(_base, ManifestFileName));
-            if (state.ETag is { Length: > 0 } etag && EntityTagHeaderValue.TryParse(etag, out var tag))
-                request.Headers.IfNoneMatch.Add(tag);
-            using var response = await _http.SendAsync(request, cancel).ConfigureAwait(false);
+            var (status, body, newTag) = await UpdateHttp.GetAsync(_http, new Uri(_base, ManifestFileName), state.ETag, cancel).ConfigureAwait(false);
             state.LastChecked = DateTimeOffset.UtcNow;
-            if (response.StatusCode == HttpStatusCode.NotModified)
+            if (status == HttpStatusCode.NotModified)
                 return new UpdateResult(UpdateOutcome.NotModified, "not modified");
-            if (!response.IsSuccessStatusCode)
-                return new UpdateResult(UpdateOutcome.Failed, $"manifest: HTTP {(int)response.StatusCode}");
+            if (body is null)
+                return new UpdateResult(UpdateOutcome.Failed, $"manifest: HTTP {(int)status}");
 
-            var manifest = EmojiPackManifest.Parse(await response.Content.ReadAsByteArrayAsync(cancel).ConfigureAwait(false));
+            var manifest = EmojiPackManifest.Parse(body);
             if (manifest is null)
                 return new UpdateResult(UpdateOutcome.Failed, "manifest unreadable");
 
@@ -88,7 +82,7 @@ public sealed class EmojiUpdater
             if (verdict != PackVerdict.Accept)
             {
                 // Remember the ETag only once nothing more can come of this manifest for this app.
-                state.ETag = response.Headers.ETag?.ToString();
+                state.ETag = newTag;
                 return new UpdateResult(UpdateOutcome.UpToDate, $"manifest {manifest.DataVersion}: {verdict}");
             }
 
@@ -99,7 +93,7 @@ public sealed class EmojiUpdater
 
             WriteAtomically(pack);
             var data = EmojiData.FromBytes(pack);
-            state.ETag = response.Headers.ETag?.ToString();
+            state.ETag = newTag;
             return new UpdateResult(UpdateOutcome.Updated, $"pack {manifest.DataVersion}: {data.Count} emoji", data);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or UnauthorizedAccessException or InvalidDataException)

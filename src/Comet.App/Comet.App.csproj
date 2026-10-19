@@ -34,10 +34,12 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" />
     <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Assets\Tray*.ico" LogicalName="%(Filename)%(Extension)" />
     <Content Include="Assets\Comet.ico" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Comet.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\AppIcon*.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

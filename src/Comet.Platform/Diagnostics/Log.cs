@@ -76,19 +76,3 @@ internal static class Log
     }
 }
 
-/// <summary>Where Comet keeps its files.</summary>
-internal static class AppPaths
-{
-    private static string? s_dataDirectory;
-
-    /// <summary><c>%LocalAppData%\Comet</c>, or <c>COMET_DATA_DIR</c> when set (tests run against a scratch folder).</summary>
-    public static string DataDirectory => s_dataDirectory ??= IsScratch
-        ? Environment.GetEnvironmentVariable("COMET_DATA_DIR")!
-        : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Comet");
-
-    /// <summary>Running against a scratch data folder (tests, measurements): leave per-user machine state alone.</summary>
-    public static bool IsScratch => Environment.GetEnvironmentVariable("COMET_DATA_DIR") is { Length: > 0 };
-
-    public static string Version { get; } =
-        typeof(AppPaths).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
-}

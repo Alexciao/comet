@@ -4,8 +4,9 @@ using Microsoft.Win32;
 namespace Comet.App.UI;
 
 /// <summary>
-/// The notification-area icon: left-click opens Settings; the right-click menu has Settings, Pause/Resume and
-/// Quit. The glyph follows the taskbar theme, and the icon is re-added when Explorer restarts.
+/// The notification-area icon: left-click opens Settings; the right-click menu has Settings, Pause/Resume, the
+/// update notice when a newer Comet exists, and Quit. The glyph follows the taskbar theme and is dimmed while
+/// paused; the tooltip says the status ("Comet — Paused"). The icon is re-added when Explorer restarts.
 /// </summary>
 internal sealed unsafe class TrayIcon : IDisposable
 {
@@ -15,11 +16,13 @@ internal sealed unsafe class TrayIcon : IDisposable
     private const int CmdSettings = 1;
     private const int CmdPause = 2;
     private const int CmdQuit = 3;
+    private const int CmdUpdate = 4;
 
     private readonly nint _hwnd;
     private nint _icon;
     private bool _added;
     private bool _paused;
+    private string _status = "Active";
 
     public TrayIcon(nint messageWindow)
     {
@@ -39,6 +42,8 @@ internal sealed unsafe class TrayIcon : IDisposable
 
     public event Action? Quit;
 
+    public event Action? OpenUpdatePage;
+
     public bool Paused
     {
         get => _paused;
@@ -48,6 +53,22 @@ internal sealed unsafe class TrayIcon : IDisposable
             Update();
         }
     }
+
+    /// <summary>"Active", "Paused" or "All features off", shown in the tooltip.</summary>
+    public string Status
+    {
+        get => _status;
+        set
+        {
+            if (_status == value)
+                return;
+            _status = value;
+            Update();
+        }
+    }
+
+    /// <summary>A newer version ("1.3.0") to offer in the menu, or null.</summary>
+    public string? UpdateVersion { get; set; }
 
     public void Show()
     {
@@ -114,6 +135,8 @@ internal sealed unsafe class TrayIcon : IDisposable
         {
             User32.AppendMenuW(menu, User32.MF_STRING, CmdSettings, "Settings");
             User32.AppendMenuW(menu, User32.MF_STRING, CmdPause, _paused ? "Resume" : "Pause");
+            if (UpdateVersion is { } version)
+                User32.AppendMenuW(menu, User32.MF_STRING, CmdUpdate, $"Update available ({version})");
             User32.AppendMenuW(menu, User32.MF_SEPARATOR, 0, null);
             User32.AppendMenuW(menu, User32.MF_STRING, CmdQuit, "Quit");
             // The owner must be foreground or the menu won't close when clicking elsewhere.
@@ -130,6 +153,9 @@ internal sealed unsafe class TrayIcon : IDisposable
                     break;
                 case CmdQuit:
                     Quit?.Invoke();
+                    break;
+                case CmdUpdate:
+                    OpenUpdatePage?.Invoke();
                     break;
             }
         }
@@ -150,21 +176,30 @@ internal sealed unsafe class TrayIcon : IDisposable
             uCallbackMessage = WmTray,
             hIcon = _icon,
         };
-        var tip = _paused ? "Comet (paused)" : "Comet";
+        var tip = $"Comet — {_status}";
         tip.AsSpan().CopyTo(new Span<char>(data.szTip, 127));
         return data;
     }
 
     private void LoadIcon()
     {
-        var size = User32.GetSystemMetricsForDpi(SM_CXSMICON, User32.GetDpiForSystem());
-        var name = TaskbarIsLight() ? "TrayLight.ico" : "TrayDark.ico";
+        // The size for the taskbar's DPI (the primary monitor's): Shell_NotifyIcon wants an icon drawn for it,
+        // not one Windows scales, or the glyph turns blurry at 125% and 150%.
+        var size = User32.GetSystemMetricsForDpi(SM_CXSMICON, TaskbarDpi());
+        var name = (TaskbarIsLight() ? "TrayLight" : "TrayDark") + (_paused ? "Paused.ico" : ".ico");
         var icon = IconFromResource(name, size);
         if (icon == 0)
             return;
         if (_icon != 0)
             User32.DestroyIcon(_icon);
         _icon = icon;
+    }
+
+    private static uint TaskbarDpi()
+    {
+        var taskbar = User32.FindWindowW("Shell_TrayWnd", null);
+        var dpi = taskbar == 0 ? 0 : User32.GetDpiForWindow(taskbar);
+        return dpi != 0 ? dpi : User32.GetDpiForSystem();
     }
 
     private static bool TaskbarIsLight()

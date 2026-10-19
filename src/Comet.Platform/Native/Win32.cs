@@ -562,6 +562,11 @@ internal static partial class Kernel32
     [LibraryImport("kernel32.dll")]
     public static partial nint GetCurrentProcess();
 
+    /// <summary>With both sizes -1: removes as many pages as possible from the working set (they stay in RAM, on standby).</summary>
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool SetProcessWorkingSetSize(nint hProcess, nint dwMinimumWorkingSetSize, nint dwMaximumWorkingSetSize);
+
     [LibraryImport("kernel32.dll")]
     public static partial uint GetTickCount();
 

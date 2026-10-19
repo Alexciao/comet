@@ -16,20 +16,14 @@ namespace Comet.App.Services;
 /// </summary>
 internal sealed class EmojiUpdateService : IDisposable
 {
-    /// <summary>A skipped check (metered or offline) is retried after this, without counting as a check.</summary>
-    private static readonly TimeSpan s_retryAfterSkip = TimeSpan.FromHours(6);
-
-    private static readonly HttpClient s_http = CreateClient();
-
     private readonly DispatcherQueue _dispatcher;
-    private readonly DispatcherQueueTimer _timer;
+    private readonly WeeklyCheck _check;
     private readonly JsonStore<EmojiUpdateState> _store;
     private readonly EmojiUpdater _updater;
     private readonly EngineDataFactory _factory;
     private readonly Func<AppSettings> _settings;
     private readonly Func<bool> _paused;
     private readonly Action _dataReplaced;
-    private readonly long _startedAt = Environment.TickCount64;
     private readonly Lock _fontGate = new();
     private EmojiUpdateState _state;
     private bool _running;
@@ -46,39 +40,18 @@ internal sealed class EmojiUpdateService : IDisposable
         var dir = AppPaths.DataDirectory;
         _store = new JsonStore<EmojiUpdateState>(Path.Combine(dir, "emoji-update.json"), CometJsonContext.Default.EmojiUpdateState, EmojiUpdateState.CurrentVersion);
         _state = _store.Load().Value;
-        _updater = new EmojiUpdater(s_http, EmojiUpdater.Endpoint, dir, new Version(AppPaths.Version));
+        _updater = new EmojiUpdater(UpdateHttp.Client, EmojiUpdater.Endpoint, dir, new Version(AppPaths.Version));
 
         factory.LoadEmoji = () => EmojiUpdater.LoadStartupData(dir);
         factory.Visibility = FontVisibility;
 
-        _timer = dispatcher.CreateTimer();
-        _timer.IsRepeating = false;
-        _timer.Tick += (_, _) => _ = CheckAsync();
+        _check = new WeeklyCheck(dispatcher, () => EmojiUpdatePolicy.Enabled(_settings(), _paused()), () => _state.LastChecked, CheckAsync, "COMET_EMOJI_UPDATE_NOW");
     }
 
     public DateTimeOffset? LastChecked => _state.LastChecked;
 
-    private static HttpClient CreateClient()
-    {
-        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd($"Comet/{AppPaths.Version}");
-        return client;
-    }
-
     /// <summary>Arms the timer for the next due check, or disarms it when updates are off.</summary>
-    public void Schedule() => Schedule(null);
-
-    private void Schedule(TimeSpan? after)
-    {
-        _timer.Stop();
-        if (!EmojiUpdatePolicy.Enabled(_settings(), _paused()))
-            return;
-        var delay = after ?? EmojiUpdatePolicy.NextCheckIn(DateTimeOffset.UtcNow, _state.LastChecked, TimeSpan.FromMilliseconds(Environment.TickCount64 - _startedAt));
-        if (Environment.GetEnvironmentVariable("COMET_EMOJI_UPDATE_NOW") == "1" && _state.LastChecked is null)
-            delay = TimeSpan.FromMilliseconds(500); // tests: check right away
-        _timer.Interval = delay;
-        _timer.Start();
-    }
+    public void Schedule() => _check.Schedule();
 
     private async Task CheckAsync()
     {
@@ -93,7 +66,7 @@ internal sealed class EmojiUpdateService : IDisposable
             var result = await Task.Run(() => _updater.CheckAsync(_state, version, count, EmojiUpdater.NetworkUsable)).ConfigureAwait(true);
             Log.Info($"emoji update check: {result.Outcome}, {result.Detail} ({Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0} ms)");
             if (result.Outcome == UpdateOutcome.Skipped)
-                retry = s_retryAfterSkip;
+                retry = WeeklyCheck.RetryAfterSkip;
             else
                 Save();
 
@@ -107,7 +80,7 @@ internal sealed class EmojiUpdateService : IDisposable
         finally
         {
             _running = false;
-            Schedule(retry);
+            _check.Schedule(retry);
         }
     }
 
@@ -160,5 +133,5 @@ internal sealed class EmojiUpdateService : IDisposable
         return null;
     }
 
-    public void Dispose() => _timer.Stop();
+    public void Dispose() => _check.Dispose();
 }

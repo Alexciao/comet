@@ -6,6 +6,8 @@ using System.Drawing.Imaging;
 //   Comet.ico      app icon, full color, 16–256 px
 //   TrayLight.ico  dark glyph for light taskbars
 //   TrayDark.ico   light glyph for dark taskbars
+//   Tray*Paused.ico the same glyphs dimmed, shown while Comet is paused
+//   AppIcon16/48.scale-*.png  title bar and Settings pane icons, one file per display scale
 // Every size is drawn from vectors (no downscaling) so 16 px stays crisp.
 
 var root = AppContext.BaseDirectory;
@@ -17,6 +19,17 @@ Directory.CreateDirectory(assets);
 WriteIcon(Path.Combine(assets, "Comet.ico"), [16, 20, 24, 32, 40, 48, 64, 96, 128, 256], DrawColor);
 WriteIcon(Path.Combine(assets, "TrayLight.ico"), [16, 20, 24, 32, 40, 48, 64], s => DrawGlyph(s, Color.FromArgb(0x1A, 0x1A, 0x1A)));
 WriteIcon(Path.Combine(assets, "TrayDark.ico"), [16, 20, 24, 32, 40, 48, 64], s => DrawGlyph(s, Color.White));
+WriteIcon(Path.Combine(assets, "TrayLightPaused.ico"), [16, 20, 24, 32, 40, 48, 64], s => DrawGlyph(s, Color.FromArgb(0x70, 0x1A, 0x1A, 0x1A)));
+WriteIcon(Path.Combine(assets, "TrayDarkPaused.ico"), [16, 20, 24, 32, 40, 48, 64], s => DrawGlyph(s, Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF)));
+foreach (var (scale, factor) in new[] { (100, 1.0), (125, 1.25), (150, 1.5), (200, 2.0) })
+{
+    foreach (var logical in new[] { 16, 48 })
+    {
+        using var bmp = DrawColor((int)Math.Round(logical * factor));
+        bmp.Save(Path.Combine(assets, $"AppIcon{logical}.scale-{scale}.png"), ImageFormat.Png);
+    }
+}
+
 using (var preview = DrawColor(256))
     preview.Save(Path.Combine(assets, "Comet.png"), ImageFormat.Png);
 Console.WriteLine($"icons written to {assets}");

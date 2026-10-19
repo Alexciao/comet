@@ -34,10 +34,27 @@ public sealed partial class PerformanceTests : IDisposable
     }
 
     [Fact]
-    public void Keystroke_to_popup_is_under_one_frame_at_p95()
+    public void Keystroke_to_popup_is_under_one_frame_at_p95() => Measure(afterSettings: false);
+
+    /// <summary>
+    /// Closing Settings releases its window and trims Comet's working set; the popup must still be as fast the next
+    /// time (its pages come back from the standby list).
+    /// </summary>
+    [Fact]
+    public void Keystroke_to_popup_stays_under_one_frame_after_Settings_was_closed() => Measure(afterSettings: true);
+
+    private void Measure(bool afterSettings)
     {
         // Comet normally starts at login, long before the first ":"; let its emoji warm-up finish first.
         Wait.Until(() => _comet.Log.Contains("emoji bitmaps ready", StringComparison.Ordinal), TimeSpan.FromSeconds(60), "emoji warm-up");
+        if (afterSettings)
+        {
+            _comet.OpenSettings();
+            var window = Automation.WaitForWindow(w => w.Name == "Comet Settings", TimeSpan.FromSeconds(10), "Settings");
+            window.Patterns.Window.Pattern.Close();
+            Wait.Until(() => _comet.Log.Contains("settings released", StringComparison.Ordinal), TimeSpan.FromSeconds(15), "Settings to be released");
+        }
+
         _notepad.Focus();
         string[] queries = Environment.GetEnvironmentVariable("COMET_PERF_SAME") == "1"
             ? ["smi", "smi", "smi", "smi", "smi", "smi", "smi", "smi", "smi", "smi"]

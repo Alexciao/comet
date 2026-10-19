@@ -132,7 +132,7 @@ public sealed class SettingsTests : IDisposable
     public void Normalize_clamps_broken_hand_edits()
     {
         var s = new AppSettings { MinimumCharacters = 99, SkinTone = -3, TriggerCharacter = "a", PickerExcludedApps = [" Slack.EXE ", "", "slack.exe"] }.Normalize();
-        Assert.Equal(5, s.MinimumCharacters);
+        Assert.Equal(AppSettings.MaxMinimumCharacters, s.MinimumCharacters);
         Assert.Equal(0, s.SkinTone);
         Assert.Equal(":", s.TriggerCharacter);
         Assert.Equal(["slack.exe"], s.PickerExcludedApps);
