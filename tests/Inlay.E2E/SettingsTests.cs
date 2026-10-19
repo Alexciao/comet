@@ -88,7 +88,7 @@ public sealed class SettingsTests : IDisposable
 
     private List<string?> Snippets() => [.. ReadJson("snippets.json")["snippets"]!.AsArray().Select(n => (string?)n!["name"])];
 
-    private List<JsonNode> Replacements() => [.. ReadJson("autoreplace.json")["entries"]!.AsArray().Select(n => n!)];
+    private List<JsonNode> Replacements() => [.. ReadJson("shorthands.json")["entries"]!.AsArray().Select(n => n!)];
 
     private JsonNode Settings() => ReadJson("settings.json");
 

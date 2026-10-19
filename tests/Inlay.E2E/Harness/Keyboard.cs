@@ -122,6 +122,23 @@ internal static class Keyboard
         Pace();
     }
 
+    public const ushort VK_LWIN = 0x5B;
+    public const ushort VK_F11 = 0x7A;
+
+    /// <summary>Presses keys together (all down in order, then up in reverse), e.g. a global shortcut.</summary>
+    public static void Chord(params ushort[] keys)
+    {
+        var layout = Layout();
+        var inputs = new List<INPUT>();
+        foreach (var vk in keys)
+            inputs.Add(Key(vk, false, layout, vk == VK_LWIN));
+        for (var i = keys.Length - 1; i >= 0; i--)
+            inputs.Add(Key(keys[i], true, layout, keys[i] == VK_LWIN));
+        EnsureTarget();
+        SendInputs(inputs.ToArray());
+        Pace();
+    }
+
     public static void SelectAllAndDelete()
     {
         Press(VK_A, ctrl: true);

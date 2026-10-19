@@ -18,7 +18,16 @@ internal sealed class InlayApp : IDisposable
     {
         DataDirectory = Path.Combine(Path.GetTempPath(), "inlay-e2e-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(DataDirectory);
-        Settings = new JsonObject { ["schemaVersion"] = 1, ["startAtLogin"] = false, ["pickerExcludedApps"] = new JsonArray() };
+        // Recents and the shortcut are off unless a test turns them on: pauses between keys must not open Quick
+        // Insert, and the user's own Inlay may hold the default shortcut.
+        Settings = new JsonObject
+        {
+            ["schemaVersion"] = 2,
+            ["startAtLogin"] = false,
+            ["quickInsertApps"] = new JsonArray(),
+            ["showRecentsOnPause"] = false,
+            ["quickInsertShortcut"] = "",
+        };
         // Tests never reach GitHub: both weekly checks go to a closed local port unless a test serves them itself.
         Environment["INLAY_EMOJI_UPDATE_URL"] = "http://127.0.0.1:9/";
         Environment["INLAY_APP_UPDATE_URL"] = "http://127.0.0.1:9/latest";
@@ -39,10 +48,27 @@ internal sealed class InlayApp : IDisposable
 
     public bool IsRunning => _process is { HasExited: false };
 
-    public InlayApp WithFeatures(bool emoji = true, bool snippets = true, bool shorthands = true)
+    public InlayApp WithFeatures(bool emoji = true, bool snippets = true, bool shorthands = true, bool images = true, bool symbols = true)
     {
-        Settings["features"] = new JsonObject { ["emoji"] = emoji, ["snippets"] = snippets, ["shorthands"] = shorthands };
+        Settings["features"] = new JsonObject { ["emoji"] = emoji, ["symbols"] = symbols, ["snippets"] = snippets, ["images"] = images, ["shorthands"] = shorthands };
         return this;
+    }
+
+    /// <summary>images.json with the given entries (JSON objects in the settings format).</summary>
+    public InlayApp WithImages(params JsonObject[] entries)
+    {
+        Write("images.json", new JsonObject { ["schemaVersion"] = 1, ["entries"] = new JsonArray([.. entries]) });
+        return this;
+    }
+
+    /// <summary>A file in Inlay's image library (as "Add image" would put it there), returning its library name.</summary>
+    public string AddToLibrary(string sourcePath)
+    {
+        var name = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(sourcePath))).ToLowerInvariant() + Path.GetExtension(sourcePath).ToLowerInvariant();
+        var library = Path.Combine(DataDirectory, "Images");
+        Directory.CreateDirectory(library);
+        File.Copy(sourcePath, Path.Combine(library, name), overwrite: true);
+        return name;
     }
 
     public InlayApp WithSnippets(params (string Name, string Text)[] snippets)
@@ -58,8 +84,8 @@ internal sealed class InlayApp : IDisposable
     {
         var list = new JsonArray();
         foreach (var (a, r) in entries)
-            list.Add(new JsonObject { ["id"] = Guid.NewGuid().ToString("N"), ["abbreviation"] = a, ["replacement"] = r, ["matchCase"] = false, ["enabled"] = true });
-        Write("autoreplace.json", new JsonObject { ["schemaVersion"] = 1, ["entries"] = list });
+            list.Add(new JsonObject { ["id"] = Guid.NewGuid().ToString("N"), ["shorthand"] = a, ["expansion"] = r, ["matchCase"] = false, ["enabled"] = true });
+        Write("shorthands.json", new JsonObject { ["schemaVersion"] = 2, ["entries"] = list });
         return this;
     }
 

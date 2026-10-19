@@ -11,15 +11,18 @@
   <input id="areaOut" aria-label="areaOut" readonly>
   <input id="richOut" aria-label="richOut" readonly>
   <input id="secretOut" aria-label="secretOut" readonly>
+  <input id="richImages" aria-label="richImages" readonly>
   <script>
     const area = document.getElementById('area'), rich = document.getElementById('rich'), secret = document.getElementById('secret');
     const sync = () => {
       document.getElementById('areaOut').value = JSON.stringify(area.value);
       document.getElementById('richOut').value = JSON.stringify(rich.innerText);
       document.getElementById('secretOut').value = JSON.stringify(secret.value);
+      document.getElementById('richImages').value = String(rich.querySelectorAll('img').length);
     };
     // Each mirror holds its field's exact value as JSON, readable through UI Automation by its label.
     ['input','keyup'].forEach(e => { area.addEventListener(e, sync); rich.addEventListener(e, sync); secret.addEventListener(e, sync); });
+    new MutationObserver(sync).observe(rich, { childList: true, subtree: true });
     sync();
   </script>
 </body>

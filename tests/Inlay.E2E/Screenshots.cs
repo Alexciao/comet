@@ -55,7 +55,7 @@ public sealed class Screenshots : IDisposable
         Thread.Sleep(800); // entrance animation and Mica
         Save(Native.FrameBounds(window), $"settings-general-{t}");
 
-        foreach (var (page, file) in new[] { ("Snippets", "snippets"), ("Shorthands", "autoreplace"), ("Excluded apps", "excluded"), ("About", "about") })
+        foreach (var (page, file) in new[] { ("Snippets", "snippets"), ("Shorthands", "shorthands"), ("Excluded apps", "excluded"), ("About", "about") })
         {
             window.FindFirstDescendant(c => c.ByName(page).And(c.ByControlType(ControlType.ListItem)))!.Click();
             Thread.Sleep(600);
@@ -98,7 +98,7 @@ public sealed class Screenshots : IDisposable
         _inlay.OpenSettings();
         var window = Automation.WaitForWindow(w => w.Name == "Inlay Settings", TimeSpan.FromSeconds(10), "Settings");
         Automation.Foreground(window);
-        foreach (var (page, file) in new[] { ("Snippets", "snippets"), ("Shorthands", "autoreplace") })
+        foreach (var (page, file) in new[] { ("Snippets", "snippets"), ("Shorthands", "shorthands") })
         {
             window.FindFirstDescendant(c => c.ByName(page).And(c.ByControlType(ControlType.ListItem)))!.Click();
             Thread.Sleep(600);
