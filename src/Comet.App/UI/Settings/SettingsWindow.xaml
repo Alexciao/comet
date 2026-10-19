@@ -70,7 +70,7 @@
                 </NavigationViewItem>
                 <NavigationViewItem x:Name="SnippetsItem" Content="Snippets" Tag="snippets">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE8C8;" />
+                        <FontIcon Glyph="&#xE70B;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem x:Name="AutoReplaceItem" Content="Auto-replace" Tag="autoreplace">

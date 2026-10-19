@@ -29,9 +29,6 @@ public sealed class AppSettings
 
     public List<string> AutoReplaceExcludedApps { get; set; } = [];
 
-    /// <summary>Auto-replace's own pause, independent of the picker and of the tray's Pause.</summary>
-    public bool AutoReplacePaused { get; set; }
-
     public bool UpdateEmojiAutomatically { get; set; } = true;
 
     /// <summary>Check GitHub once a week for a newer Comet and say so in Settings and the tray menu.</summary>

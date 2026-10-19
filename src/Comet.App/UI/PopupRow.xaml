@@ -58,7 +58,7 @@
             <FontIcon
                 x:Name="SnippetIcon"
                 FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                Glyph="&#xE8C8;"
+                Glyph="&#xE70B;"
                 FontSize="16"
                 VerticalAlignment="Center"
                 Visibility="Collapsed" />

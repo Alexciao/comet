@@ -10,6 +10,7 @@ namespace Comet.Platform;
 internal static class Log
 {
     private const long MaxBytes = 1 << 20;
+    private const int MaxCrashReports = 10;
     private static readonly Lock s_lock = new();
     private static string? s_directory;
 
@@ -62,6 +63,9 @@ internal static class Log
             System.IO.Directory.CreateDirectory(Directory);
             var path = Path.Combine(Directory, string.Create(CultureInfo.InvariantCulture, $"crash-{DateTime.Now:yyyyMMdd-HHmmss}.log"));
             File.WriteAllText(path, $"Comet {AppPaths.Version} crashed ({source}) at {DateTime.Now:O}\n{Environment.OSVersion}\n\n{ex}\n", Encoding.UTF8);
+            // Keep the newest few: a crash loop must not fill the disk.
+            foreach (var old in System.IO.Directory.GetFiles(Directory, "crash-*.log").OrderDescending(StringComparer.Ordinal).Skip(MaxCrashReports))
+                File.Delete(old);
             Write("FATAL", $"{source}: {ex.GetType().Name}: {ex.Message} (see {Path.GetFileName(path)})");
             return path;
         }

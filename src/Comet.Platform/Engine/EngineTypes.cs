@@ -18,8 +18,6 @@ internal sealed record EngineConfig
 
     public bool AutoReplaceEnabled { get; init; } = true;
 
-    public bool AutoReplacePaused { get; init; }
-
     public char TriggerChar { get; init; } = ':';
 
     public int MinChars { get; init; } = 2;
@@ -35,7 +33,7 @@ internal sealed record EngineConfig
 
     public bool PickerEnabled => !Paused && (EmojiEnabled || SnippetsEnabled);
 
-    public bool AutoReplaceActive => !Paused && AutoReplaceEnabled && !AutoReplacePaused;
+    public bool AutoReplaceActive => !Paused && AutoReplaceEnabled;
 
     /// <summary>With nothing to do the hook is uninstalled entirely.</summary>
     public bool NeedsHook => PickerEnabled || AutoReplaceActive;
@@ -46,7 +44,6 @@ internal sealed record EngineConfig
         EmojiEnabled = s.Features.Emoji,
         SnippetsEnabled = s.Features.Snippets,
         AutoReplaceEnabled = s.Features.AutoReplace,
-        AutoReplacePaused = s.AutoReplacePaused,
         TriggerChar = s.TriggerCharacter[0],
         MinChars = s.MinimumCharacters,
         SkinTone = s.SkinTone,
