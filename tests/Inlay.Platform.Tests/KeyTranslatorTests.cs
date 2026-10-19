@@ -1,12 +1,14 @@
 using System.Runtime.InteropServices;
 using Inlay.Core.Input;
+using Inlay.Core.Shorthands;
 using Inlay.Platform.Hook;
 
 namespace Inlay.Platform.Tests;
 
 /// <summary>
 /// Key translation against real Windows keyboard layouts: Italian (where ':' is Shift+period and '@' is AltGr+ò)
-/// and US. A layout the machine doesn't have loaded is loaded for the test and unloaded afterwards.
+/// US, and US-International (dead keys). A layout the machine doesn't have loaded is loaded for the test and unloaded
+/// afterwards.
 /// </summary>
 public sealed partial class KeyTranslatorTests : IDisposable
 {
@@ -162,6 +164,136 @@ public sealed partial class KeyTranslatorTests : IDisposable
         Assert.Equal(expected, new string(output[..n].ToArray().Select(k => k.Char).ToArray()));
     }
 
+    private const string UsInternational = "00020409";
+    private const uint VkOem7 = 0xDE, VkOemComma = 0xBC, VkSpace = 0x20, VkTab = 0x09;
+
+    // US-International dead keys: ' " ` ~ ^.
+    private static readonly (uint Vk, Modifiers Modifiers)[] s_usIntlDeadKeys =
+        [(VkOem7, Modifiers.None), (VkOem7, Modifiers.Shift), (VkOem3, Modifiers.None), (VkOem3, Modifiers.Shift), ('6', Modifiers.Shift)];
+
+    /// <summary>
+    /// H13: after a dead key, what Inlay reads is what Windows types: another dead key types both accents, and
+    /// Enter, Tab, Backspace and Escape come after the accent. Windows is asked directly (ToUnicodeEx changing this
+    /// thread's keyboard state). Letters whose composition NFC gets differently from the layout's table (<c>~e</c>,
+    /// <c>'c</c> → <c>ç</c>) are left out.
+    /// </summary>
+    [Fact]
+    public void Us_international_dead_keys_read_as_windows_types_them()
+    {
+        var intl = Layout(UsInternational);
+        (uint Vk, Modifiers Modifiers)[] next =
+        [
+            .. s_usIntlDeadKeys, (VkSpace, Modifiers.None), ('A', Modifiers.None), ('A', Modifiers.Shift), ('Q', Modifiers.None),
+            (VkOemComma, Modifiers.None), (VkOemPeriod, Modifiers.None), ('1', Modifiers.Shift), (VkReturn, Modifiers.None),
+            (VkTab, Modifiers.None), (VkBack, Modifiers.None), (VkEscape, Modifiers.None),
+        ];
+        foreach (var dead in s_usIntlDeadKeys)
+        {
+            foreach (var key in next)
+            {
+                WindowsTypes(intl, VkSpace, Modifiers.None); // nothing pending
+                var expected = WindowsTypes(intl, dead.Vk, dead.Modifiers) + WindowsTypes(intl, key.Vk, key.Modifiers);
+                var actual = Typed(Press(intl, dead.Vk, dead.Modifiers)) + Typed(Press(intl, key.Vk, key.Modifiers));
+                Assert.Equal(expected, actual);
+            }
+        }
+    }
+
+    /// <summary>The text a translated key stands for, with Enter, Tab, Backspace and Escape as their control characters.</summary>
+    private static string Typed(KeyInput[] keys) => string.Concat(keys.Select(k => k.Kind switch
+    {
+        KeyKind.Char => k.Char.ToString(),
+        KeyKind.Enter => "\r",
+        KeyKind.Tab => "\t",
+        KeyKind.Backspace => "\b",
+        KeyKind.Escape => "\u001B",
+        KeyKind.DeadKey => "",
+        _ => throw new InvalidOperationException(k.ToString()),
+    }));
+
+    /// <summary>What Windows types for a key, keeping a dead key pending on this thread as an app's thread would.</summary>
+    private static unsafe string WindowsTypes(nint layout, uint vk, Modifiers modifiers)
+    {
+        var state = stackalloc byte[256];
+        if ((modifiers & Modifiers.Shift) != 0)
+            state[VkShift] = state[0xA0] = 0x80;
+        var buffer = stackalloc char[8];
+        var n = ToUnicodeEx(vk, MapVirtualKeyExW(vk, MapVkToVsc, layout), state, buffer, 8, 0, layout);
+        return n > 0 ? new string(buffer, 0, n) : "";
+    }
+
+    /// <summary>H13, end to end on US-International: the key after a dead key never expands, so nothing is swallowed.</summary>
+    [Theory]
+    [InlineData(VkOem7, true, VkSpace, false)]      // brb + " + space = brb"
+    [InlineData(VkOem7, true, 'Q', false)]          // brb + " + q = brb"q (the q was lost)
+    [InlineData(VkOem7, true, VkOemPeriod, false)]
+    [InlineData(VkOem7, true, VkOem7, true)]        // brb + " + " = brb""
+    [InlineData(VkOem7, false, VkReturn, false)]    // brb + ' + Enter = brb' and a new line
+    [InlineData(VkOem7, false, VkTab, false)]
+    [InlineData(VkOem3, true, VkSpace, false)]
+    public void Us_international_the_key_after_a_dead_key_does_not_expand(uint deadVk, bool deadShift, uint vk, bool shift)
+    {
+        var intl = Layout(UsInternational);
+        var shorthands = Shorthands();
+        TypeKeys(shorthands, intl, ('B', Modifiers.None), ('R', Modifiers.None), ('B', Modifiers.None));
+        var decisions = TypeKeys(shorthands, intl,
+            (deadVk, deadShift ? Modifiers.Shift : Modifiers.None), (vk, shift ? Modifiers.Shift : Modifiers.None));
+        Assert.All(decisions, d => Assert.False(d.Swallow));
+    }
+
+    [Fact]
+    public void Us_international_a_composed_letter_is_part_of_the_word()
+    {
+        var intl = Layout(UsInternational);
+        var shorthands = Shorthands();
+        TypeKeys(shorthands, intl, ('C', Modifiers.None), ('A', Modifiers.None), ('F', Modifiers.None), (VkOem7, Modifiers.None), ('E', Modifiers.None));
+        var d = TypeKeys(shorthands, intl, (VkSpace, Modifiers.None)).Single();
+        Assert.Equal(ShorthandAction.Expand, d.Action);
+        Assert.Equal("café", d.Deleted);
+    }
+
+    [Fact]
+    public void Us_international_after_a_dead_key_is_resolved_words_expand_again()
+    {
+        var intl = Layout(UsInternational);
+        var shorthands = Shorthands();
+        TypeKeys(shorthands, intl, (VkOem7, Modifiers.Shift), ('Q', Modifiers.None), (VkSpace, Modifiers.None),
+            ('B', Modifiers.None), ('R', Modifiers.None), ('B', Modifiers.None));
+        Assert.Equal(ShorthandAction.Expand, TypeKeys(shorthands, intl, (VkSpace, Modifiers.None)).Single().Action);
+    }
+
+    /// <summary>Italian has no dead keys: the apostrophe is a character and words expand after it as before.</summary>
+    [Fact]
+    public void Italian_apostrophe_and_quote_are_characters_and_boundaries_expand()
+    {
+        var it = Layout("00000410");
+        Assert.Equal('\'', Char(it, 0xDB));
+        Assert.Equal('"', Char(it, '2', Modifiers.Shift));
+        var shorthands = Shorthands();
+        TypeKeys(shorthands, it, ('B', Modifiers.None), ('R', Modifiers.None), ('B', Modifiers.None));
+        Assert.Equal(new Boundary(BoundaryKind.Char, '"'), TypeKeys(shorthands, it, ('2', Modifiers.Shift)).Single().Boundary);
+    }
+
+    private static ShorthandEngine Shorthands()
+    {
+        var e = new ShorthandEngine();
+        e.SetRules([new ShorthandRule("brb", "be right back"), new ShorthandRule("café", "coffee shop")]);
+        return e;
+    }
+
+    /// <summary>Presses keys, feeding what they translate to into <paramref name="shorthands"/> as the engine does.</summary>
+    private List<ShorthandDecision> TypeKeys(ShorthandEngine shorthands, nint layout, params (uint Vk, Modifiers Modifiers)[] keys)
+    {
+        var decisions = new List<ShorthandDecision>();
+        foreach (var (vk, modifiers) in keys)
+        {
+            foreach (var input in Press(layout, vk, modifiers))
+                decisions.Add(shorthands.OnKey(input));
+        }
+
+        return decisions;
+    }
+
     private static HashSet<nint> LoadedLayouts()
     {
         var buffer = new nint[64];
@@ -181,4 +313,7 @@ public sealed partial class KeyTranslatorTests : IDisposable
 
     [LibraryImport("user32.dll")]
     private static partial uint MapVirtualKeyExW(uint code, uint mapType, nint hkl);
+
+    [LibraryImport("user32.dll")]
+    private static unsafe partial int ToUnicodeEx(uint vk, uint scan, byte* state, char* buffer, int count, uint flags, nint hkl);
 }

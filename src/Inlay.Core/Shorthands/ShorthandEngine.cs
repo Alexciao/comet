@@ -71,6 +71,10 @@ public sealed class ShorthandEngine
     // After an undo, this word stays unexpanded until something else is typed.
     private string? _suppressed;
 
+    // A dead key was typed and the key resolving it is arriving (see OnKey); _deadKeyAccent is its accent until seen.
+    private bool _resolvingDeadKey;
+    private char _deadKeyAccent;
+
     public ShorthandEngine() => SetRules([]);
 
     /// <summary>Number of active rules.</summary>
@@ -125,6 +129,21 @@ public sealed class ShorthandEngine
     /// <param name="allowed">False in password fields, elevated or excluded apps: track nothing, expand nothing.</param>
     public ShorthandDecision OnKey(KeyInput key, bool allowed = true)
     {
+        // The key resolving a dead key must reach the app, which holds the accent: swallowing it to expand would leave
+        // the accent pending there, to land on the replacement, and lose the key's own character. So it never expands.
+        // It gives the composed character (the accent alone before a space), or the accent uncombined followed by
+        // its own character or action: once the accent arrives, the input after it is still that key's. (After a dead
+        // key and space, that holds back the next key too, which only matters to a word ending in the accent.)
+        // Modifiers and keys that type nothing leave the accent pending.
+        if (_resolvingDeadKey && key.Kind is not (KeyKind.DeadKey or KeyKind.Ignored))
+        {
+            allowed = false;
+            if (key.Kind == KeyKind.Char && key.Char == _deadKeyAccent && key.Char != '\0')
+                _deadKeyAccent = '\0';
+            else
+                _resolvingDeadKey = false;
+        }
+
         // Undo: Backspace immediately after an expansion.
         if (_undoWord is not null)
         {
@@ -163,8 +182,11 @@ public sealed class ShorthandEngine
                 if (_count > 0)
                     RemoveGrapheme();
                 return default;
-            case KeyKind.Ignored:
             case KeyKind.DeadKey: // the composed character arrives with the next key
+                _resolvingDeadKey = true;
+                _deadKeyAccent = key.Char;
+                return default;
+            case KeyKind.Ignored:
                 return default;
             default:
                 // Caret moved, shortcut, paste or IME: forget the text. The next word is assumed to start fresh.
