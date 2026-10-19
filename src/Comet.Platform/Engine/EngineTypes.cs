@@ -93,7 +93,11 @@ internal sealed class PopupFrame
 }
 
 /// <summary>Where the popup is on screen, published by the UI for click hit-testing on the hook thread.</summary>
-internal readonly record struct PopupGeometry(RECT Window, int ListTop, int RowHeight, int FirstVisible, int VisibleRows);
+/// <summary>
+/// Where the popup's rows are on screen, for the frame <paramref name="Version"/> it shows. A class, so the hook
+/// thread always reads a whole value the UI thread published, never half of an old one and half of a new one.
+/// </summary>
+internal sealed record PopupGeometry(RECT Window, int ListTop, int RowHeight, int FirstVisible, int VisibleRows, int Version);
 
 /// <summary>The popup as seen from the hook thread. Calls must return immediately.</summary>
 internal interface IPopupSink

@@ -25,8 +25,12 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     private const uint WmCancel = HookThread.WmClientBase + 4;
     private const uint WmDispatchInjection = HookThread.WmClientBase + 5;
 
-    /// <summary>Give up holding keys if an insertion hasn't completed by then (keys are then replayed).</summary>
-    private const long MaxInjectionMs = 1000;
+    /// <summary>
+    /// Give up holding keys if an insertion hasn't completed by then (they are then replayed, in order). Longer than
+    /// the injector's own worst case (the clipboard path waits up to ~1.5 s for a slow app), so held keys can't
+    /// overtake an insertion that is still running.
+    /// </summary>
+    private const long MaxInjectionMs = 4000;
 
     // Apps known to mishandle KEYEVENTF_UNICODE input: remote desktops and VMs forward scan codes, Java
     // Swing drops surrogate pairs.
@@ -48,7 +52,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     private readonly List<(KBDLLHOOKSTRUCT Key, bool Up)> _held = new(16);
     private readonly ConcurrentQueue<ContextResult> _contextResults = new();
     private readonly ConcurrentQueue<InsertionJob> _completedJobs = new();
-    private InsertionJob? _queuedJob;
+    private readonly Queue<InsertionJob> _queuedJobs = new(); // hook thread only
     private InsertionJob? _currentJob;
 
     private EngineConfig _config = new();
@@ -76,6 +80,11 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         _popup = popup;
         _picker.ExactMatcher = this;
         _hook = new HookThread(this) { AcceptForeignInjectedInput = acceptForeignInjectedInput };
+        _hook.CallbackWasSlow += () =>
+        {
+            Log.Warn("a keyboard callback was slow; checking that Windows kept the hook");
+            KickWatchdog(force: true);
+        };
         _worker = new ContextWorker(r =>
         {
             _contextResults.Enqueue(r);
@@ -163,6 +172,10 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             return true;
         }
 
+        // A new press of a key whose earlier press was swallowed: that press's key-up was lost (or the key is
+        // auto-repeating through), so this press's key-up must reach the app, or the key stays down there.
+        _swallowedDown[vk] = false;
+
         var start = Stopwatch.GetTimestamp();
         _keyTimestamp = start;
         var wasActive = _picker.IsActive;
@@ -193,16 +206,17 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     /// being replayed pass straight through, unless one of them started a newer insertion: the replayed keys
     /// after it must then wait for that one too.
     /// </summary>
-    private bool MustHold(bool isReplay) =>
-        _currentJob is { } job && !(isReplay && job.Replay is not null) && !InjectionTimedOut();
-
-    private bool InjectionTimedOut()
+    private bool MustHold(bool isReplay)
     {
-        if (Environment.TickCount64 - _injectingSince <= MaxInjectionMs)
+        if (_currentJob is not { } job || (isReplay && job.Replay is not null))
             return false;
+        if (Environment.TickCount64 - _injectingSince <= MaxInjectionMs)
+            return true;
+
+        // Stuck: replay what was held. If there was anything, this key waits behind that replay, so the order holds.
         Log.Warn("insertion did not complete in time; releasing held keys");
         FinishInjection();
-        return true;
+        return _currentJob is not null;
     }
 
     private bool Process(KeyInput key)
@@ -210,7 +224,8 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         var config = _config;
 
         // ---- picker
-        if (config.PickerEnabled && PickerAllowedHere(config))
+        if (config.PickerEnabled && PickerAllowedHere(config)
+            && !(key.Kind == KeyKind.Char && key.Char == config.TriggerChar && !_picker.IsActive && ImeOpen()))
         {
             var d = _picker.OnKey(key, _popupVisible);
             switch (d.Action)
@@ -262,6 +277,9 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             return false;
 
         var allowed = _context.IsSafe && !config.AutoReplaceExcluded.Contains(_context.ProcessName);
+        // A boundary typed into an IME composition (space converts, Enter commits) is the IME's, not a word end.
+        if (allowed && _autoReplace.IsCandidate && EndsWord(key) && ImeOpen())
+            allowed = false;
         var a = _autoReplace.OnKey(key, allowed);
         switch (a.Action)
         {
@@ -275,6 +293,26 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             EnsurePasswordKnown();
         return false;
     }
+
+    /// <summary>
+    /// True while the focused window's IME is on (Japanese, Chinese, Korean input): the low-level hook sees raw
+    /// keys before the IME composes them, so Comet must stay out. Asked only when a trigger is typed or a word
+    /// could expand, never per key; one bounded cross-process message.
+    /// </summary>
+    private bool ImeOpen()
+    {
+        var window = _context.Focus != 0 ? _context.Focus : _context.Foreground;
+        var ime = window == 0 ? 0 : Imm32.ImmGetDefaultIMEWnd(window);
+        if (ime == 0)
+            return false;
+        return User32.SendMessageTimeoutW(ime, WmImeControl, ImcGetOpenStatus, 0, User32.SMTO_ABORTIFHUNG, 50, out var open) != 0 && open != 0;
+    }
+
+    private static bool EndsWord(KeyInput key) => key.Kind is KeyKind.Enter or KeyKind.Tab
+        || (key.Kind == KeyKind.Char && (TextClass.IsWhitespace(key.Char) || TextClass.IsClosingPunctuation(key.Char)));
+
+    private const uint WmImeControl = 0x0283;
+    private const nuint ImcGetOpenStatus = 0x0005;
 
     private bool PickerAllowedHere(EngineConfig config) =>
         !_context.Elevated && !_context.IsSelf && !config.PickerExcluded.Contains(_context.ProcessName);
@@ -397,7 +435,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         _injectingSince = Environment.TickCount64;
         // Hand the job over only after the current hook callback has returned, so SendInput never runs while
         // the system is still waiting on our callback for the key that triggered it.
-        _queuedJob = job;
+        _queuedJobs.Enqueue(job);
         _hook.Post(WmDispatchInjection);
     }
 
@@ -435,9 +473,11 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         {
             if (message == User32.WM_LBUTTONDOWN)
             {
-                // Handle the click here and never let it reach the popup, so the popup can't take focus.
+                // Handle the click here and never let it reach the popup, so the popup can't take focus. A click on
+                // a list the popup hasn't drawn yet (a key typed in the same frame) picks nothing: the user saw a
+                // different row there.
                 var row = g.RowHeight > 0 ? g.FirstVisible + ((point.Y - g.Window.Top - g.ListTop) / g.RowHeight) : -1;
-                if (row >= 0 && row < _resultCount && point.Y >= g.Window.Top + g.ListTop)
+                if (g.Version == _frame.Version && row >= 0 && row < _resultCount && point.Y >= g.Window.Top + g.ListTop)
                 {
                     var token = _picker.Token.Length;
                     _picker.Reset();
@@ -584,12 +624,8 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
 
                 break;
             case WmDispatchInjection:
-                if (_queuedJob is { } job)
-                {
-                    _queuedJob = null;
+                while (_queuedJobs.TryDequeue(out var job))
                     _injector.Enqueue(job);
-                }
-
                 break;
             case WmCancel:
                 ResetForNewFocus();

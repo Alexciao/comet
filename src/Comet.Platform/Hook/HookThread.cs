@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Comet.Platform.Native;
 
@@ -56,6 +57,16 @@ internal sealed unsafe class HookThread : IDisposable
     private nint _foregroundEvents;
     private nint _focusEvents;
     private long _lastProbeTicks;
+    private bool _mouseWanted;
+    private nuint _retryTimer;
+
+    /// <summary>A keyboard callback took long enough that Windows may drop the hook: check it now (raised on the thread pool).</summary>
+    public event Action? CallbackWasSlow;
+
+    /// <summary>Windows removes a hook whose callback exceeds LowLevelHooksTimeout (a few hundred ms by default).</summary>
+    private static readonly long s_slowCallback = Stopwatch.Frequency / 5; // 200 ms
+
+    private const uint RetryIntervalMs = 5000;
 
     public HookThread(IHookClient client)
     {
@@ -117,7 +128,7 @@ internal sealed unsafe class HookThread : IDisposable
                 switch (msg.message)
                 {
                     case WmReinstall:
-                        if (_keyboardHook != 0)
+                        if (_wantKeyboard)
                         {
                             RemoveKeyboard();
                             InstallKeyboard();
@@ -125,13 +136,22 @@ internal sealed unsafe class HookThread : IDisposable
 
                         break;
                     case WmSetKeyboardHook:
-                        if (msg.wParam != 0 && _keyboardHook == 0)
+                        _wantKeyboard = msg.wParam != 0;
+                        if (_wantKeyboard && _keyboardHook == 0)
                             InstallKeyboard();
-                        else if (msg.wParam == 0 && _keyboardHook != 0)
+                        else if (!_wantKeyboard && _keyboardHook != 0)
                             RemoveKeyboard();
                         break;
                     case WmSetMouseHook:
-                        SetMouse(msg.wParam != 0);
+                        _mouseWanted = msg.wParam != 0;
+                        SetMouse(_mouseWanted);
+                        break;
+                    case User32.WM_TIMER when msg.wParam == _retryTimer:
+                        // An earlier SetWindowsHookEx failed: try again while the hook is still wanted.
+                        if (!_wantKeyboard || _keyboardHook != 0)
+                            StopRetrying();
+                        else
+                            InstallKeyboard();
                         break;
                     case User32.WM_NULL:
                         break;
@@ -153,16 +173,36 @@ internal sealed unsafe class HookThread : IDisposable
         var module = Kernel32.GetModuleHandleW(null);
         Volatile.Write(ref _keyboardHook, User32.SetWindowsHookExW(User32.WH_KEYBOARD_LL, &KeyboardProc, module, 0));
         if (_keyboardHook == 0)
-            Log.Warn($"SetWindowsHookEx(WH_KEYBOARD_LL) failed: {Marshal.GetLastWin32Error()}");
-        else
-            Log.Info("keyboard hook installed");
+        {
+            Log.Warn($"SetWindowsHookEx(WH_KEYBOARD_LL) failed: {Marshal.GetLastWin32Error()}; retrying every {RetryIntervalMs / 1000} s");
+            if (_retryTimer == 0)
+                _retryTimer = User32.SetTimer(0, 0, RetryIntervalMs, 0);
+            return;
+        }
+
+        Log.Info("keyboard hook installed");
+        StopRetrying();
+        // Focus events come with the keyboard hook; installed once, whatever happened to the hook before.
         var flags = User32.WINEVENT_OUTOFCONTEXT | User32.WINEVENT_SKIPOWNPROCESS;
-        _foregroundEvents = User32.SetWinEventHook(User32.EVENT_SYSTEM_FOREGROUND, User32.EVENT_SYSTEM_FOREGROUND, 0, &WinEventProc, 0, 0, flags);
-        _focusEvents = User32.SetWinEventHook(User32.EVENT_OBJECT_FOCUS, User32.EVENT_OBJECT_FOCUS, 0, &WinEventProc, 0, 0, flags);
+        if (_foregroundEvents == 0)
+            _foregroundEvents = User32.SetWinEventHook(User32.EVENT_SYSTEM_FOREGROUND, User32.EVENT_SYSTEM_FOREGROUND, 0, &WinEventProc, 0, 0, flags);
+        if (_focusEvents == 0)
+            _focusEvents = User32.SetWinEventHook(User32.EVENT_OBJECT_FOCUS, User32.EVENT_OBJECT_FOCUS, 0, &WinEventProc, 0, 0, flags);
+        // A re-install must not lose the mouse hook the engine still wants.
+        if (_mouseWanted)
+            SetMouse(true);
+    }
+
+    private void StopRetrying()
+    {
+        if (_retryTimer != 0)
+            User32.KillTimer(0, _retryTimer);
+        _retryTimer = 0;
     }
 
     private void RemoveKeyboard()
     {
+        StopRetrying();
         SetMouse(false);
         if (_keyboardHook != 0)
         {
@@ -214,7 +254,11 @@ internal sealed unsafe class HookThread : IDisposable
 
                 var down = wParam is User32.WM_KEYDOWN or User32.WM_SYSKEYDOWN;
                 var replay = (k.flags & User32.LLKHF_INJECTED) != 0 && k.dwExtraInfo == InputSignature.Replay;
-                if (self._client.OnKey(k, down, replay))
+                var started = Stopwatch.GetTimestamp();
+                var swallow = self._client.OnKey(k, down, replay);
+                if (Stopwatch.GetTimestamp() - started > s_slowCallback && self.CallbackWasSlow is { } slow)
+                    ThreadPool.UnsafeQueueUserWorkItem(static s => s(), slow, preferLocal: false);
+                if (swallow)
                     return 1;
             }
             catch (Exception ex)

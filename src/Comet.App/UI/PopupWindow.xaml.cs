@@ -55,14 +55,19 @@ public sealed partial class PopupWindow : Window, IPopupSink
     private int _selected;
     private int _first;
     private bool _visible;
-    private bool _uncloaked;
+    private volatile bool _uncloaked; // also cleared by Hide on the hook thread
     private bool _awaitingFrame;
     private int _hideCount;
     private int _renderHideCount;
     private long _awaitingKeyTimestamp;
     private RECT _windowRect;
     private double _scale = 1;
-    private PopupGeometry? _geometry;
+    private volatile PopupGeometry? _geometry;
+
+    // Ordering of the hook thread's Update and Hide calls: a hide is applied only if no update came after it.
+    private long _sequence;
+    private long _lastUpdate;
+    private long _lastHide;
 
     public PopupWindow()
     {
@@ -145,6 +150,7 @@ public sealed partial class PopupWindow : Window, IPopupSink
     void IPopupSink.Update(PopupFrame frame)
     {
         _frame = frame;
+        Volatile.Write(ref _lastUpdate, Interlocked.Increment(ref _sequence));
         if (Interlocked.Exchange(ref _updatePending, 1) == 0)
             _messages?.Post(WmUpdate);
     }
@@ -154,6 +160,7 @@ public sealed partial class PopupWindow : Window, IPopupSink
         // Cloaking is a DWM call, safe from any thread: the popup disappears now, not when the UI thread gets to it.
         _geometry = null;
         Interlocked.Increment(ref _hideCount);
+        Volatile.Write(ref _lastHide, Interlocked.Increment(ref _sequence));
         Cloak(true);
         _messages?.Post(WmHide);
     }
@@ -170,6 +177,10 @@ public sealed partial class PopupWindow : Window, IPopupSink
                 Render();
                 return true;
             case WmHide:
+                // Messages can be handled out of the order the calls were made (updates are coalesced): if the
+                // hook thread showed the popup again after this hide, the pending or just-rendered update wins.
+                if (Volatile.Read(ref _lastUpdate) > Volatile.Read(ref _lastHide))
+                    return true;
                 _visible = false;
                 _awaitingFrame = false;
                 CompositionTarget.Rendered -= OnFrameRendered;
@@ -371,7 +382,7 @@ public sealed partial class PopupWindow : Window, IPopupSink
     }
 
     private void PublishGeometry() =>
-        _geometry = new PopupGeometry(_windowRect, (int)Math.Round(PaddingEpx * _scale), (int)Math.Round(PopupRow.RowHeight * _scale), _first, VisibleRows);
+        _geometry = new PopupGeometry(_windowRect, (int)Math.Round(PaddingEpx * _scale), (int)Math.Round(PopupRow.RowHeight * _scale), _first, VisibleRows, _shownVersion);
 
     // ------------------------------------------------------------------ cloak
 

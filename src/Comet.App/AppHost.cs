@@ -374,10 +374,18 @@ internal sealed class AppHost : IDisposable
                 _settings.SaveFrecency();
                 _settings.Flush();
                 return false;
+            case User32.WM_POWERBROADCAST when (uint)wParam == PowrProf.PBT_APMSUSPEND:
+                _engine.Cancel(); // going to sleep: close the popup now, not on wake
+                return false;
             case User32.WM_POWERBROADCAST when (uint)wParam is PowrProf.PBT_APMRESUMEAUTOMATIC or PowrProf.PBT_APMRESUMESUSPEND:
                 Log.Info("resumed from sleep");
                 AfterWake();
                 return false;
+            case User32.WM_WTSSESSION_CHANGE when (int)wParam == WtsApi32.WTS_SESSION_LOCK:
+                // Locking (or sleeping with the lid): no session survives, so a key pressed while the lock screen
+                // comes up can't insert the old selection.
+                _engine.Cancel();
+                return true;
             case User32.WM_WTSSESSION_CHANGE when (int)wParam == WtsApi32.WTS_SESSION_UNLOCK:
                 Log.Info("session unlocked");
                 AfterWake();

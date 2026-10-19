@@ -4,14 +4,18 @@ using System.Text;
 namespace Comet.Platform;
 
 /// <summary>
-/// Local log in <c>%LocalAppData%\Comet\logs</c>. Records events and timings only — never typed text.
-/// Writes are rare (start/stop, failures, timing summaries) so a lock and a direct append are enough.
+/// Local log in <c>%LocalAppData%\Comet\logs</c>. Records events and timings only — never typed text. Lines are
+/// queued and written by a background thread, so logging never does disk I/O on the caller's thread (some
+/// callers are inside the keyboard hook, which Windows drops if it is slow). Rotated at 1 MB (one old copy kept).
 /// </summary>
 internal static class Log
 {
     private const long MaxBytes = 1 << 20;
     private const int MaxCrashReports = 10;
     private static readonly Lock s_lock = new();
+    private static readonly System.Collections.Concurrent.ConcurrentQueue<string> s_pending = new();
+    private static readonly AutoResetEvent s_signal = new(false);
+    private static int s_writerStarted;
     private static string? s_directory;
 
     public static string Directory => s_directory ??= Path.Combine(AppPaths.DataDirectory, "logs");
@@ -33,25 +37,50 @@ internal static class Log
 
     private static void Write(string level, string message)
     {
-        try
+        s_pending.Enqueue(string.Create(CultureInfo.InvariantCulture, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{level}] {message}{Environment.NewLine}"));
+        if (Interlocked.Exchange(ref s_writerStarted, 1) == 0)
         {
-            var line = string.Create(CultureInfo.InvariantCulture, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} [{level}] {message}{Environment.NewLine}");
-            lock (s_lock)
+            new Thread(WriterLoop) { IsBackground = true, Name = "Comet log", Priority = ThreadPriority.BelowNormal }.Start();
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => Flush();
+        }
+
+        s_signal.Set();
+    }
+
+    private static void WriterLoop()
+    {
+        while (true)
+        {
+            s_signal.WaitOne();
+            Drain();
+        }
+    }
+
+    /// <summary>Writes everything queued so far; used on exit and before a crash report.</summary>
+    public static void Flush() => Drain();
+
+    private static void Drain()
+    {
+        lock (s_lock)
+        {
+            if (s_pending.IsEmpty)
+                return;
+            var text = new StringBuilder();
+            while (s_pending.TryDequeue(out var line))
+                text.Append(line);
+            try
             {
                 System.IO.Directory.CreateDirectory(Directory);
                 var path = FilePath;
                 var info = new FileInfo(path);
                 if (info.Exists && info.Length > MaxBytes)
                     File.Move(path, path + ".1", overwrite: true);
-                File.AppendAllText(path, line, Encoding.UTF8);
+                File.AppendAllText(path, text.ToString(), Encoding.UTF8);
             }
-        }
-        catch (IOException)
-        {
-            // Logging must never take the app down.
-        }
-        catch (UnauthorizedAccessException)
-        {
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Logging must never take the app down.
+            }
         }
     }
 
@@ -67,6 +96,7 @@ internal static class Log
             foreach (var old in System.IO.Directory.GetFiles(Directory, "crash-*.log").OrderDescending(StringComparer.Ordinal).Skip(MaxCrashReports))
                 File.Delete(old);
             Write("FATAL", $"{source}: {ex.GetType().Name}: {ex.Message} (see {Path.GetFileName(path)})");
+            Flush(); // the process may end right after this
             return path;
         }
         catch (IOException)

@@ -56,6 +56,7 @@ public static partial class Program
         });
 
         Log.Info("Comet stopped");
+        Log.Flush();
         return 0;
     }
 }

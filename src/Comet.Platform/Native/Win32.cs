@@ -705,6 +705,7 @@ internal static partial class UxTheme
 internal static partial class WtsApi32
 {
     public const int NOTIFY_FOR_THIS_SESSION = 0;
+    public const int WTS_SESSION_LOCK = 0x7;
     public const int WTS_SESSION_UNLOCK = 0x8;
 
     [LibraryImport("wtsapi32.dll")]
@@ -718,6 +719,7 @@ internal static partial class WtsApi32
 
 internal static partial class PowrProf
 {
+    public const uint PBT_APMSUSPEND = 0x0004;
     public const uint PBT_APMRESUMEAUTOMATIC = 0x0012;
     public const uint PBT_APMRESUMESUSPEND = 0x0007;
 }
