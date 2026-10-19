@@ -18,8 +18,8 @@ concurrency:
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
   DOTNET_NOLOGO: "1"
-  # Oldest app that reads this pack format. Raise it together with the blob format version.
-  MIN_APP_VERSION: "1.0.0"
+  # Oldest app that reads this pack format. Raise it together with the blob format version (2: symbols, Inlay 1.1).
+  MIN_APP_VERSION: "1.1.0"
 
 jobs:
   build:
@@ -73,6 +73,8 @@ jobs:
             --out src/Inlay.Core/Data/emoji.bin `
             --manifest artifacts/emoji-data/manifest.json `
             --min-app-version $env:MIN_APP_VERSION
+          # The builder fails on broken data (codes that aren't unique snake_case, symbols.tsv errors): stop here.
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item src/Inlay.Core/Data/emoji.bin artifacts/emoji-data/emoji-data.bin
 
       - name: Golden search tests on the new data

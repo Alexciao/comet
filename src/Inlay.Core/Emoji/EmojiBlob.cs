@@ -12,7 +12,8 @@ internal static class EmojiBlob
     public const uint Magic = 0x31544D43; // "CMT1"
 
     /// <summary>Layout version. A data pack with a different format version is ignored until the app is updated.</summary>
-    public const int FormatVersion = 1;
+    /// <remarks>2: symbols (flagged, after every emoji, with their own term index), search-only aliases.</remarks>
+    public const int FormatVersion = 2;
 
     // Header: magic, format version, data version, section count, then (offset, count) per section.
     public const int HeaderFixedSize = 16;
@@ -23,8 +24,10 @@ internal static class EmojiBlob
         Emoji,       // EmojiRecord
         Shortcodes,  // StringRef: display shortcodes (e.g. "thumbs_up"), grouped per emoji
         Tones,       // StringRef: 5 skin-tone variants per toned emoji
-        Terms,       // TermRecord, sorted ordinally by folded text
+        Terms,       // TermRecord, sorted ordinally by folded text (emoji only)
         Postings,    // uint: Posting.Pack
+        SymbolTerms, // TermRecord: the same index over the symbols, so leaving symbols out costs nothing
+        SymbolPostings,
         Count,
     }
 }
@@ -58,6 +61,8 @@ internal enum EmojiFlags : byte
     Variant = 1,
     /// <summary>The build machine's Segoe UI Emoji drew it as one glyph (default until the app checks the installed font).</summary>
     RenderedOnReferenceFont = 2,
+    /// <summary>A text symbol (→ ° €) rather than an emoji. Symbols follow every emoji in the record table.</summary>
+    Symbol = 4,
 }
 
 [StructLayout(LayoutKind.Sequential, Pack = 4)]
@@ -71,16 +76,21 @@ internal struct TermRecord
 /// <summary>How a term relates to an emoji. Lower values are stronger.</summary>
 public enum TermKind : byte
 {
-    /// <summary>The term is a whole shortcode or alias (folded).</summary>
+    /// <summary>The term is a whole displayed shortcode (folded); the slot is the shortcode's.</summary>
     Shortcode = 0,
+    /// <summary>
+    /// A search-only alias, never displayed: an upstream shortcode that another emoji or a symbol owns, or one that
+    /// can't be snake_case (<c>+1</c>). Ranks like a shortcode; <c>:code:</c> prefers the owner.
+    /// </summary>
+    Alias = 1,
     /// <summary>A curated everyday word ("love", "yay"); the slot is its preference order. Ranks like an alias.</summary>
-    Curated = 1,
+    Curated = 2,
     /// <summary>The term is a shortcode suffix starting at a later word ("tears" in face_holding_back_tears).</summary>
-    ShortcodeWord = 2,
+    ShortcodeWord = 3,
     /// <summary>The term is a CLDR-name suffix starting at a word.</summary>
-    NameWord = 3,
+    NameWord = 4,
     /// <summary>The term is a keyword (CLDR, emojilib or gemoji tag).</summary>
-    Keyword = 4,
+    Keyword = 5,
 }
 
 internal static class Posting

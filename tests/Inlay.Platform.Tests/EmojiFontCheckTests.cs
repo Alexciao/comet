@@ -18,6 +18,31 @@ public sealed class EmojiFontCheckTests
     }
 
     [Fact]
+    public void Symbols_are_checked_against_the_text_fonts()
+    {
+        // U+10FFFD: in no font.
+        Assert.Equal([true, true, true, true, true, false], EmojiFontCheck.CheckText(["→", "✓", "⌘", "∑", "α", "\U0010FFFD"])!);
+    }
+
+    [Fact]
+    public void The_dataset_check_uses_the_emoji_font_for_emoji_and_the_text_fonts_for_symbols()
+    {
+        using var data = EmojiData.LoadEmbedded();
+        var result = EmojiFontCheck.Check(data)!;
+        Assert.Equal(data.Count, result.Length);
+        Assert.True(result[data.IndexOf("👍")]);
+        Assert.True(result[data.IndexOf("⌘")]);
+
+        // Many symbols have no glyph in Segoe UI Emoji: the emoji rule alone would hide them.
+        var symbols = Enumerable.Range(data.FirstSymbol, data.SymbolCount).Select(i => data.Emoji(i).ToString()).ToArray();
+        Assert.True(EmojiFontCheck.Check(symbols)!.Count(drawn => !drawn) > 50);
+
+        var hiddenSymbols = Enumerable.Range(data.FirstSymbol, data.SymbolCount).Where(i => !result[i]).Select(i => data.Emoji(i).ToString()).ToArray();
+        TestContext.Current.TestOutputHelper?.WriteLine($"{data.SymbolCount} symbols, not drawable: {string.Join(' ', hiddenSymbols)}");
+        Assert.True(hiddenSymbols.Length <= 10, string.Join(' ', hiddenSymbols));
+    }
+
+    [Fact]
     public void The_check_mostly_agrees_with_the_data_builder_on_this_machine()
     {
         // The embedded flags were computed against the developer machine's Segoe UI Emoji; CI runners can have
@@ -27,7 +52,7 @@ public sealed class EmojiFontCheckTests
         using var data = EmojiData.LoadEmbedded();
         var sequences = Enumerable.Range(0, data.Count).Select(i => data.Emoji(i).ToString()).ToArray();
         var started = System.Diagnostics.Stopwatch.StartNew();
-        var result = EmojiFontCheck.Check(sequences)!;
+        var result = EmojiFontCheck.Check(data)!; // symbols against the text fonts, like the builder
         var elapsed = started.Elapsed;
         var disagree = Enumerable.Range(0, data.Count).Where(i => result[i] != data.RenderedOnReferenceFont(i)).Select(i => sequences[i]).ToArray();
         TestContext.Current.TestOutputHelper?.WriteLine($"{data.Count} emoji checked in {elapsed.TotalMilliseconds:F0} ms; " +

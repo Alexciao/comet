@@ -27,12 +27,15 @@ public enum ResultKind : byte
     Snippet,
 }
 
+/// <param name="Index">For emoji: the entry in <see cref="EmojiData"/>, an emoji or a symbol (<see cref="EmojiData.IsSymbol"/>).</param>
 /// <param name="Slot">For emoji: the shortcode slot to display (the alias that matched, or 0).</param>
 public readonly record struct SearchResult(ResultKind Kind, int Index, MatchTier Tier, int Slot, int Score);
 
 /// <summary>
-/// Ranks emoji and snippets for a <c>:query</c>. One instance per dataset; not thread-safe (it reuses
+/// Ranks emoji, symbols and snippets for a <c>:query</c>. One instance per dataset; not thread-safe (it reuses
 /// scratch buffers so a search allocates nothing). A search over the full set takes well under 1 ms.
+/// Symbols rank in the same tiers as emoji, but after an emoji in the same tier unless the query is exactly
+/// one of the symbol's names (<c>:euro</c> → €, <c>:heart</c> → ❤️ before ♥).
 /// </summary>
 public sealed class SearchEngine
 {
@@ -43,7 +46,16 @@ public sealed class SearchEngine
     private const int MaxResults = 64;
     private const int MaxCost = 300;
 
+    /// <summary>A symbol in the same tier as an emoji ranks after it (frecency can still lift it)...</summary>
+    private const int SymbolPenalty = 60_000;
+
+    /// <summary>...unless the query is exactly one of its names: then it comes first.</summary>
+    private const int SymbolNameBonus = 150_000;
+
     private readonly EmojiData? _emoji;
+
+    // Entries [0, _count) take part: every emoji, plus the symbols when they are included.
+    private readonly int _count;
     private SnippetIndex _snippets;
 
     // Per-emoji scratch, valid when _stamp[i] == _generation.
@@ -63,11 +75,17 @@ public sealed class SearchEngine
     private MatchTier[] _snippetTier = [];
     private int[] _snippetCost = [];
 
-    public SearchEngine(EmojiData? emoji, SnippetIndex? snippets)
+    /// <param name="includeSymbols">
+    /// False leaves the symbols out entirely (the Symbols setting is off): their index is never read, they never match,
+    /// and per-entry setters ignore their indices.
+    /// </param>
+    public SearchEngine(EmojiData? emoji, SnippetIndex? snippets, bool includeSymbols = true)
     {
         _emoji = emoji;
         _snippets = snippets ?? SnippetIndex.Empty;
-        var n = emoji?.Count ?? 0;
+        var n = emoji is null ? 0 : includeSymbols ? emoji.Count : emoji.FirstSymbol;
+        _count = n;
+        IncludesSymbols = includeSymbols && emoji is { SymbolCount: > 0 };
         _stamp = new int[n];
         _tier = new MatchTier[n];
         _cost = new int[n];
@@ -82,6 +100,9 @@ public sealed class SearchEngine
     }
 
     public EmojiData? Emoji => _emoji;
+
+    /// <summary>Whether symbols take part in search (see the constructor).</summary>
+    public bool IncludesSymbols { get; }
 
     public SnippetIndex Snippets => _snippets;
 
@@ -99,7 +120,11 @@ public sealed class SearchEngine
     }
 
     /// <summary>Sets the frecency score (≥ 0; ~1 per recent pick, decaying) used to boost an emoji within its tier.</summary>
-    public void SetEmojiFrecency(int index, float score) => _emojiFrecency[index] = score;
+    public void SetEmojiFrecency(int index, float score)
+    {
+        if ((uint)index < (uint)_count)
+            _emojiFrecency[index] = score;
+    }
 
     /// <summary>Adds a pick to the live scores right away (the persisted, decayed scores arrive with the next rebuild).</summary>
     public void BumpFrecency(ResultKind kind, int index)
@@ -117,12 +142,17 @@ public sealed class SearchEngine
     }
 
     /// <summary>
-    /// Shows or hides an emoji (hidden emoji never match). Defaults to whether the build machine's font drew it;
-    /// the app replaces that with a check against the installed Segoe UI Emoji.
+    /// Shows or hides an emoji or symbol (hidden entries never match). Defaults to whether the build machine's fonts
+    /// drew it; the app replaces that with a check against the installed fonts (Segoe UI Emoji, or the text fonts for symbols).
     /// </summary>
-    public void SetVisible(int index, bool visible) => _visible[index] = visible;
+    public void SetVisible(int index, bool visible)
+    {
+        if ((uint)index < (uint)_count)
+            _visible[index] = visible;
+    }
 
-    public bool IsVisible(int index) => _visible[index];
+    /// <summary>False for hidden entries and for symbols left out of this engine.</summary>
+    public bool IsVisible(int index) => (uint)index < (uint)_count && _visible[index];
 
     public void ClearFrecency()
     {
@@ -148,23 +178,28 @@ public sealed class SearchEngine
 
         if (_emoji is null)
             return null;
-        var terms = _emoji.Terms;
-        var t = LowerBound(terms, q);
-        if (t < terms.Length && _emoji.Text(terms[t].Text).SequenceEqual(q))
-        {
-            var postings = _emoji.Postings.Slice(terms[t].PostingStart, terms[t].PostingCount);
-            var best = -1;
-            for (var k = 0; k < postings.Length; k++)
-            {
-                if (Posting.Kind(postings[k]) == TermKind.Shortcode && _visible[Posting.Emoji(postings[k])] && (best < 0 || Posting.Slot(postings[k]) < Posting.Slot(postings[best])))
-                    best = k;
-            }
+        // A symbol's own name, then an emoji's displayed shortcode, then a search-only alias (":+1:").
+        if (IncludesSymbols && FindCode(_emoji.SymbolTerms, _emoji.SymbolPostings, q, TermKind.Shortcode) is { } symbol)
+            return symbol;
+        return FindCode(_emoji.Terms, _emoji.Postings, q, TermKind.Shortcode)
+            ?? FindCode(_emoji.Terms, _emoji.Postings, q, TermKind.Alias);
+    }
 
-            if (best >= 0)
-                return new SearchResult(ResultKind.Emoji, Posting.Emoji(postings[best]), MatchTier.Exact, Posting.Slot(postings[best]), 0);
+    private SearchResult? FindCode(ReadOnlySpan<TermRecord> terms, ReadOnlySpan<uint> postingTable, ReadOnlySpan<char> q, TermKind kind)
+    {
+        var t = LowerBound(terms, q);
+        if (t >= terms.Length || !_emoji!.Text(terms[t].Text).SequenceEqual(q))
+            return null;
+
+        var postings = postingTable.Slice(terms[t].PostingStart, terms[t].PostingCount);
+        var best = -1;
+        for (var k = 0; k < postings.Length; k++)
+        {
+            if (Posting.Kind(postings[k]) == kind && _visible[Posting.Emoji(postings[k])] && (best < 0 || Posting.Slot(postings[k]) < Posting.Slot(postings[best])))
+                best = k;
         }
 
-        return null;
+        return best < 0 ? null : new SearchResult(ResultKind.Emoji, Posting.Emoji(postings[best]), MatchTier.Exact, Posting.Slot(postings[best]), 0);
     }
 
     /// <summary>Fills <paramref name="results"/> with the best matches, best first. Returns how many were written.</summary>
@@ -241,8 +276,15 @@ public sealed class SearchEngine
     private int MatchTerms(ReadOnlySpan<char> q)
     {
         var data = _emoji!;
-        var terms = data.Terms;
-        var postings = data.Postings;
+        MatchTerms(q, data.Terms, data.Postings);
+        if (IncludesSymbols)
+            MatchTerms(q, data.SymbolTerms, data.SymbolPostings);
+        return _touchedCount;
+    }
+
+    private void MatchTerms(ReadOnlySpan<char> q, ReadOnlySpan<TermRecord> terms, ReadOnlySpan<uint> postings)
+    {
+        var data = _emoji!;
         for (var t = LowerBound(terms, q); t < terms.Length; t++)
         {
             var text = data.Text(terms[t].Text);
@@ -256,6 +298,7 @@ public sealed class SearchEngine
                 switch (Posting.Kind(p))
                 {
                     case TermKind.Shortcode:
+                    case TermKind.Alias: // search-only, displays slot 0
                         Offer(e, exact ? MatchTier.Exact : MatchTier.ShortcodePrefix, extra, Posting.Slot(p));
                         break;
                     case TermKind.Curated:
@@ -274,8 +317,6 @@ public sealed class SearchEngine
                 }
             }
         }
-
-        return _touchedCount;
     }
 
     private int LowerBound(ReadOnlySpan<TermRecord> terms, ReadOnlySpan<char> q)
@@ -298,7 +339,7 @@ public sealed class SearchEngine
     private void MatchSubsequences(ReadOnlySpan<char> q)
     {
         var data = _emoji!;
-        for (var e = 0; e < data.Count; e++)
+        for (var e = 0; e < _count; e++)
         {
             if (Matched(e) || !_visible[e])
                 continue;
@@ -321,9 +362,15 @@ public sealed class SearchEngine
     private void MatchTypos(ReadOnlySpan<char> q)
     {
         var data = _emoji!;
+        MatchTypos(q, data.Terms, data.Postings);
+        if (IncludesSymbols)
+            MatchTypos(q, data.SymbolTerms, data.SymbolPostings);
+    }
+
+    private void MatchTypos(ReadOnlySpan<char> q, ReadOnlySpan<TermRecord> terms, ReadOnlySpan<uint> postings)
+    {
+        var data = _emoji!;
         var max = q.Length >= 8 ? 2 : 1;
-        var terms = data.Terms;
-        var postings = data.Postings;
         var q0 = q[0];
         var q1 = q[1];
         for (var t = 0; t < terms.Length; t++)
@@ -349,14 +396,14 @@ public sealed class SearchEngine
             {
                 var e = Posting.Emoji(p);
                 if (!Matched(e) || _tier[e] == MatchTier.Typo)
-                    Offer(e, MatchTier.Typo, cost + TypoKindCost(Posting.Kind(p)), Posting.Kind(p) == TermKind.Shortcode ? Posting.Slot(p) : 0);
+                    Offer(e, MatchTier.Typo, cost + TypoKindCost(Posting.Kind(p)), Posting.Kind(p) is TermKind.Shortcode or TermKind.Alias ? Posting.Slot(p) : 0);
             }
         }
     }
 
     private static int TypoKindCost(TermKind kind) => kind switch
     {
-        TermKind.Shortcode => 0,
+        TermKind.Shortcode or TermKind.Alias => 0,
         TermKind.Curated => 2,
         TermKind.ShortcodeWord or TermKind.NameWord => 8,
         _ => 24, // keywords are looser than names: a typo on one costs like an extra edit
@@ -429,6 +476,7 @@ public sealed class SearchEngine
     /// <summary>
     /// Score within a tier (lower is better): frecency is the strongest signal, then how much of the
     /// matched term is left untyped (shorter names first), popularity, and base emoji before variants.
+    /// Symbols go after emoji, except on an exact match of one of their names (the only way a symbol is Exact).
     /// </summary>
     private int EmojiScore(int e)
     {
@@ -441,6 +489,8 @@ public sealed class SearchEngine
         score += PopularityPenalty(data.Popularity(e));
         if (data.IsVariant(e))
             score += 40_000;
+        if (data.IsSymbol(e))
+            score += tier == MatchTier.Exact ? -SymbolNameBonus : SymbolPenalty;
         return score;
     }
 
