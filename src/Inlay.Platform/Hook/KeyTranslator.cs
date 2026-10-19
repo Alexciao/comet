@@ -130,8 +130,24 @@ internal sealed unsafe class KeyTranslator
 
         if (special is { } kind)
         {
+            var dead = _pendingDead;
             _pendingDead = '\0';
-            output[0] = shortcut || altGr ? KeyInput.Of(KeyKind.Shortcut) : KeyInput.Of(kind, shift);
+            if (shortcut || altGr)
+            {
+                output[0] = KeyInput.Of(KeyKind.Shortcut);
+                return 1;
+            }
+
+            // Enter, Tab, Backspace and Escape type a control character: after a dead key, Windows types the accent
+            // first ("'" then Enter gives "'\r"). The caret keys type nothing.
+            if (dead != '\0' && kind is KeyKind.Enter or KeyKind.Tab or KeyKind.Backspace or KeyKind.Escape)
+            {
+                output[0] = KeyInput.Text(dead);
+                output[1] = KeyInput.Of(kind, shift);
+                return 2;
+            }
+
+            output[0] = KeyInput.Of(kind, shift);
             return 1;
         }
 
@@ -159,8 +175,18 @@ internal sealed unsafe class KeyTranslator
 
         if (n < 0)
         {
+            if (_pendingDead != '\0')
+            {
+                // A dead key after a dead key: Windows types both accents, and nothing is pending any more.
+                output[0] = KeyInput.Text(_pendingDead);
+                output[1] = KeyInput.Text(buffer[0]);
+                _pendingDead = '\0';
+                return 2;
+            }
+
+            // The accent travels with the key, so the next key can be recognized as the one resolving it.
             _pendingDead = buffer[0];
-            output[0] = KeyInput.Of(KeyKind.DeadKey);
+            output[0] = new KeyInput(KeyKind.DeadKey, buffer[0]);
             return 1;
         }
 

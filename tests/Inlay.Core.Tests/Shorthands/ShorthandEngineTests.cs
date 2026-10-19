@@ -189,6 +189,71 @@ public sealed class ShorthandEngineTests
         Assert.Equal(ShorthandAction.Expand, Type(e, "cmq ").Action);
     }
 
+    private static KeyInput Dead(char accent) => new(KeyKind.DeadKey, accent);
+
+    /// <summary>
+    /// H13: the key resolving a dead key reaches the app, which still holds the accent. Expanding on it would swallow
+    /// it: the accent would land on the replacement and the key's own character would be lost (US-International:
+    /// <c>"</c> then <c>q</c> types <c>"q</c>, and <c>"</c> ends a word).
+    /// </summary>
+    [Theory]
+    [InlineData('"', "\"")]      // " then space: the accent alone, a boundary
+    [InlineData('"', "\"q")]     // " then q: the accent uncombined, then q
+    [InlineData('"', "\".")]
+    [InlineData('\'', "'\n")]    // ' then Enter: Windows types the accent before the Enter
+    [InlineData('\'', "'\t")]
+    [InlineData('"', "\"\"")]    // " twice: both accents
+    public void The_key_resolving_a_dead_key_never_expands(char accent, string resolved)
+    {
+        var e = Engine();
+        Type(e, "cmq");
+        e.OnKey(Dead(accent));
+        foreach (var c in resolved)
+        {
+            var d = c switch
+            {
+                '\n' => e.OnKey(KeyInput.Of(KeyKind.Enter)),
+                '\t' => e.OnKey(KeyInput.Of(KeyKind.Tab)),
+                _ => e.OnKey(KeyInput.Text(c)),
+            };
+            Assert.Equal(ShorthandAction.None, d.Action);
+            Assert.False(d.Swallow);
+        }
+    }
+
+    [Fact]
+    public void A_modifier_between_a_dead_key_and_its_key_keeps_it_pending()
+    {
+        var e = Engine();
+        Type(e, "cmq");
+        e.OnKey(Dead('"'));
+        e.OnKey(KeyInput.Of(KeyKind.Ignored)); // Shift
+        Assert.Equal(ShorthandAction.None, e.OnKey(KeyInput.Text('"')).Action);
+    }
+
+    [Fact]
+    public void A_composed_letter_continues_the_word_and_the_next_boundary_expands()
+    {
+        var e = Engine(new ShorthandRule("cafè", "coffee shop"));
+        Type(e, "caf");
+        e.OnKey(Dead('`'));
+        Assert.Equal(ShorthandAction.None, e.OnKey(KeyInput.Text('è')).Action);
+        Assert.Equal("cafè", e.CurrentWord.ToString());
+        var d = Type(e, " ");
+        Assert.Equal(ShorthandAction.Expand, d.Action);
+        Assert.Equal(4, d.DeleteCount);
+    }
+
+    [Fact]
+    public void After_an_uncombined_accent_and_its_character_words_expand_again()
+    {
+        var e = Engine();
+        Type(e, "x");
+        e.OnKey(Dead('"'));
+        Type(e, "\"q");
+        Assert.Equal(ShorthandAction.Expand, Type(e, " cmq ").Action);
+    }
+
     [Fact]
     public void Tracking_and_matching_do_not_allocate()
     {
