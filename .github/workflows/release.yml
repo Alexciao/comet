@@ -92,10 +92,28 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
+
       - uses: actions/download-artifact@v4
         with:
           path: assets
           merge-multiple: true
+
+      # The release body is this version's CHANGELOG section (the same text the app shows in Settings), followed by
+      # GitHub's generated list of changes. No section, no release: the notes must exist before tagging.
+      - name: Release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && (/^## \[/ || /^\[[^]]+\]: /) { exit }
+            on { print }
+          ' CHANGELOG.md | sed -e '/./,$!d' > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section for $version"; exit 1; }
+          cat notes.md
 
       - name: Checksums
         working-directory: assets
@@ -105,5 +123,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" --title "Inlay ${GITHUB_REF_NAME#v}" --generate-notes --latest \
+          gh release create "${{ github.ref_name }}" --repo "${{ github.repository }}" --title "Inlay ${GITHUB_REF_NAME#v}" --notes-file notes.md --generate-notes --latest \
             assets/Inlay-Setup-x64.exe assets/Inlay-Portable-x64.zip assets/Inlay-Setup-arm64.exe assets/Inlay-Portable-arm64.zip assets/SHA256SUMS.txt
