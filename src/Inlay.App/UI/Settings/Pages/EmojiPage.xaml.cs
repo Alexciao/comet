@@ -4,7 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace Inlay.App.UI.Settings.Pages;
 
-/// <summary>Settings › Emoji: the feature switch, the default skin tone and clearing the recently used list.</summary>
+/// <summary>Settings › Emoji: the feature switch, symbols and the default skin tone.</summary>
 public sealed partial class EmojiPage : SettingsPage
 {
     private bool _loading;
@@ -16,13 +16,6 @@ public sealed partial class EmojiPage : SettingsPage
 
     protected override void OnAttached() => Load();
 
-    protected override void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
-    {
-        base.OnNavigatedTo(e);
-        // Picks made since the page was last shown don't raise a settings change.
-        ClearButton.IsEnabled = Store.HasFrecency;
-    }
-
     private protected override void OnSettingsChanged(SettingsParts parts)
     {
         if (parts.HasFlag(SettingsParts.Settings))
@@ -33,8 +26,9 @@ public sealed partial class EmojiPage : SettingsPage
     {
         _loading = true;
         FeatureToggle.IsOn = Settings.Features.Emoji;
+        SymbolsToggle.IsOn = Settings.Features.Symbols;
+        SymbolsCard.IsEnabled = Settings.Features.Emoji;
         SkinToneBox.SelectedIndex = Settings.SkinTone;
-        ClearButton.IsEnabled = Store.HasFrecency;
         _loading = false;
     }
 
@@ -54,9 +48,11 @@ public sealed partial class EmojiPage : SettingsPage
         Store.SaveSettings();
     }
 
-    private void OnClearRecent(object sender, RoutedEventArgs e)
+    private void OnSymbolsToggled(object sender, RoutedEventArgs e)
     {
-        Host.ResetFrecency();
-        ClearButton.IsEnabled = false;
+        if (_loading || Settings.Features.Symbols == SymbolsToggle.IsOn)
+            return;
+        Settings.Features.Symbols = SymbolsToggle.IsOn;
+        Store.SaveSettings();
     }
 }

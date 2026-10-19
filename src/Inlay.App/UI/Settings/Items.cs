@@ -72,11 +72,11 @@ public sealed partial class SnippetItem
 }
 
 /// <summary>An shorthands entry as its card shows it ("cmq → comunque").</summary>
-public sealed partial class ReplacementItem
+public sealed partial class ShorthandCardItem
 {
-    private readonly ICardHost<ReplacementItem> _host;
+    private readonly ICardHost<ShorthandCardItem> _host;
 
-    internal ReplacementItem(ShorthandDefinition definition, ICardHost<ReplacementItem> host)
+    internal ShorthandCardItem(ShorthandDefinition definition, ICardHost<ShorthandCardItem> host)
     {
         _host = host;
         Definition = definition;

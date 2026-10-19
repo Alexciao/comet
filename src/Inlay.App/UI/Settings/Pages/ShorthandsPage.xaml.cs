@@ -12,11 +12,11 @@ namespace Inlay.App.UI.Settings.Pages;
 /// Settings › Shorthands: the same layout as Snippets, with a switch on each entry, and the apps where
 /// abbreviations aren't expanded below the list.
 /// </summary>
-public sealed partial class ShorthandsPage : SettingsPage, ICardHost<ReplacementItem>
+public sealed partial class ShorthandsPage : SettingsPage, ICardHost<ShorthandCardItem>
 {
-    private readonly Dictionary<ShorthandDefinition, ReplacementItem> _cache = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<ShorthandDefinition, ShorthandCardItem> _cache = new(ReferenceEqualityComparer.Instance);
     private readonly MenuFlyout _itemMenu = new();
-    private ReplacementItem? _menuItem;
+    private ShorthandCardItem? _menuItem;
     private (ShorthandDefinition Item, int Index)? _deleted;
     private bool _loading;
     private bool _dialogOpen;
@@ -30,7 +30,7 @@ public sealed partial class ShorthandsPage : SettingsPage, ICardHost<Replacement
         AddMenuItem(_itemMenu, "Export…", "", () => _ = ExportAsync(_menuItem?.Definition));
     }
 
-    public ObservableCollection<ReplacementItem> Items { get; } = [];
+    public ObservableCollection<ShorthandCardItem> Items { get; } = [];
 
     private List<ShorthandDefinition> Entries => Store.Shorthands;
 
@@ -61,7 +61,7 @@ public sealed partial class ShorthandsPage : SettingsPage, ICardHost<Replacement
         _loading = false;
 
         var query = SearchBox.Text.Trim();
-        var shown = new List<ReplacementItem>(Entries.Count);
+        var shown = new List<ShorthandCardItem>(Entries.Count);
         foreach (var entry in Entries.OrderBy(e => e.Shorthand, StringComparer.CurrentCultureIgnoreCase))
         {
             if (query.Length > 0
@@ -69,7 +69,7 @@ public sealed partial class ShorthandsPage : SettingsPage, ICardHost<Replacement
                 && !entry.Expansion.Contains(query, StringComparison.CurrentCultureIgnoreCase))
                 continue;
             if (!_cache.TryGetValue(entry, out var item) || !item.IsCurrent)
-                _cache[entry] = item = new ReplacementItem(entry, this);
+                _cache[entry] = item = new ShorthandCardItem(entry, this);
             shown.Add(item);
         }
 
@@ -118,15 +118,15 @@ public sealed partial class ShorthandsPage : SettingsPage, ICardHost<Replacement
 
     private void OnAdd(object sender, RoutedEventArgs e) => _ = EditAsync(null);
 
-    void ICardHost<ReplacementItem>.Open(ReplacementItem item) => _ = EditAsync(item.Definition);
+    void ICardHost<ShorthandCardItem>.Open(ShorthandCardItem item) => _ = EditAsync(item.Definition);
 
-    void ICardHost<ReplacementItem>.ShowMenu(ReplacementItem item, FrameworkElement anchor)
+    void ICardHost<ShorthandCardItem>.ShowMenu(ShorthandCardItem item, FrameworkElement anchor)
     {
         _menuItem = item;
         _itemMenu.ShowAt(anchor);
     }
 
-    void ICardHost<ReplacementItem>.EnabledChanged(ReplacementItem item) => Store.SaveShorthands();
+    void ICardHost<ShorthandCardItem>.EnabledChanged(ShorthandCardItem item) => Store.SaveShorthands();
 
     private async Task EditAsync(ShorthandDefinition? existing)
     {

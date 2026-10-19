@@ -86,6 +86,12 @@
                             </toolkit:SettingsCard>
                         </toolkit:SettingsExpander.Items>
                     </toolkit:SettingsExpander>
+                    <toolkit:SettingsCard Header="Clear recent items" Description="Forget what you picked, so results go back to their usual order">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE74D;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <Button x:Name="ClearButton" Click="OnClearRecent" Content="Clear" />
+                    </toolkit:SettingsCard>
                     <toolkit:SettingsCard x:Name="CreateCard" Header="Offer to create a snippet when nothing matches">
                         <toolkit:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE710;" />

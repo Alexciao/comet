@@ -20,14 +20,19 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
-                    <toolkit:SettingsCard Header="Emoji" Description="Type : and a few letters in any app to pick an emoji">
+                    <toolkit:SettingsCard Header="Emoji" Description="Show emoji in Quick Insert">
                         <toolkit:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE76E;" />
                         </toolkit:SettingsCard.HeaderIcon>
                         <ToggleSwitch OffContent="Off" OnContent="On" x:Name="FeatureToggle" AutomationProperties.Name="Emoji" Toggled="OnFeatureToggled" />
                     </toolkit:SettingsCard>
 
-                    <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Emoji picker" />
+                    <toolkit:SettingsCard x:Name="SymbolsCard" Header="Symbols" Description="Show arrows, math, currency and other symbols in Quick Insert">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE8D2;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <ToggleSwitch OffContent="Off" OnContent="On" x:Name="SymbolsToggle" AutomationProperties.Name="Symbols" Toggled="OnSymbolsToggled" />
+                    </toolkit:SettingsCard>
                     <toolkit:SettingsCard Header="Default skin tone" Description="Used for emoji that come in more than one skin tone">
                         <toolkit:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE790;" />
@@ -40,12 +45,6 @@
                             <ComboBoxItem Content="✋🏾  Medium-dark" />
                             <ComboBoxItem Content="✋🏿  Dark" />
                         </ComboBox>
-                    </toolkit:SettingsCard>
-                    <toolkit:SettingsCard Header="Clear recently used" Description="The : menu forgets which emoji and snippets you picked most and goes back to its usual order">
-                        <toolkit:SettingsCard.HeaderIcon>
-                            <FontIcon Glyph="&#xE81C;" />
-                        </toolkit:SettingsCard.HeaderIcon>
-                        <Button x:Name="ClearButton" Click="OnClearRecent" Content="Clear" />
                     </toolkit:SettingsCard>
                 </StackPanel>
             </Grid>

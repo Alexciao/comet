@@ -7,7 +7,7 @@
     NavigationCacheMode="Required">
 
     <Page.Resources>
-        <DataTemplate x:Key="ReplacementTemplate" x:DataType="local:ReplacementItem">
+        <DataTemplate x:Key="ShorthandTemplate" x:DataType="local:ShorthandCardItem">
             <toolkit:SettingsCard
                 AutomationProperties.Name="{x:Bind Header}"
                 Click="{x:Bind Open}"
@@ -117,7 +117,7 @@
                         </Button>
                     </Grid>
 
-                    <ItemsRepeater x:Name="List" VerticalCacheLength="{StaticResource SettingsListCacheLength}" ItemTemplate="{StaticResource ReplacementTemplate}" ItemsSource="{x:Bind Items}">
+                    <ItemsRepeater x:Name="List" VerticalCacheLength="{StaticResource SettingsListCacheLength}" ItemTemplate="{StaticResource ShorthandTemplate}" ItemsSource="{x:Bind Items}">
                         <ItemsRepeater.Layout>
                             <StackLayout Spacing="{StaticResource SettingsCardSpacing}" />
                         </ItemsRepeater.Layout>
