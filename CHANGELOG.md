@@ -5,7 +5,11 @@ All notable changes to Inlay (called Comet before 1.1) are listed in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.1] - 2026-10-20
+
+### Added
+
+- **Check for updates** in Settings › General checks for a new Inlay and new emoji data right away, even with the automatic checks turned off.
 
 ### Fixed
 
@@ -64,5 +68,6 @@ The first release, under the name Comet.
 - **Update notifications**: Comet tells you when a new version is out, and never installs anything by itself.
 - Installer (per user, no admin rights) and portable zip, for x64 and Arm64.
 
+[1.1.1]: https://github.com/Alexciao/inlay/releases/tag/v1.1.1
 [1.1.0]: https://github.com/Alexciao/inlay/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Alexciao/inlay/releases/tag/v1.0.0
