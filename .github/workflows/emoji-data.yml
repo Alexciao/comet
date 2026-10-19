@@ -95,6 +95,7 @@ jobs:
           }
           "built:     data $($new.dataVersion), content $($new.contentHash), $($new.emojiCount) emoji"
           "changed=$changed" >> $env:GITHUB_OUTPUT
+          exit 0 # the download above fails on the first run (no release yet); that is expected
 
       - name: Publish
         if: steps.compare.outputs.changed == 'true'

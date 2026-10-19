@@ -104,7 +104,7 @@ Release build (Native AOT), measured; details in [docs/performance.md](docs/perf
 | Start → ready | 113–148 ms |
 | Tray click → Settings drawn (warm / first) | 154–168 ms / 217–243 ms |
 | CPU while idle | ≈ 0 (Comet's threads: 0 cycles) |
-| Download (installer) | ~25 MB |
+| Download (installer) | 18 MB |
 
 ## Privacy
 
