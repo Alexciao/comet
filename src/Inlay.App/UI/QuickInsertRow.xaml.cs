@@ -45,6 +45,7 @@ public sealed partial class QuickInsertRow : UserControl
     private Slot _slot = Slot.Emoji;
 
     private readonly Image[] _pickImages = new Image[MaxPicks];
+    private readonly FontIcon[] _pickGlyphs = new FontIcon[MaxPicks];
     private readonly Border[] _pickRings = new Border[MaxPicks];
 
     public QuickInsertRow()
@@ -94,21 +95,22 @@ public sealed partial class QuickInsertRow : UserControl
     }
 
     /// <summary>
-    /// An image row: the thumbnail where an emoji would be (an image icon until it arrives, so nothing moves), the
-    /// name, and the type and size ("GIF, 240 × 180").
+    /// An image row: the thumbnail where an emoji would be (a neutral box of the same size until it arrives, so
+    /// nothing moves; the image glyph when there is no image to show), the name, and the type and size
+    /// ("GIF, 240 × 180").
     /// </summary>
-    public void ShowImage(ImageSource? thumbnail, string trigger, string name, (int Start, int Length) match, string caption)
+    public void ShowImage(ThumbnailView thumbnail, string trigger, string name, (int Start, int Length) match, string caption)
     {
-        if (thumbnail is not null)
-        {
-            ThumbImage.Source = thumbnail;
-            ShowSlot(Slot.Thumbnail);
-        }
-        else
+        if (thumbnail.Glyph)
         {
             ThumbImage.Source = null;
             GlyphIcon.Glyph = ImageGlyph;
             ShowSlot(Slot.Icon);
+        }
+        else
+        {
+            ThumbImage.Source = thumbnail.Image;
+            ShowSlot(Slot.Thumbnail);
         }
 
         SetCode(trigger, name, match);
@@ -117,9 +119,10 @@ public sealed partial class QuickInsertRow : UserControl
 
     /// <summary>
     /// Shows the "Let me pick" strip under the row (the row grows by <see cref="PickStripHeight"/>), with
-    /// <paramref name="chosen"/> ringed in the accent color. A null thumbnail is still loading.
+    /// <paramref name="chosen"/> ringed in the accent color. A slot without an image is a neutral box (still loading)
+    /// or, when there is nothing to show, the image glyph.
     /// </summary>
-    public void ShowPickStrip(IReadOnlyList<ImageSource?> thumbnails, int chosen)
+    public void ShowPickStrip(IReadOnlyList<ThumbnailView> thumbnails, int chosen)
     {
         if (_pickImages[0] is null)
             BuildPickStrip();
@@ -129,7 +132,8 @@ public sealed partial class QuickInsertRow : UserControl
             slot.Visibility = i < thumbnails.Count ? Visibility.Visible : Visibility.Collapsed;
             if (i >= thumbnails.Count)
                 continue;
-            _pickImages[i].Source = thumbnails[i];
+            _pickImages[i].Source = thumbnails[i].Image;
+            _pickGlyphs[i].Visibility = thumbnails[i].Glyph ? Visibility.Visible : Visibility.Collapsed;
             _pickRings[i].Visibility = i == chosen ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -157,7 +161,8 @@ public sealed partial class QuickInsertRow : UserControl
         for (var i = 0; i < MaxPicks; i++)
         {
             _pickImages[i] = new Image { Stretch = Stretch.UniformToFill };
-            var frame = new Border { Width = PickBox, Height = PickBox, CornerRadius = new CornerRadius(4), Child = _pickImages[i] };
+            _pickGlyphs[i] = new FontIcon { FontFamily = GlyphIcon.FontFamily, Glyph = ImageGlyph, FontSize = 16, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
+            var frame = new Border { Width = PickBox, Height = PickBox, CornerRadius = new CornerRadius(4), Child = new Grid { Children = { _pickImages[i], _pickGlyphs[i] } } };
             frame.BorderThickness = new Thickness(1);
             frame.BorderBrush = Thumb.BorderBrush;
             frame.Background = Thumb.Background;

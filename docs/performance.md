@@ -82,6 +82,20 @@ off, handles −37, GDI/USER objects unchanged; no errors logged. Latency over t
 p95 9.6 ms, p99 10.8 ms (n = 4,096 most recent); hook cost per keystroke p50 67 µs idle / 161 µs with the popup
 open.
 
+## "Let me pick" preview (Debug build, E2E `Let_me_pick_shows_thumbnails_for_new_files_and_the_preview_never_flashes`)
+
+The preview window is placed and laid out cloaked and uncloaked only once the image has opened, two frames have
+rendered and DWM has composed once more, so it never appears empty. Checked with real keystrokes: a sampler
+grabbed the preview's screen rectangle in a loop while the picker opened five times; no sample showed the window
+without its picture (6 runs in a row, 30 opens; with a single frame wait it failed in about 1 of 5 opens).
+
+| Metric | Value | How |
+|---|---:|---|
+| Preview shown → first visible frame, with the image in it | p50 33–47 ms (3 runs, 5 opens each; first open of a new file is the slowest, 160–175 ms) | "preview shown to first frame" log line. Counted from the moment the preview is requested, which is 100 ms after the row is selected on purpose (no flicker while arrowing). |
+| Quick Insert popup, keystroke → rendered | unchanged | the popup's own path was not touched |
+
+Measured on a Debug build; the shipped AOT build was not re-measured for this change.
+
 ## Settings window (Release, Native AOT, 500 snippets + 500 replacements)
 
 Measured inside Inlay with `INLAY_PERF=1` (time from the action to the composed frame that shows its result,

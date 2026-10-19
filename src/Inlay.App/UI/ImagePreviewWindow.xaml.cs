@@ -1,4 +1,5 @@
 using Inlay.Platform;
+using Inlay.Platform.Engine;
 using Inlay.Platform.Native;
 using Microsoft.UI;
 using Microsoft.UI.Composition;
@@ -12,7 +13,9 @@ namespace Inlay.App.UI;
 /// <summary>
 /// A larger preview of the selected image row, beside Quick Insert. Like Quick Insert it is created once at startup,
 /// never activates and stays DWM-cloaked between uses; Quick Insert never resizes for it. The image is decoded at
-/// the preview's display size only, and a GIF animates only while the preview is visible.
+/// the preview's display size only, and a GIF animates only while the preview is visible. The window is placed and
+/// laid out while cloaked and uncloaked only after the first frame rendered with the decoded image in it (the same
+/// rule as Quick Insert), so it never appears empty and then fills in.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "The backdrop controller is disposed when the window closes.")]
 public sealed partial class ImagePreviewWindow : Window
@@ -22,12 +25,25 @@ public sealed partial class ImagePreviewWindow : Window
     private const double PaddingEpx = 8;
     private const double GapEpx = 6;
 
+    /// <summary>Show → first visible frame with the image in it (logged on exit with Quick Insert's).</summary>
+    internal LatencyStats ShowLatency { get; } = new("preview shown to first frame");
+
     private readonly nint _hwnd;
     private readonly SystemBackdropConfiguration _backdropConfig;
     private readonly DesktopAcrylicController _acrylic;
     private string? _path;
     private BitmapImage? _bitmap;
     private bool _shown;
+    private bool _opened;
+    private int _framesToWait;
+    private int _showId;
+
+    /// <summary>
+    /// Rendered frames to let pass after the image opened before uncloaking: the first can still be the one composed
+    /// before the picture reached the surface (seen as an empty acrylic frame for one refresh).
+    /// </summary>
+    private const int FramesBeforeUncloak = 2;
+    private long _showStart;
 
     public ImagePreviewWindow()
     {
@@ -76,13 +92,18 @@ public sealed partial class ImagePreviewWindow : Window
         if (!string.Equals(path, _path, StringComparison.OrdinalIgnoreCase))
         {
             _path = path;
+            _opened = false;
             // Decode no larger than the preview shows it (in physical pixels): never the full image.
-            _bitmap = new BitmapImage { DecodePixelWidth = (int)Math.Round(MaxSizeEpx * scale), DecodePixelType = DecodePixelType.Physical, AutoPlay = false };
-            _bitmap.ImageOpened += OnImageOpened;
-            _bitmap.ImageFailed += (_, e) => Log.Warn($"preview: {e.ErrorMessage}");
-            _bitmap.UriSource = new Uri(path);
-            Picture.Source = _bitmap;
+            var bitmap = new BitmapImage { DecodePixelWidth = (int)Math.Round(MaxSizeEpx * scale), DecodePixelType = DecodePixelType.Physical, AutoPlay = false };
+            bitmap.ImageOpened += OnImageOpened;
+            bitmap.ImageFailed += (_, e) => Log.Warn($"preview: {e.ErrorMessage}"); // stays cloaked: no empty preview
+            bitmap.UriSource = new Uri(path);
+            _bitmap = bitmap;
+            Picture.Source = bitmap;
         }
+
+        _showStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        _showId++;
 
         var size = (int)Math.Round((MaxSizeEpx + (2 * PaddingEpx)) * scale);
         var gap = (int)Math.Round(GapEpx * scale);
@@ -96,21 +117,51 @@ public sealed partial class ImagePreviewWindow : Window
         _shown = true;
         if (_bitmap is { IsAnimatedBitmap: true, IsPlaying: false })
             _bitmap.Play();
-        // Uncloak once the frame with this image has rendered, so the old picture never flashes.
-        CompositionTarget.Rendered += OnRendered;
+        // Uncloak once the image is decoded and the frame with it has rendered, so neither an empty preview nor
+        // the old picture ever shows. A same-image Show (already decoded) only waits for the frame.
+        if (_opened)
+            AwaitFrame();
     }
 
     private void OnImageOpened(object sender, RoutedEventArgs e)
     {
-        if (_shown && sender is BitmapImage { IsAnimatedBitmap: true } bitmap)
+        if (!ReferenceEquals(sender, _bitmap))
+            return; // a picture that was replaced before it finished decoding
+        _opened = true;
+        if (!_shown)
+            return;
+        if (_bitmap is { IsAnimatedBitmap: true } bitmap)
             bitmap.Play();
+        AwaitFrame();
+    }
+
+    private void AwaitFrame()
+    {
+        _framesToWait = FramesBeforeUncloak;
+        CompositionTarget.Rendered -= OnRendered;
+        CompositionTarget.Rendered += OnRendered;
     }
 
     private void OnRendered(object? sender, RenderedEventArgs e)
     {
+        if (_shown && --_framesToWait > 0)
+            return;
         CompositionTarget.Rendered -= OnRendered;
-        if (_shown)
-            Cloak(false);
+        if (!_shown)
+            return;
+        // Let DWM compose once more (off the UI thread) so the uncloak can't show the frame from before the picture.
+        var show = _showId;
+        _ = Task.Run(() =>
+        {
+            _ = Dwm.DwmFlush();
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (show != _showId || !_shown)
+                    return; // hidden or replaced meanwhile
+                Cloak(false);
+                ShowLatency.Add(System.Diagnostics.Stopwatch.GetElapsedTime(_showStart).TotalMicroseconds);
+            });
+        });
     }
 
     /// <summary>Hides the preview at once and stops any animation.</summary>
@@ -119,6 +170,7 @@ public sealed partial class ImagePreviewWindow : Window
         if (!_shown)
             return;
         _shown = false;
+        _showId++;
         CompositionTarget.Rendered -= OnRendered;
         Cloak(true);
         if (_bitmap is { IsPlaying: true })
@@ -132,6 +184,7 @@ public sealed partial class ImagePreviewWindow : Window
         Picture.Source = null;
         _bitmap = null;
         _path = null;
+        _opened = false;
     }
 
     private void Cloak(bool cloak) => Dwm.SetInt(_hwnd, Dwm.DWMWA_CLOAK, cloak ? 1 : 0);

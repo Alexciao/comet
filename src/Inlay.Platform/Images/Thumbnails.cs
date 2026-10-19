@@ -16,6 +16,10 @@ internal sealed record ThumbnailPixels(int Width, int Height, byte[] Bgra);
 /// build the thumbnail. A placeholder without a cached thumbnail gets none (null: show the generic tile), so a
 /// thumbnail never downloads a file.
 /// </para>
+/// <para>
+/// <see cref="ResolveAsync"/> also says what to do when the shell has nothing (see <see cref="ThumbnailFallback"/>);
+/// <see cref="GetAsync"/> is the shell's answer alone.
+/// </para>
 /// </summary>
 internal sealed unsafe class Thumbnails : IDisposable
 {
@@ -33,7 +37,7 @@ internal sealed unsafe class Thumbnails : IDisposable
     private readonly object _gate = new(); // Monitor.Wait/Pulse: the worker sleeps on it
     private readonly Dictionary<Key, LinkedListNode<(Key Key, ThumbnailPixels Pixels)>> _cache = [];
     private readonly LinkedList<(Key Key, ThumbnailPixels Pixels)> _lru = new();
-    private readonly Dictionary<Key, TaskCompletionSource<ThumbnailPixels?>> _inFlight = [];
+    private readonly Dictionary<Key, TaskCompletionSource<ThumbnailOutcome>> _inFlight = [];
     private readonly Queue<Key> _queue = new();
     private Thread? _thread;
     private bool _disposed;
@@ -67,20 +71,28 @@ internal sealed unsafe class Thumbnails : IDisposable
 
     /// <summary>
     /// The thumbnail of <paramref name="path"/> fitting <paramref name="sizePx"/> × <paramref name="sizePx"/> physical
-    /// pixels (aspect ratio kept), or null when there is none. Completes on a pool thread.
+    /// pixels (aspect ratio kept), or null when the shell has none. Completes on a pool thread.
     /// </summary>
-    public Task<ThumbnailPixels?> GetAsync(string path, int sizePx, DateTime version = default)
+    public Task<ThumbnailPixels?> GetAsync(string path, int sizePx, DateTime version = default) =>
+        ResolveAsync(path, sizePx, version).ContinueWith(t => t.Result.Pixels, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+
+    /// <summary>
+    /// Like <see cref="GetAsync"/>, but when the shell has no thumbnail it says what to do instead: decode the file at
+    /// thumbnail size, show a neutral placeholder (cloud-only file), or show the glyph (missing or too big). The decode
+    /// itself is the caller's; only shell thumbnails are kept in the cache here.
+    /// </summary>
+    public Task<ThumbnailOutcome> ResolveAsync(string path, int sizePx, DateTime version = default)
     {
         if (TryGetCached(path, sizePx, version) is { } cached)
-            return Task.FromResult<ThumbnailPixels?>(cached);
+            return Task.FromResult(new ThumbnailOutcome(ThumbnailKind.Shell, cached));
         var key = new Key(path, Math.Clamp(sizePx, MinSize, MaxSize), version);
         lock (_gate)
         {
             if (_disposed)
-                return Task.FromResult<ThumbnailPixels?>(null);
+                return Task.FromResult(ThumbnailOutcome.Glyph);
             if (_inFlight.TryGetValue(key, out var running))
                 return running.Task;
-            var tcs = new TaskCompletionSource<ThumbnailPixels?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var tcs = new TaskCompletionSource<ThumbnailOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
             _inFlight[key] = tcs;
             _queue.Enqueue(key);
             if (_thread is null)
@@ -96,6 +108,24 @@ internal sealed unsafe class Thumbnails : IDisposable
 
             return tcs.Task;
         }
+    }
+
+    /// <summary>Raised on a pool thread when a file's thumbnails were dropped because the file changed.</summary>
+    public event Action<string>? Invalidated;
+
+    /// <summary>Drops every thumbnail of <paramref name="path"/> (the file changed, was replaced or deleted).</summary>
+    public void Invalidate(string path)
+    {
+        lock (_gate)
+        {
+            foreach (var key in _cache.Keys.Where(k => string.Equals(k.Path, path, StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                _lru.Remove(_cache[key]);
+                _cache.Remove(key);
+            }
+        }
+
+        Invalidated?.Invoke(path);
     }
 
     /// <summary>Drops every cached thumbnail (the feature was turned off).</summary>
@@ -127,25 +157,25 @@ internal sealed unsafe class Thumbnails : IDisposable
                 key = _queue.Dequeue();
             }
 
-            ThumbnailPixels? pixels = null;
+            var outcome = ThumbnailOutcome.Glyph;
             try
             {
-                pixels = Extract(key.Path, key.Size);
+                outcome = Extract(key.Path, key.Size);
             }
             catch (Exception ex)
             {
                 Log.Error("thumbnail", ex);
             }
 
-            TaskCompletionSource<ThumbnailPixels?>? tcs;
+            TaskCompletionSource<ThumbnailOutcome>? tcs;
             lock (_gate)
             {
                 _inFlight.Remove(key, out tcs);
-                if (pixels is not null && !_disposed)
+                if (outcome.Pixels is { } pixels && !_disposed)
                     Store(key, pixels);
             }
 
-            tcs?.TrySetResult(pixels);
+            tcs?.TrySetResult(outcome);
         }
     }
 
@@ -161,24 +191,38 @@ internal sealed unsafe class Thumbnails : IDisposable
         }
     }
 
-    private static ThumbnailPixels? Extract(string path, int size)
+    private static ThumbnailOutcome Extract(string path, int size)
     {
         FileAttributes attributes;
+        long length;
         try
         {
             attributes = File.GetAttributes(path);
+            length = new FileInfo(path).Length;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return null;
+            return ThumbnailOutcome.Glyph; // missing or unreadable
         }
 
+        var cloudOnly = FolderCache.IsCloudOnly(attributes);
+        var pixels = FromShell(path, size, cloudOnly);
+        var kind = ThumbnailFallback.Decide(pixels is not null, exists: true, cloudOnly, length);
+        return new ThumbnailOutcome(kind, kind == ThumbnailKind.Shell ? pixels : null);
+    }
+
+    /// <summary>
+    /// The shell's thumbnail: the cache first, then (only for files whose content is on this PC) a request that makes
+    /// one when none is cached. <c>THUMBNAILONLY</c> fails rather than return a generic file-type icon.
+    /// </summary>
+    private static ThumbnailPixels? FromShell(string path, int size, bool cloudOnly)
+    {
         if (ImageApi.SHCreateItemFromParsingName(path, 0, IidShellItemImageFactory, out var factory) < 0 || factory == 0)
             return null;
         try
         {
             var bitmap = GetImage(factory, size, SIIGBF_THUMBNAILONLY | SIIGBF_INCACHEONLY);
-            if (bitmap == 0 && !FolderCache.IsCloudOnly(attributes))
+            if (bitmap == 0 && !cloudOnly)
                 bitmap = GetImage(factory, size, SIIGBF_THUMBNAILONLY);
             if (bitmap == 0)
                 return null;
@@ -245,7 +289,7 @@ internal sealed unsafe class Thumbnails : IDisposable
 
     public void Dispose()
     {
-        List<TaskCompletionSource<ThumbnailPixels?>> waiting;
+        List<TaskCompletionSource<ThumbnailOutcome>> waiting;
         lock (_gate)
         {
             _disposed = true;
@@ -258,6 +302,6 @@ internal sealed unsafe class Thumbnails : IDisposable
         }
 
         foreach (var t in waiting)
-            t.TrySetResult(null);
+            t.TrySetResult(ThumbnailOutcome.Glyph);
     }
 }

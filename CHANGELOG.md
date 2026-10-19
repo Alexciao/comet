@@ -5,6 +5,12 @@ All notable changes to Inlay (called Comet before 1.1) are listed in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- In Images, "Let me pick" no longer flashes when it opens, and its thumbnails show up for pictures Windows has not made a thumbnail for yet.
+
 ## [1.1.0] - 2026-10-20
 
 Comet is now Inlay. Installing 1.1 over Comet 1.0 upgrades it in place and keeps your settings, snippets, shorthands and excluded apps.
