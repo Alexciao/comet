@@ -28,7 +28,7 @@
                         VerticalAlignment="Center"
                         Foreground="{ThemeResource SystemFillColorCautionBrush}"
                         Glyph="&#xE7BA;"
-                        ToolTipService.ToolTip="A placeholder isn't written correctly; it will be inserted as typed." />
+                        ToolTipService.ToolTip="A placeholder isn't written correctly and will be inserted as typed" />
                     <Button
                         AutomationProperties.Name="{x:Bind MoreOptionsName}"
                         Click="{x:Bind ShowMenu}"
@@ -70,7 +70,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
 
-                    <toolkit:SettingsCard Header="Snippets" Description="Save text you type often, then insert it from the : menu by its name">
+                    <toolkit:SettingsCard Header="Snippets" Description="Insert text you use often from Quick Insert">
                         <toolkit:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE70B;" />
                         </toolkit:SettingsCard.HeaderIcon>
@@ -138,7 +138,7 @@
                         Padding="{StaticResource SettingsEmptyStatePadding}"
                         HorizontalAlignment="Center"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="No snippets match your search." />
+                        Text="No snippets match your search" />
 
                     <StackPanel
                         x:Name="EmptyState"
@@ -146,8 +146,8 @@
                         Padding="{StaticResource SettingsEmptyStatePadding}"
                         HorizontalAlignment="Center"
                         Spacing="{StaticResource SettingsToolbarSpacing}">
-                        <TextBlock HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="You haven't added any snippets yet." />
-                        <Button HorizontalAlignment="Center" Click="OnAdd" Content="Add your first snippet" Style="{StaticResource AccentButtonStyle}" />
+                        <TextBlock HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Snippets you add appear here" />
+                        <Button HorizontalAlignment="Center" Click="OnAdd" Content="Add snippet" Style="{StaticResource AccentButtonStyle}" />
                     </StackPanel>
                 </StackPanel>
             </Grid>

@@ -33,7 +33,7 @@
                     <InfoBar x:Name="StatusBar" x:Load="False" IsOpen="False" />
 
                     <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Startup" />
-                    <toolkit:SettingsCard x:Name="StartupCard" Header="Start with Windows" Description="Inlay starts in the notification area when you sign in">
+                    <toolkit:SettingsCard x:Name="StartupCard" Header="Start with Windows" Description="Start Inlay when you sign in to Windows">
                         <toolkit:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE7E8;" />
                         </toolkit:SettingsCard.HeaderIcon>
@@ -71,7 +71,7 @@
                     </toolkit:SettingsCard>
 
                     <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="About" />
-                    <toolkit:SettingsExpander x:Name="AboutExpander" AutomationProperties.Name="About Inlay" Header="Inlay" Description="Emoji, snippets and shorthands for any app">
+                    <toolkit:SettingsExpander x:Name="AboutExpander" AutomationProperties.Name="About Inlay" Header="Inlay" Description="Snippets, images, emoji and shorthands in any app">
                         <toolkit:SettingsExpander.HeaderIcon>
                             <ImageIcon Source="ms-appx:///Assets/AppIcon16.png" />
                         </toolkit:SettingsExpander.HeaderIcon>

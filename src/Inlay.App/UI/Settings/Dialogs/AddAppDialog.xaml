@@ -15,7 +15,7 @@
     </ContentDialog.Resources>
 
     <StackPanel Width="{StaticResource SettingsDialogContentWidth}" Spacing="{StaticResource SettingsToolbarSpacing}">
-        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Choose an app that's open, or browse for its program file." TextWrapping="Wrap" />
+        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Choose an open app or browse for its program file" TextWrapping="Wrap" />
         <Grid ColumnSpacing="{StaticResource SettingsToolbarSpacing}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -61,7 +61,7 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Text="No open apps match. Use Browse… to pick a program file."
+                Text="No open apps match. Use Browse to choose a program file"
                 TextWrapping="Wrap"
                 Visibility="Collapsed" />
         </Grid>

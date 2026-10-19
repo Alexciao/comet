@@ -198,7 +198,7 @@ public sealed partial class SnippetsPage : SettingsPage, ICardHost<SnippetItem>
         Snippets.RemoveAt(index);
         _deleted = (item!, index);
         Store.SaveSnippets();
-        ShowStatus(InfoBarSeverity.Informational, $"Deleted {item!.Name}.", canUndo: true);
+        ShowStatus(InfoBarSeverity.Informational, $"Deleted {item!.Name}", canUndo: true);
     }
 
     private void OnUndo(object sender, RoutedEventArgs e)
@@ -229,11 +229,11 @@ public sealed partial class SnippetsPage : SettingsPage, ICardHost<SnippetItem>
                 return;
             var (added, replaced) = ImportExport.ImportSnippets(json, Snippets);
             Store.SaveSnippets();
-            ShowStatus(InfoBarSeverity.Success, $"Imported {added} new and {replaced} updated snippets.", canUndo: false);
+            ShowStatus(InfoBarSeverity.Success, $"Imported {added} new and {replaced} updated snippets", canUndo: false);
         }
         catch (Exception ex) when (FilePickers.IsFileError(ex) || ex is FormatException)
         {
-            ShowStatus(InfoBarSeverity.Error, $"Couldn't import: {ex.Message}", canUndo: false);
+            ShowStatus(InfoBarSeverity.Error, $"Couldn't import the file. {ex.Message}", canUndo: false);
         }
     }
 
@@ -247,11 +247,11 @@ public sealed partial class SnippetsPage : SettingsPage, ICardHost<SnippetItem>
         {
             var name = await FilePickers.SaveJsonAsync(OwnerWindow, one is null ? "Inlay snippets" : $"Snippet {one.Name}", ImportExport.ExportSnippets(snippets)).ConfigureAwait(true);
             if (name is not null)
-                ShowStatus(InfoBarSeverity.Success, snippets.Count == 1 ? $"Exported 1 snippet to {name}." : $"Exported {snippets.Count} snippets to {name}.", canUndo: false);
+                ShowStatus(InfoBarSeverity.Success, snippets.Count == 1 ? $"Exported 1 snippet to {name}" : $"Exported {snippets.Count} snippets to {name}", canUndo: false);
         }
         catch (Exception ex) when (FilePickers.IsFileError(ex))
         {
-            ShowStatus(InfoBarSeverity.Error, $"Couldn't export: {ex.Message}", canUndo: false);
+            ShowStatus(InfoBarSeverity.Error, $"Couldn't export the file. {ex.Message}", canUndo: false);
         }
     }
 

@@ -61,18 +61,18 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
 
-                    <toolkit:SettingsCard Header="Shorthands" Description="Expand abbreviations as you type: finish the word and it becomes the replacement">
+                    <toolkit:SettingsCard Header="Shorthands" Description="Expand abbreviations automatically as you type">
                         <toolkit:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE8AC;" />
                         </toolkit:SettingsCard.HeaderIcon>
                         <ToggleSwitch OffContent="Off" OnContent="On" x:Name="FeatureToggle" AutomationProperties.Name="Shorthands" Toggled="OnFeatureToggled" />
                     </toolkit:SettingsCard>
 
-                    <toolkit:SettingsCard x:Name="AddCard" Header="Add a replacement" Description="Backspace right after an expansion undoes it">
+                    <toolkit:SettingsCard x:Name="AddCard" Header="Add a shorthand" Description="Backspace right after an expansion undoes it">
                         <toolkit:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE710;" />
                         </toolkit:SettingsCard.HeaderIcon>
-                        <Button Click="OnAdd" Content="Add replacement" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Click="OnAdd" Content="Add shorthand" Style="{StaticResource AccentButtonStyle}" />
                     </toolkit:SettingsCard>
 
                     <Grid Margin="{StaticResource SettingsListToolbarMargin}" ColumnSpacing="{StaticResource SettingsToolbarSpacing}">
@@ -86,7 +86,7 @@
                             x:Name="SearchBox"
 
                             AutomationProperties.Name="Search replacements"
-                            PlaceholderText="Search replacements"
+                            PlaceholderText="Search shorthands"
                             QueryIcon="Find"
                             TextChanged="OnSearchChanged" />
                         <TextBlock
@@ -129,7 +129,7 @@
                         Padding="{StaticResource SettingsEmptyStatePadding}"
                         HorizontalAlignment="Center"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="No replacements match your search." />
+                        Text="No shorthands match your search" />
 
                     <StackPanel
                         x:Name="EmptyState"
@@ -137,12 +137,12 @@
                         Padding="{StaticResource SettingsEmptyStatePadding}"
                         HorizontalAlignment="Center"
                         Spacing="{StaticResource SettingsToolbarSpacing}">
-                        <TextBlock HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="You haven't added any replacements yet." />
-                        <Button HorizontalAlignment="Center" Click="OnAdd" Content="Add your first replacement" Style="{StaticResource AccentButtonStyle}" />
+                        <TextBlock HorizontalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Shorthands you add appear here" />
+                        <Button HorizontalAlignment="Center" Click="OnAdd" Content="Add shorthand" Style="{StaticResource AccentButtonStyle}" />
                     </StackPanel>
 
                     <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Apps" />
-                    <local:ExcludedAppsExpander x:Name="ExcludedApps" Description="Abbreviations aren't expanded in these apps" />
+                    <local:ExcludedAppsExpander x:Name="ExcludedApps" Description="Shorthands don't expand in these apps" />
                 </StackPanel>
             </Grid>
         </ScrollViewer>

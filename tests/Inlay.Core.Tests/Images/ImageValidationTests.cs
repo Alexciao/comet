@@ -37,7 +37,7 @@ public sealed class ImageValidationTests
         var m = Assert.Single(EntryValidation.ValidateImage(Image("fire"), [], [], Emoji, trigger: ";"));
         Assert.Equal(Severity.Warning, m.Severity);
         Assert.Contains("“;fire”", m.Text, StringComparison.Ordinal);
-        Assert.Contains("the image will be picked", m.Text, StringComparison.Ordinal);
+        Assert.Contains("Your image is inserted instead", m.Text, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -62,7 +62,7 @@ public sealed class ImageValidationTests
         var m = Assert.Single(Validate(Image("big"), size: 31L * 1024 * 1024));
         Assert.Equal((Severity.Warning, ValidationField.File), (m.Severity, m.Field));
         Assert.Contains("31 MB", m.Text, StringComparison.Ordinal);
-        Assert.Contains("many chat apps reject larger uploads", m.Text, StringComparison.Ordinal);
+        Assert.Contains("Many chat apps reject files over 25 MB", m.Text, StringComparison.Ordinal);
     }
 
     [Fact]

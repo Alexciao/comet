@@ -17,7 +17,6 @@
                 x:Name="AbbreviationBox"
                 AutomationProperties.Name="Shorthand"
                 Header="Shorthand"
-                PlaceholderText="For example, btw"
                 TextChanged="OnChanged" />
             <TextBlock x:Name="AbbreviationError" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
             <TextBlock x:Name="AbbreviationWarning" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
@@ -27,8 +26,7 @@
             <TextBox
                 x:Name="ReplacementBox"
                 AutomationProperties.Name="Expansion"
-                Header="Expansion"
-                PlaceholderText="For example, by the way"
+                Header="Expands to"
                 TextChanged="OnChanged" />
             <TextBlock x:Name="ReplacementError" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
             <TextBlock x:Name="ReplacementWarning" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
@@ -38,7 +36,7 @@
         <TextBlock
             Style="{StaticResource CaptionTextBlockStyle}"
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-            Text="Without it, the replacement follows how you typed the abbreviation: btw → by the way, Btw → By the way, BTW → BY THE WAY."
+            Text="When it's off, capitals follow how you typed the shorthand"
             TextWrapping="Wrap" />
     </StackPanel>
 </ContentDialog>

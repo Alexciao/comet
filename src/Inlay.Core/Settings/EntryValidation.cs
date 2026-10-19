@@ -53,7 +53,7 @@ public static class EntryValidation
             messages.Add(problem);
 
         if (text.Length == 0)
-            messages.Add(new(Severity.Error, ValidationField.Text, "The snippet has no text."));
+            messages.Add(new(Severity.Error, ValidationField.Text, "Type the text the snippet inserts"));
         foreach (var p in SnippetTemplate.Validate(text))
             messages.Add(new(Severity.Warning, ValidationField.Text, $"{p.Message} It will be inserted as typed."));
         return messages;
@@ -87,7 +87,7 @@ public static class EntryValidation
             if (string.IsNullOrWhiteSpace(entry.File))
                 messages.Add(new(Severity.Error, ValidationField.File, "Choose an image."));
             else if (fileSize > LargeImageBytes)
-                messages.Add(new(Severity.Warning, ValidationField.File, $"This image is {fileSize.Value / (1024 * 1024)} MB; many chat apps reject larger uploads."));
+                messages.Add(new(Severity.Warning, ValidationField.File, $"This image is {fileSize.Value / (1024 * 1024)} MB. Many chat apps reject files over 25 MB"));
         }
         else if (string.IsNullOrWhiteSpace(entry.Folder))
         {
@@ -115,7 +115,7 @@ public static class EntryValidation
         if (imageNames.Any(n => string.Equals(n.Trim(), trimmed, StringComparison.OrdinalIgnoreCase)))
             return new(Severity.Error, ValidationField.Name, $"There's already an image named “{trimmed}”.");
         if (isEmojiShortcode?.Invoke(trimmed) == true)
-            return new(Severity.Warning, ValidationField.Name, $"“{TriggerFormat.Code(trigger, trimmed)}” is also an emoji; the {what} will be picked instead.");
+            return new(Severity.Warning, ValidationField.Name, $"“{TriggerFormat.Code(trigger, trimmed)}” is also an emoji. Your {what} is inserted instead");
         return null;
     }
 
@@ -124,18 +124,18 @@ public static class EntryValidation
         var messages = new List<ValidationMessage>();
         var a = abbreviation.Trim();
         if (a.Length == 0)
-            messages.Add(new(Severity.Error, ValidationField.Shorthand, "Type the abbreviation."));
+            messages.Add(new(Severity.Error, ValidationField.Shorthand, "Type the shorthand"));
         else if (a.Any(char.IsWhiteSpace))
-            messages.Add(new(Severity.Error, ValidationField.Shorthand, "Abbreviations can't contain spaces."));
+            messages.Add(new(Severity.Error, ValidationField.Shorthand, "Shorthands can't contain spaces"));
         else if (a.Any(c => TextClass.IsClosingPunctuation(c) || TextClass.IsOpeningPunctuation(c)))
-            messages.Add(new(Severity.Error, ValidationField.Shorthand, "Abbreviations can't contain punctuation that ends or starts a word, such as . , ; : ! ? ( ) or quotes."));
+            messages.Add(new(Severity.Error, ValidationField.Shorthand, "Shorthands can't contain punctuation that starts or ends a word, such as . , ; : ! ? ( ) or quotes"));
         else if (otherAbbreviations.Any(o => string.Equals(o.Trim(), a, StringComparison.OrdinalIgnoreCase)))
             messages.Add(new(Severity.Error, ValidationField.Shorthand, $"“{a}” is already in the list."));
         else if (CommonWords.Contains(a))
             messages.Add(new(Severity.Warning, ValidationField.Shorthand, $"“{a}” is a common word, so it will expand very often."));
 
         if (replacement.Length == 0)
-            messages.Add(new(Severity.Error, ValidationField.Expansion, "Type the replacement."));
+            messages.Add(new(Severity.Error, ValidationField.Expansion, "Type what it expands to"));
         return messages;
     }
 

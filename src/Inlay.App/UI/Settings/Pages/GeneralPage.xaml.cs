@@ -18,7 +18,7 @@ public sealed partial class GeneralPage : SettingsPage
     {
         InitializeComponent();
         if (AppPaths.IsPortable)
-            StartupCard.Description = "Inlay starts from this folder, in the notification area, when you sign in";
+            StartupCard.Description = "Start Inlay from this folder when you sign in to Windows";
     }
 
     protected override void OnAttached()
@@ -232,7 +232,7 @@ public sealed partial class GeneralPage : SettingsPage
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException)
         {
-            ShowStatus(InfoBarSeverity.Error, $"Couldn't open the folder: {ex.Message}");
+            ShowStatus(InfoBarSeverity.Error, $"Couldn't open the logs folder. {ex.Message}");
         }
     }
 }

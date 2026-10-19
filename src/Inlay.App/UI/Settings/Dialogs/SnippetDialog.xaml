@@ -17,7 +17,6 @@
                 x:Name="NameBox"
                 AutomationProperties.Name="Name"
                 Header="Name"
-                PlaceholderText="For example, address"
                 TextChanged="OnChanged" />
             <TextBlock x:Name="NameError" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" Visibility="Collapsed" />
             <TextBlock x:Name="NameWarning" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Visibility="Collapsed" />
@@ -59,7 +58,7 @@
                         <TextBlock
                             x:Name="PreviewHint"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="What the snippet inserts appears here, with today's date and your clipboard filled in."
+                            Text="Shows what the snippet inserts, with dates and the clipboard filled in"
                             TextWrapping="Wrap" />
                     </Grid>
                 </ScrollViewer>

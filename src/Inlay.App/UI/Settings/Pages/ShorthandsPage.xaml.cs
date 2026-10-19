@@ -186,7 +186,7 @@ public sealed partial class ShorthandsPage : SettingsPage, ICardHost<ShorthandCa
         Entries.RemoveAt(index);
         _deleted = (item!, index);
         Store.SaveShorthands();
-        ShowStatus(InfoBarSeverity.Informational, $"Deleted {item!.Shorthand}.", canUndo: true);
+        ShowStatus(InfoBarSeverity.Informational, $"Deleted {item!.Shorthand}", canUndo: true);
     }
 
     private void OnUndo(object sender, RoutedEventArgs e)
@@ -217,11 +217,11 @@ public sealed partial class ShorthandsPage : SettingsPage, ICardHost<ShorthandCa
                 return;
             var (added, replaced) = ImportExport.ImportShorthands(json, Entries);
             Store.SaveShorthands();
-            ShowStatus(InfoBarSeverity.Success, $"Imported {added} new and {replaced} updated replacements.", canUndo: false);
+            ShowStatus(InfoBarSeverity.Success, $"Imported {added} new and {replaced} updated shorthands", canUndo: false);
         }
         catch (Exception ex) when (FilePickers.IsFileError(ex) || ex is FormatException)
         {
-            ShowStatus(InfoBarSeverity.Error, $"Couldn't import: {ex.Message}", canUndo: false);
+            ShowStatus(InfoBarSeverity.Error, $"Couldn't import the file. {ex.Message}", canUndo: false);
         }
     }
 
@@ -234,11 +234,11 @@ public sealed partial class ShorthandsPage : SettingsPage, ICardHost<ShorthandCa
         {
             var name = await FilePickers.SaveJsonAsync(OwnerWindow, one is null ? "Inlay replacements" : $"Expansion {one.Shorthand}", ImportExport.ExportShorthands(entries)).ConfigureAwait(true);
             if (name is not null)
-                ShowStatus(InfoBarSeverity.Success, entries.Count == 1 ? $"Exported 1 replacement to {name}." : $"Exported {entries.Count} replacements to {name}.", canUndo: false);
+                ShowStatus(InfoBarSeverity.Success, entries.Count == 1 ? $"Exported 1 shorthand to {name}" : $"Exported {entries.Count} shorthands to {name}", canUndo: false);
         }
         catch (Exception ex) when (FilePickers.IsFileError(ex))
         {
-            ShowStatus(InfoBarSeverity.Error, $"Couldn't export: {ex.Message}", canUndo: false);
+            ShowStatus(InfoBarSeverity.Error, $"Couldn't export the file. {ex.Message}", canUndo: false);
         }
     }
 

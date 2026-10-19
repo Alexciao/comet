@@ -12,7 +12,7 @@ public sealed partial class ShorthandDialog : ContentDialog
     {
         _otherAbbreviations = otherAbbreviations;
         InitializeComponent();
-        Title = editing is null ? "Add replacement" : "Edit replacement";
+        Title = editing is null ? "Add shorthand" : "Edit shorthand";
         AbbreviationBox.Text = editing?.Shorthand ?? "";
         ReplacementBox.Text = editing?.Expansion ?? "";
         MatchCaseBox.IsChecked = editing?.MatchCase ?? false;
