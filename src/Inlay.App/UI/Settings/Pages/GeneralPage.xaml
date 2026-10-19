@@ -43,6 +43,22 @@
                     <!-- At or below the bottom edge at the default size: built right after the page's first frame. -->
                     <StackPanel x:Name="LaterSections" x:Load="False" Spacing="{StaticResource SettingsCardSpacing}">
                     <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Updates" />
+                    <toolkit:SettingsCard Header="Check now" Description="Look for a new version of Inlay and new emoji data">
+                        <toolkit:SettingsCard.HeaderIcon>
+                            <FontIcon Glyph="&#xE72C;" />
+                        </toolkit:SettingsCard.HeaderIcon>
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <ProgressRing x:Name="CheckRing" Width="16" Height="16" IsActive="False" Visibility="Collapsed" AutomationProperties.Name="Checking for updates" />
+                            <Button x:Name="CheckButton" Click="OnCheckForUpdates" Content="Check for updates" />
+                        </StackPanel>
+                    </toolkit:SettingsCard>
+                    <StackPanel x:Name="CheckResults" Margin="16,0,0,0" Spacing="4" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <TextBlock x:Name="CheckLine1" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            <HyperlinkButton x:Name="CheckLink" Padding="0" Content="See what's new" Click="OnCheckLink" Visibility="Collapsed" />
+                        </StackPanel>
+                        <TextBlock x:Name="CheckLine2" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+                    </StackPanel>
                     <toolkit:SettingsCard x:Name="EmojiUpdatesCard" Header="Update emoji automatically">
                         <toolkit:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE895;" />

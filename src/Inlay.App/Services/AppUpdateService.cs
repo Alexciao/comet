@@ -58,6 +58,19 @@ internal sealed class AppUpdateService : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// The "Check for updates" button: the same request and state as the daily check, now, whatever the schedule, the
+    /// notification toggle or the connection's cost say. Logs nothing (the caller logs one line for both checks).
+    /// </summary>
+    public async Task<(UpdateOutcome Outcome, AppRelease? Newer)> CheckNowAsync()
+    {
+        var state = _state;
+        var result = await DailyCheck.InBackground(() => _checker.CheckAsync(state, () => true)).ConfigureAwait(true);
+        await Task.Run(() => Save(state)).ConfigureAwait(true);
+        _changed();
+        return result;
+    }
+
     private void Save(AppUpdateState state)
     {
         try

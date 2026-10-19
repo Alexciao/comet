@@ -367,7 +367,7 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
         else if (r.Kind == ResultKind.Snippet && r.Index < _data.UserItems.Length && _data.UserItems[r.Index] is { Image: { } image } && Images is { } images)
         {
             var (file, caption) = ImageRow(images, image);
-            var thumbnail = file is null ? null : Thumbnail(images, file, QuickInsertRow.ThumbnailBox);
+            var thumbnail = file is null ? ThumbnailView.NoImage : Thumbnail(images, file, QuickInsertRow.ThumbnailBox);
             row.ShowImage(thumbnail, _trigger, image.Name, Highlighter.Find(image.Name, query), caption);
         }
     }
@@ -392,8 +392,8 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
         return (file, ImageText.Row(file.Type, w, h, System.Globalization.CultureInfo.CurrentCulture));
     }
 
-    private ImageSource? Thumbnail(ImagesService images, ImageFile file, double sizeEpx) =>
-        _thumbnails?.Get(images.Thumbnails, file.Path, file.LastWriteUtc, (int)Math.Round(sizeEpx * (Root.XamlRoot?.RasterizationScale ?? _scale)));
+    private ThumbnailView Thumbnail(ImagesService images, ImageFile file, double sizeEpx) =>
+        _thumbnails?.Get(images.Thumbnails, file.Path, file.LastWriteUtc, (int)Math.Round(sizeEpx * (Root.XamlRoot?.RasterizationScale ?? _scale))) ?? ThumbnailView.Placeholder;
 
     /// <summary>Shows the "Let me pick" strip in the selected row when it is a pick folder; false otherwise.</summary>
     private bool PickStrip(QuickInsertRow row, int index)
@@ -403,7 +403,7 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
         var candidates = images.PickCandidates(item);
         if (candidates.Count == 0)
             return false;
-        var thumbnails = new ImageSource?[candidates.Count];
+        var thumbnails = new ThumbnailView[candidates.Count];
         for (var i = 0; i < candidates.Count; i++)
             thumbnails[i] = Thumbnail(images, candidates[i], QuickInsertRow.PickBox);
         row.ShowPickStrip(thumbnails, Math.Min(_pick, candidates.Count - 1));
@@ -620,5 +620,7 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
     {
         Log.Info(RenderLatency.Describe());
         Log.Info(ColdRenderLatency.Describe());
+        if (_preview is { } preview)
+            Log.Info(preview.ShowLatency.Describe());
     }
 }

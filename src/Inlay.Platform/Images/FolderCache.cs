@@ -42,6 +42,9 @@ internal sealed class FolderCache : IDisposable
     /// <summary>Raised on a pool thread after the list changed (once per event; the service debounces).</summary>
     public event Action? Changed;
 
+    /// <summary>Raised on a pool thread with the path of every file the watcher reports, before the index is updated.</summary>
+    public event Action<string>? FileChanged;
+
     /// <summary>The scan in progress (or the last one): tests wait on it.</summary>
     internal Task Scanning
     {
@@ -163,6 +166,7 @@ internal sealed class FolderCache : IDisposable
     /// <summary>Brings one path up to date from its directory entry (metadata only).</summary>
     private void Apply(string path)
     {
+        FileChanged?.Invoke(path);
         lock (_gate)
         {
             if (_scanning)

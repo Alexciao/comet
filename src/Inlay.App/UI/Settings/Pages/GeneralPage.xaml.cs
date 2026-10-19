@@ -2,7 +2,9 @@ using System.Diagnostics;
 using Inlay.App.Services;
 using Inlay.App.UI.Settings.Dialogs;
 using Inlay.Core.Settings;
+using Inlay.Core.Updates;
 using Inlay.Platform;
+using Inlay.Platform.Updates;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -130,6 +132,49 @@ public sealed partial class GeneralPage : SettingsPage
 
     private void OnDownloadUpdate(object sender, RoutedEventArgs e) => Host.OpenUpdatePage();
 
+    /// <summary>
+    /// Checks the app and the emoji data now, whatever the automatic toggles say. The checks run on their own threads;
+    /// the button stays disabled with a progress ring until both are done, then one line per check is shown under it.
+    /// </summary>
+    private async void OnCheckForUpdates(object sender, RoutedEventArgs e)
+    {
+        if (!CheckButton.IsEnabled)
+            return;
+        CheckButton.IsEnabled = false;
+        CheckResults.Visibility = Visibility.Collapsed;
+        CheckRing.Visibility = Visibility.Visible;
+        CheckRing.IsActive = true;
+        try
+        {
+            ShowCheckResult(await Host.CheckForUpdatesAsync());
+            Load(); // "Last checked" and the emoji data version
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            ShowCheckResult(new ManualCheckResult([ManualUpdateCheck.FailedMessage], null));
+        }
+        finally
+        {
+            CheckRing.IsActive = false;
+            CheckRing.Visibility = Visibility.Collapsed;
+            CheckButton.IsEnabled = true;
+        }
+    }
+
+    private AppRelease? _checkRelease;
+
+    private void ShowCheckResult(ManualCheckResult result)
+    {
+        _checkRelease = result.Available;
+        CheckLine1.Text = result.Lines[0];
+        CheckLink.Visibility = result.Available is null ? Visibility.Collapsed : Visibility.Visible;
+        CheckLine2.Text = result.Lines.Count > 1 ? result.Lines[1] : "";
+        CheckLine2.Visibility = result.Lines.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        CheckResults.Visibility = Visibility.Visible;
+    }
+
+    private void OnCheckLink(object sender, RoutedEventArgs e) => _ = ShowWhatsNewAsync(_checkRelease);
+
     private async void OnExport(object sender, RoutedEventArgs e)
     {
         try
@@ -203,9 +248,12 @@ public sealed partial class GeneralPage : SettingsPage
     /// The newer version's notes (fetched with the update check) in a dialog over Settings. Also opened from the
     /// tray's "Update available" item.
     /// </summary>
-    internal async Task ShowWhatsNewAsync()
+    internal Task ShowWhatsNewAsync() => ShowWhatsNewAsync(Host.AvailableUpdate);
+
+    /// <summary>The same dialog for a release the manual check found (shown even when update notifications are off).</summary>
+    private async Task ShowWhatsNewAsync(AppRelease? release)
     {
-        if (_dialogOpen || XamlRoot is null || Host.AvailableUpdate is not { } release)
+        if (_dialogOpen || XamlRoot is null || release is null)
             return;
         _dialogOpen = true;
         try

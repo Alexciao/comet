@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Buffers.Binary;
 using System.Text.Json.Nodes;
 using Inlay.E2E.Harness;
@@ -171,6 +172,127 @@ public sealed class QuickInsertTests(QuickInsertTargets targets) : IClassFixture
         Keyboard.Press(Keyboard.VK_RETURN);
 
         Assert.Equal(middle, Expect(notepad, middle));
+    }
+
+    /// <summary>A solid-color PNG.</summary>
+    private string Solid(string name, Color color, DateTime lastWriteUtc)
+    {
+        var path = Path.Combine(_images, name);
+        using (var bmp = new Bitmap(320, 200))
+        {
+            using (var g = Graphics.FromImage(bmp))
+                g.Clear(color);
+            bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+        }
+
+        File.SetLastWriteTimeUtc(path, lastWriteUtc);
+        return path;
+    }
+
+    /// <summary>Pixels of <paramref name="shot"/> that are close to <paramref name="color"/>.</summary>
+    private static int Count(Bitmap shot, Color color)
+    {
+        var n = 0;
+        for (var y = 0; y < shot.Height; y++)
+        {
+            for (var x = 0; x < shot.Width; x++)
+            {
+                var p = shot.GetPixel(x, y);
+                if (Math.Abs(p.R - color.R) < 24 && Math.Abs(p.G - color.G) < 24 && Math.Abs(p.B - color.B) < 24)
+                    n++;
+            }
+        }
+
+        return n;
+    }
+
+    private static Bitmap Grab(Native.RECT r)
+    {
+        var bmp = new Bitmap(r.Right - r.Left, r.Bottom - r.Top);
+        using var g = Graphics.FromImage(bmp);
+        g.CopyFromScreen(r.Left, r.Top, 0, 0, bmp.Size);
+        return bmp;
+    }
+
+    /// <summary>
+    /// Desktop check for the "Let me pick" fixes, with real keystrokes. The files are new, so none is in the Explorer
+    /// cache. Opening the picker must show all three thumbnails, and over five opens the preview window must never be
+    /// on screen without its picture. A screenshot of the first open is written to INLAY_PICKER_SHOT (default: the
+    /// temp folder).
+    /// </summary>
+    [Fact]
+    public void Let_me_pick_shows_thumbnails_for_new_files_and_the_preview_never_flashes()
+    {
+        var now = DateTime.UtcNow;
+        var blue = Color.FromArgb(0, 0, 255);
+        var green = Color.FromArgb(0, 200, 0);
+        var red = Color.FromArgb(255, 0, 0);
+        Solid("c.png", blue, now.AddMinutes(-30));
+        Solid("b.png", green, now.AddMinutes(-20));
+        Solid("a.png", red, now.AddMinutes(-10));
+        Start(app => app.WithImages(Entry("shots", "Folder", "Path", e =>
+        {
+            e["folder"] = _images;
+            e["mode"] = "Pick";
+            e["pickCount"] = 3;
+        })));
+        Wait.Until(() => _inlay!.Log.Contains("images", StringComparison.OrdinalIgnoreCase), s_settle, "the folder scan");
+        Notepad();
+        var preview = Wait.For(() => Native.WindowsOf(_inlay!.ProcessId).FirstOrDefault(h => Native.WindowText(h) == "Inlay preview"), h => h != 0, s_settle, "the preview window");
+
+        for (var open = 0; open < 5; open++)
+        {
+            var flashes = 0;
+            var flashLog = "";
+            var good = 0;
+            var sw = Stopwatch.StartNew();
+            double firstGoodMs = -1;
+            var stop = false;
+            var sampler = new Thread(() =>
+            {
+                while (!Volatile.Read(ref stop))
+                {
+                    if (Native.IsCloaked(preview) || !Native.GetWindowRect(preview, out var r) || r.Right - r.Left < 100 || r.Left < -10000)
+                        continue;
+                    using var frame = Grab(r);
+                    var share = (double)Count(frame, red) / (frame.Width * frame.Height);
+                    if (share > 0.3)
+                    {
+                        good++;
+                        if (firstGoodMs < 0)
+                            firstGoodMs = sw.Elapsed.TotalMilliseconds;
+                    }
+                    else if (!Native.IsCloaked(preview)) // still on screen after the grab: not a frame caught as it was hidden
+                    {
+                        flashes++;
+                        flashLog += $" [{sw.Elapsed.TotalMilliseconds:F0} ms, {share:P0} picture, {good} good before]";
+                    }
+                }
+            });
+            sampler.Start();
+
+            Keyboard.Type(":shots");
+            var popup = _inlay!.WaitForPopup();
+            Wait.Until(() => good > 0, TimeSpan.FromSeconds(3), "the preview to appear");
+            Thread.Sleep(300); // keep sampling for a moment after it appeared
+            if (open == 0)
+            {
+                using var shot = Grab(popup);
+                shot.Save(Environment.GetEnvironmentVariable("INLAY_PICKER_SHOT") ?? Path.Combine(Path.GetTempPath(), "inlay-picker.png"), System.Drawing.Imaging.ImageFormat.Png);
+                Assert.True(Count(shot, red) > 300, "the thumbnail of the newest file");
+                Assert.True(Count(shot, green) > 300, "the second thumbnail");
+                Assert.True(Count(shot, blue) > 300, "the third thumbnail");
+            }
+
+            Keyboard.Press(Keyboard.VK_ESCAPE);
+            _inlay.WaitForPopupClosed();
+            Thread.Sleep(200);
+            Volatile.Write(ref stop, true);
+            sampler.Join();
+            Assert.True(flashes == 0, $"open {open + 1}: the preview was on screen {flashes} time(s) without its picture{flashLog}");
+            Assert.True(Native.IsCloaked(preview), "the preview is cloaked again after Quick Insert closes");
+            Keyboard.SelectAllAndDelete();
+        }
     }
 
     [Fact]

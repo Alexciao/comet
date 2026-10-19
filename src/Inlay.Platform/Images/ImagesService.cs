@@ -105,6 +105,7 @@ internal sealed class ImagesService : IDisposable
                     {
                         cache = new FolderCache(KnownFolders.Resolve(e.Folder)!, e.IncludeSubfolders);
                         cache.Changed += () => FolderChanged(cache);
+                        cache.FileChanged += Thumbnails.Invalidate;
                         started.Add(cache);
                     }
 

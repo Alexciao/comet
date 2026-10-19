@@ -25,7 +25,7 @@ Inlay runs in the system tray and works in any app. Type `:` followed by a few l
 >
 > Most of Inlay's code was written with the help of AI coding agents. It is covered by extensive unit and end-to-end tests, and every feature was also tested by hand to keep the quality bar high.
 >
-> Inlay works fully offline. It never logs what you type and never sends it anywhere. The only network requests are two optional update checks to GitHub (emoji data and new Inlay versions), made quietly at launch and once a day, which you can turn off in Settings.
+> Inlay works fully offline. It never logs what you type and never sends it anywhere. The only network requests are update checks to GitHub (emoji data and new Inlay versions). They run quietly at launch and once a day, and you can turn them off in Settings. **Check for updates** in Settings › General runs both once, when you press it.
 
 ## Features
 
@@ -118,7 +118,7 @@ You need the [.NET 10 SDK](https://dotnet.microsoft.com/download), Visual Studio
 dotnet build Inlay.sln
 dotnet test tests/Inlay.Core.Tests
 dotnet test tests/Inlay.Platform.Tests
-./installer/build.ps1 -Version 1.1.0
+./installer/build.ps1 -Version 1.1.1
 ```
 
 The end-to-end tests in `tests/Inlay.E2E` send real keystrokes to your desktop, so don't use the computer while they run. Release notes are in [CHANGELOG.md](CHANGELOG.md).
