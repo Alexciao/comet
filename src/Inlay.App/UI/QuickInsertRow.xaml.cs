@@ -21,6 +21,12 @@ public sealed partial class QuickInsertRow : UserControl
     /// <summary>Size of an image thumbnail in the glyph slot.</summary>
     public const double ThumbnailBox = 32;
 
+    /// <summary>A thumbnail in the "Let me pick" strip, and the strip's extra height (thumbnail + bottom margin).</summary>
+    public const double PickBox = 40;
+    public const double PickStripHeight = PickBox + 8;
+
+    private const int MaxPicks = 8;
+
     private const string SnippetGlyph = "";
     private const string AddGlyph = "";
     private const string ImageGlyph = "";
@@ -37,6 +43,9 @@ public sealed partial class QuickInsertRow : UserControl
     private bool _selected;
     private bool _hover;
     private Slot _slot = Slot.Emoji;
+
+    private readonly Image[] _pickImages = new Image[MaxPicks];
+    private readonly Border[] _pickRings = new Border[MaxPicks];
 
     public QuickInsertRow()
     {
@@ -104,6 +113,58 @@ public sealed partial class QuickInsertRow : UserControl
 
         SetCode(trigger, name, match);
         SetCaption(caption);
+    }
+
+    /// <summary>
+    /// Shows the "Let me pick" strip under the row (the row grows by <see cref="PickStripHeight"/>), with
+    /// <paramref name="chosen"/> ringed in the accent color. A null thumbnail is still loading.
+    /// </summary>
+    public void ShowPickStrip(IReadOnlyList<ImageSource?> thumbnails, int chosen)
+    {
+        if (_pickImages[0] is null)
+            BuildPickStrip();
+        for (var i = 0; i < MaxPicks; i++)
+        {
+            var slot = (FrameworkElement)PickStrip.Children[i];
+            slot.Visibility = i < thumbnails.Count ? Visibility.Visible : Visibility.Collapsed;
+            if (i >= thumbnails.Count)
+                continue;
+            _pickImages[i].Source = thumbnails[i];
+            _pickRings[i].Visibility = i == chosen ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        PickStrip.Visibility = Visibility.Visible;
+        Height = RowHeight + PickStripHeight;
+    }
+
+    public void HidePickStrip()
+    {
+        if (PickStrip.Visibility == Visibility.Collapsed)
+            return;
+        PickStrip.Visibility = Visibility.Collapsed;
+        foreach (var image in _pickImages)
+        {
+            if (image is not null)
+                image.Source = null;
+        }
+
+        Height = RowHeight;
+    }
+
+    /// <summary>The strip's slots, made the first time a pick row is selected (most people never need them).</summary>
+    private void BuildPickStrip()
+    {
+        for (var i = 0; i < MaxPicks; i++)
+        {
+            _pickImages[i] = new Image { Stretch = Stretch.UniformToFill };
+            var frame = new Border { Width = PickBox, Height = PickBox, CornerRadius = new CornerRadius(4), Child = _pickImages[i] };
+            frame.BorderThickness = new Thickness(1);
+            frame.BorderBrush = Thumb.BorderBrush;
+            frame.Background = Thumb.Background;
+            _pickRings[i] = new Border { Width = PickBox, Height = PickBox, CornerRadius = new CornerRadius(4), BorderThickness = new Thickness(2), BorderBrush = Pill.Fill, Visibility = Visibility.Collapsed };
+            var slot = new Grid { Children = { frame, _pickRings[i] } };
+            PickStrip.Children.Add(slot);
+        }
     }
 
     /// <summary>The "Create snippet :name" row: an add icon, in secondary styling.</summary>

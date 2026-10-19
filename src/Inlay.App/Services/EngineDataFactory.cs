@@ -3,6 +3,7 @@ using Inlay.Core.Emoji;
 using Inlay.Core.Search;
 using Inlay.Core.Settings;
 using Inlay.Platform.Engine;
+using Inlay.Platform.Images;
 
 namespace Inlay.App.Services;
 
@@ -42,6 +43,9 @@ internal sealed class EngineDataFactory
         }
     }
 
+    /// <summary>The user's images (null until the app starts them); its items join the snippets in the search index.</summary>
+    public ImagesService? Images { get; set; }
+
     public EngineData Build(AppSettings settings, IReadOnlyList<SnippetDefinition> snippets, IReadOnlyList<ShorthandDefinition> shorthands, IReadOnlyList<(string Key, double Score)> frecency)
     {
         EmojiData? emoji = null;
@@ -65,8 +69,9 @@ internal sealed class EngineDataFactory
         var snippetDefs = settings.Features.Snippets
             ? snippets.Where(s => s.Name.Length > 0).ToArray()
             : [];
-        UserItem[] userItems = [.. snippetDefs.Select(UserItem.From)];
-        var snippetIndex = new SnippetIndex([.. userItems.Select(i => (i.Name, i.Snippet?.Text ?? i.Image?.Keywords ?? ""))]);
+        var images = settings.Features.Images ? Images : null;
+        UserItem[] userItems = [.. snippetDefs.Select(UserItem.From), .. (images?.Items ?? []).Select(UserItem.From)];
+        var snippetIndex = new SnippetIndex([.. userItems.Select(i => (i.Name, i.SearchText))]);
         var search = new SearchEngine(emoji, snippetIndex, includeSymbols: settings.Features.Symbols);
 
         if (emoji is not null && Visibility?.Invoke(emoji) is { } visible)
@@ -103,7 +108,7 @@ internal sealed class EngineDataFactory
             ? shorthands.Where(r => r.Enabled && r.Shorthand.Length > 0).Select(r => new ShorthandRule(r.Shorthand.Trim(), r.Expansion, r.MatchCase)).ToArray()
             : [];
 
-        return new EngineData(search, userItems, rules, [.. recents]);
+        return new EngineData(search, userItems, rules, [.. recents], images);
     }
 
     /// <summary>Recents kept per build: the 8 shown plus room for picks to move up.</summary>

@@ -5,6 +5,7 @@ using Inlay.App.UI;
 using Inlay.App.UI.Settings;
 using Inlay.Core.Emoji;
 using Inlay.Core.Input;
+using Inlay.Platform.Images;
 using Inlay.Platform.Input;
 using Inlay.Core.Updates;
 using Inlay.Core.Search;
@@ -32,6 +33,7 @@ internal sealed class AppHost : IDisposable
     private MessageWindow _messages = null!;
     private TrayIcon _tray = null!;
     private GlobalShortcut _shortcut = null!;
+    private ImagesService _images = null!;
     private const int QuickInsertHotKeyId = 1; // GlobalShortcut also uses id + 1 to test a combination
     private SettingsWindow? _settingsWindow;
     private readonly PauseService _pause;
@@ -78,7 +80,14 @@ internal sealed class AppHost : IDisposable
         _updates = new EmojiUpdateService(_dispatcher, _dataFactory, () => _settings.Settings, () => _pause.IsPaused, OnEmojiDataReplaced);
         _appUpdates = new AppUpdateService(_dispatcher, () => _settings.Settings, () => _pause.IsPaused, OnAppUpdateChanged);
 
+        _images = new ImagesService(new ImageLibrary(_settings.ImageLibraryDirectory));
+        _images.ItemsChanged += () => _dispatcher.TryEnqueue(() => RebuildData()); // a collection's files changed
+        _dataFactory.Images = _images;
+        UpdateImages();
+
         _popup = new QuickInsertWindow();
+        _popup.Images = _images;
+        _popup.PrepareImages(_settings.Settings.Features.Images && _settings.Images.Count > 0);
         _messages = new MessageWindow(Program.MessageWindowClass, OnMessage);
         _popup.Attach(_messages);
         _popup.WarmUp();
@@ -86,6 +95,7 @@ internal sealed class AppHost : IDisposable
         _engine = new InputEngine(_popup, _options.AcceptInjectedInput);
         _engine.Picked += _settings.RecordPick;
         _engine.CreateSnippetRequested += (name, window) => _dispatcher.TryEnqueue(() => _ = CreateSnippetAsync(name, window));
+        _engine.ImagePasteMethodLearned += (process, method) => _dispatcher.TryEnqueue(() => LearnImagePasteMethod(process, method));
         _engine.Start(Config(), BuildData());
         _shortcut = new GlobalShortcut(_messages.Handle, QuickInsertHotKeyId);
         ApplyShortcut();
@@ -139,9 +149,35 @@ internal sealed class AppHost : IDisposable
     /// <summary>While the recorder listens, the registered shortcut is released so its keys reach the dialog.</summary>
     internal void SuspendShortcut(bool suspended) => _shortcut.IsSuspended = suspended;
 
+    /// <summary>The user's images, for Settings (thumbnails, adding files) and Quick Insert.</summary>
+    internal ImagesService Images => _images;
+
+    /// <summary>
+    /// Starts, updates or stops folder watching and collections to match the settings. With Images off or no entries,
+    /// nothing runs: no watchers, no scans, no thumbnails.
+    /// </summary>
+    private void UpdateImages()
+    {
+        var on = _settings.Settings.Features.Images;
+        _images.Update(on, [.. _settings.Images], [.. _settings.Snippets.Select(s => s.Name)]);
+        _popup?.PrepareImages(on && _settings.Images.Count > 0);
+    }
+
+    /// <summary>An app didn't read a pasted image: next time it gets the clipboard formats it is more likely to read.</summary>
+    private void LearnImagePasteMethod(string process, string method)
+    {
+        if (process.Length == 0 || _settings.Settings.ImagePasteMethods.GetValueOrDefault(process) == method)
+            return;
+        Log.Info($"image paste: {process} read nothing; using \"{method}\" there from now on");
+        _settings.Settings.ImagePasteMethods[process] = method;
+        _settings.SaveSettings();
+    }
+
     private void OnSettingsChanged(SettingsParts parts)
     {
         _engine.SetConfig(Config());
+        if (parts.HasFlag(SettingsParts.Settings) || parts.HasFlag(SettingsParts.Images) || parts.HasFlag(SettingsParts.Snippets))
+            UpdateImages();
         if (parts.HasFlag(SettingsParts.Settings))
         {
             ApplyShortcut();
@@ -509,6 +545,7 @@ internal sealed class AppHost : IDisposable
     public void Dispose()
     {
         _pause.Dispose();
+        _images?.Dispose();
         _shortcut?.Dispose();
         _engine?.Dispose();
         _updates?.Dispose();

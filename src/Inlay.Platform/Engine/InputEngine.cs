@@ -76,6 +76,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     private bool _anchorIsWindow;
     private nuint _recentsTimer;
     private int _selected;
+    private int _pick; // "Let me pick": the chosen image of the selected row
     private bool _popupVisible;
     private bool _swallowNextMouseUp;
     private long _injectingSince;
@@ -113,6 +114,12 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     /// removed): open the New snippet dialog, then give the window focus back.
     /// </summary>
     public event Action<string, nint>? CreateSnippetRequested;
+
+    /// <summary>
+    /// Raised on the hook thread when an app didn't read a pasted image: (process, method to use next time). The app
+    /// stores it in <c>ImagePasteMethods</c>.
+    /// </summary>
+    public event Action<string, string>? ImagePasteMethodLearned;
 
     /// <summary>Hook overhead per keystroke when nothing is triggered.</summary>
     public LatencyStats IdleKeyLatency { get; } = new("hook idle keystroke");
@@ -260,6 +267,12 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         var config = _config;
 
         // ---- picker
+        if (_picker.IsActive && _popupVisible && key.Kind is (KeyKind.Left or KeyKind.Right) && SelectedIsPick)
+        {
+            MovePick(key.Kind == KeyKind.Right ? +1 : -1);
+            return true; // ←/→ choose in the strip; the caret stays where it is
+        }
+
         if (config.QuickInsertEnabled && (_picker.FromShortcut || QuickInsertAllowedHere(config))
             && !(key.Kind == KeyKind.Char && key.Char == config.TriggerChar && !_picker.IsActive && ImeOpen()))
         {
@@ -413,6 +426,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         _resultCount = FilterForApp(_data.Search.Search(_picker.Token, _results));
         _hasCreateRow = OffersCreate();
         _selected = 0;
+        _pick = 0;
         Publish();
     }
 
@@ -477,6 +491,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         _hasCreateRow = false;
         _showingRecents = true;
         _selected = 0;
+        _pick = 0;
         Publish();
     }
 
@@ -501,6 +516,21 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         if (rows == 0)
             return;
         _selected = (_selected + delta + rows) % rows;
+        _pick = 0;
+        Publish();
+    }
+
+    /// <summary>The selected row is a "Let me pick" folder.</summary>
+    private bool SelectedIsPick =>
+        _selected < _resultCount && _results[_selected] is { Kind: ResultKind.Snippet } r && r.Index < _data.UserItems.Length && _data.UserItems[r.Index].IsPick;
+
+    private void MovePick(int delta)
+    {
+        var item = _data.UserItems[_results[_selected].Index].Image!;
+        var count = _data.Images?.PickCandidates(item).Count ?? 0;
+        if (count == 0)
+            return;
+        _pick = Math.Clamp(_pick + delta, 0, count - 1);
         Publish();
     }
 
@@ -527,6 +557,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             _frame.AnchorIsWindow = _anchorIsWindow;
             Array.Copy(_results, _frame.Results, _resultCount);
             _frame.Selected = _selected;
+            _frame.Pick = _pick;
             var token = _picker.Token;
             token.CopyTo(_frame.Query);
             _frame.QueryLength = token.Length;
@@ -562,7 +593,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
     private void Choose(int row, int deleteCount)
     {
         if (row < _resultCount)
-            Insert(_results[row], deleteCount, after: null);
+            Insert(_results[row], deleteCount, after: null, pick: row == _selected ? _pick : 0);
         else if (_hasCreateRow && row == _resultCount)
             CreateSnippet(deleteCount);
         else
@@ -581,10 +612,11 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         CreateSnippetRequested?.Invoke(name, window);
     }
 
-    private void Insert(SearchResult result, int deleteCount, Boundary? after)
+    private void Insert(SearchResult result, int deleteCount, Boundary? after, int pick = 0)
     {
         var data = _data;
         string? text = null, template = null, key;
+        ImageInsertion? image = null;
         if (result.Kind == ResultKind.Emoji && data.Emoji is { } emoji)
         {
             text = emoji.Emoji(result.Index, _config.SkinTone).ToString();
@@ -595,6 +627,12 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             template = snippet.Text;
             key = item.FrecencyKey;
         }
+        else if (result.Kind == ResultKind.Snippet && result.Index < data.UserItems.Length && data.UserItems[result.Index] is { Image: { } imageItem } entry
+            && data.Images?.ToInsertion(imageItem, _context.ProcessName, _config.ImagePasteMethods, entry.IsPick ? pick : -1) is { } resolved)
+        {
+            image = resolved; // resolved now from cached lists: a folder entry gives its newest, a random or the picked file
+            key = entry.FrecencyKey;
+        }
         else
         {
             EndSession();
@@ -604,7 +642,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         // Hide first, with no animation: the text lands in the same frame the popup disappears.
         EndSession();
         _picker.NotifyInserted();
-        StartInjection(new InsertionJob(deleteCount, text, template, after, MethodFor(_context.ProcessName), _keyTimestamp, _context.PacedEditor));
+        StartInjection(new InsertionJob(deleteCount, text, template, after, MethodFor(_context.ProcessName), _keyTimestamp, _context.PacedEditor) { Image = image });
         data.Search.BumpFrecency(result.Kind, result.Index);
         BumpRecent(result);
         Picked?.Invoke(key);
@@ -666,8 +704,8 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
                 // Handle the click here and never let it reach the popup, so the popup can't take focus. A click on
                 // a list the popup hasn't drawn yet (a key typed in the same frame) picks nothing: the user saw a
                 // different row there.
-                var row = g.RowHeight > 0 ? g.FirstVisible + ((point.Y - g.Window.Top - g.ListTop) / g.RowHeight) : -1;
-                if (g.Version == _frame.Version && row >= 0 && row < RowCount && point.Y >= g.Window.Top + g.ListTop)
+                var row = g.RowAt(point.Y - g.Window.Top - g.ListTop);
+                if (g.Version == _frame.Version && row >= 0 && row < RowCount)
                 {
                     var delete = _picker.FromShortcut ? 0 : 1 + _picker.Token.Length;
                     _shorthands.NotifyInserted();
@@ -815,6 +853,8 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
                 // may finish after a key it replayed started a newer insertion).
                 while (_completedJobs.TryDequeue(out var done))
                 {
+                    if (done.Image is { InsertAs: ImageInsertAs.Image, Result.Read: false } unread)
+                        ImagePasteMethodLearned?.Invoke(unread.Process, ImagePasteMethod.AfterUnread(unread.Method));
                     if (ReferenceEquals(done, _currentJob))
                         FinishInjection();
                 }

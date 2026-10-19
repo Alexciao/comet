@@ -7,6 +7,10 @@
     IsTabStop="False">
     <!-- A Windows 11 list item: subtle fill for hover/selection and an accent pill marking the selection. -->
     <Grid x:Name="RowRoot" Background="Transparent">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="36" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
         <VisualStateManager.VisualStateGroups>
             <!-- Same fills as the WinUI ListViewItem; no transitions, so selection changes are instant. -->
             <VisualStateGroup x:Name="CommonStates">
@@ -30,7 +34,7 @@
                 </VisualState>
             </VisualStateGroup>
         </VisualStateManager.VisualStateGroups>
-        <Border x:Name="Fill" CornerRadius="{ThemeResource ControlCornerRadius}" Background="{ThemeResource SubtleFillColorTransparentBrush}" />
+        <Border x:Name="Fill" Grid.RowSpan="2" CornerRadius="{ThemeResource ControlCornerRadius}" Background="{ThemeResource SubtleFillColorTransparentBrush}" />
         <Rectangle
             x:Name="Pill"
             Width="3"
@@ -123,5 +127,8 @@
                 VerticalAlignment="Center"
                 Visibility="Collapsed" />
         </Grid>
+
+        <!-- "Let me pick": the newest images of the folder, shown only in the selected row; ←/→ choose. -->
+        <StackPanel x:Name="PickStrip" Grid.Row="1" Margin="50,0,12,8" Orientation="Horizontal" Spacing="4" Visibility="Collapsed" />
     </Grid>
 </UserControl>

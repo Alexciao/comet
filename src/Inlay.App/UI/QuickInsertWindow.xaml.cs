@@ -1,11 +1,15 @@
 using System.Diagnostics;
+using Inlay.Core.Images;
 using Inlay.Core.Search;
+using Inlay.Core.Settings;
 using Inlay.Core.Snippets;
 using Inlay.Platform;
 using Inlay.Platform.Engine;
+using Inlay.Platform.Images;
 using Inlay.Platform.Native;
 using Microsoft.UI;
 using Microsoft.UI.Composition;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
@@ -53,6 +57,13 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
     private EngineData _data = EngineData.Empty;
     private int _skinTone;
     private string _trigger = ":";
+    private int _pick;
+    private int _expandedRow = -1; // the row showing the pick strip (taller), or -1
+    private ThumbnailBitmaps? _thumbnails;
+    private ImagePreviewWindow? _preview;
+    private DispatcherQueueTimer? _previewTimer;
+    private string? _previewPath;
+    private RECT _anchor;
     private bool _recents;
     private bool _createRow;
     private bool _fromShortcut;
@@ -120,6 +131,27 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
 
     /// <summary>Same, for updates that showed an emoji for the first time (its glyph had to be rasterized).</summary>
     internal LatencyStats ColdRenderLatency { get; } = new("keystroke to popup rendered, first-time emoji");
+
+    /// <summary>The user's images: thumbnails, sizes and folder lists for image rows.</summary>
+    internal ImagesService? Images { get; set; }
+
+    /// <summary>
+    /// Creates the preview window (cloaked) when there are images to preview; with Images off or empty it never
+    /// exists, so it costs nothing.
+    /// </summary>
+    internal void PrepareImages(bool any)
+    {
+        if (any)
+        {
+            _preview ??= new ImagePreviewWindow();
+            _thumbnails ??= new ThumbnailBitmaps(DispatcherQueue, Refill);
+        }
+        else
+        {
+            _preview?.Release();
+            _thumbnails?.Clear();
+        }
+    }
 
     /// <summary>Connects the window that receives cross-thread update/hide messages.</summary>
     internal void Attach(MessageWindow messages) => _messages = messages;
@@ -195,6 +227,9 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
                 CompositionTarget.Rendered -= OnFrameRendered;
                 Cloak(true);
                 _data = EngineData.Empty; // hidden: hold no dataset
+                _previewTimer?.Stop();
+                _previewPath = null;
+                _preview?.Release();
                 if (SearchLine.Visibility == Visibility.Visible)
                 {
                     CaretBlink.Stop(); // nothing animates while Quick Insert is hidden
@@ -229,6 +264,7 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
             _createRow = frame.CreateRow;
             _fromShortcut = frame.FromShortcut;
             _anchorIsWindow = frame.AnchorIsWindow;
+            _pick = frame.Pick;
             _data = frame.Data;
             _queryLength = frame.QueryLength;
             frame.Query.AsSpan(0, _queryLength).CopyTo(_query);
@@ -249,7 +285,9 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
 
         ShowSearchLine();
         FillRows();
+        _anchor = anchor;
         Position(anchor, Math.Min(_count, VisibleRows));
+        SchedulePreview();
         PublishGeometry();
 
         _visible = true;
@@ -269,6 +307,7 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
 
     private void FillRows()
     {
+        _expandedRow = -1;
         var query = _query.AsSpan(0, _queryLength);
         for (var i = 0; i < _rows.Length; i++)
         {
@@ -293,6 +332,10 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
             }
 
             row.IsSelected = index == _selected;
+            if (index == _selected && PickStrip(row, index))
+                _expandedRow = i;
+            else
+                row.HidePickStrip();
             if (row.Visibility != Visibility.Visible)
                 row.Visibility = Visibility.Visible;
         }
@@ -321,7 +364,113 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
         {
             row.ShowSnippet(_trigger, s.Name, Preview(s.Text), Highlighter.Find(s.Name, query));
         }
+        else if (r.Kind == ResultKind.Snippet && r.Index < _data.UserItems.Length && _data.UserItems[r.Index] is { Image: { } image } && Images is { } images)
+        {
+            var (file, caption) = ImageRow(images, image);
+            var thumbnail = file is null ? null : Thumbnail(images, file, QuickInsertRow.ThumbnailBox);
+            row.ShowImage(thumbnail, _trigger, image.Name, Highlighter.Find(image.Name, query), caption);
+        }
     }
+
+    /// <summary>
+    /// The file a row shows and its caption: one image or collection item shows its type and size ("GIF, 240 × 180");
+    /// a folder says where its image comes from ("Latest in Screenshots"), with the newest image as its thumbnail
+    /// (none for Random).
+    /// </summary>
+    private (ImageFile? File, string Caption) ImageRow(ImagesService images, ImageItem item)
+    {
+        if (item.Kind == ImageEntryKind.Folder)
+        {
+            var folder = ImageText.Folder(item.Entry.Mode, ImageText.FolderName(item.Entry.Folder));
+            return (item.Entry.Mode == FolderMode.Random ? null : images.Newest(item), folder);
+        }
+
+        if (item.File is not { } file)
+            return (null, "");
+        if (!images.Sizes.TryGet(file.Path, file.LastWriteUtc, out var w, out var h))
+            images.Sizes.Request(file.Path, file.LastWriteUtc, file.CloudOnly, () => DispatcherQueue.TryEnqueue(Refill));
+        return (file, ImageText.Row(file.Type, w, h, System.Globalization.CultureInfo.CurrentCulture));
+    }
+
+    private ImageSource? Thumbnail(ImagesService images, ImageFile file, double sizeEpx) =>
+        _thumbnails?.Get(images.Thumbnails, file.Path, file.LastWriteUtc, (int)Math.Round(sizeEpx * (Root.XamlRoot?.RasterizationScale ?? _scale)));
+
+    /// <summary>Shows the "Let me pick" strip in the selected row when it is a pick folder; false otherwise.</summary>
+    private bool PickStrip(QuickInsertRow row, int index)
+    {
+        if (_results[index] is not { Kind: ResultKind.Snippet } r || r.Index >= _data.UserItems.Length || _data.UserItems[r.Index] is not { IsPick: true, Image: { } item } || Images is not { } images)
+            return false;
+        var candidates = images.PickCandidates(item);
+        if (candidates.Count == 0)
+            return false;
+        var thumbnails = new ImageSource?[candidates.Count];
+        for (var i = 0; i < candidates.Count; i++)
+            thumbnails[i] = Thumbnail(images, candidates[i], QuickInsertRow.PickBox);
+        row.ShowPickStrip(thumbnails, Math.Min(_pick, candidates.Count - 1));
+        return true;
+    }
+
+    /// <summary>A thumbnail or an image size arrived: redraw the rows on screen (nothing moves; only images fill in).</summary>
+    private void Refill()
+    {
+        if (!_visible)
+            return;
+        FillRows();
+        SchedulePreview();
+    }
+
+    /// <summary>The image the selected row would insert, for the preview (none for Random folders).</summary>
+    private string? SelectedImagePath()
+    {
+        if (_selected >= _count || (_createRow && _selected == _count - 1) || _results[_selected] is not { Kind: ResultKind.Snippet } r
+            || r.Index >= _data.UserItems.Length || _data.UserItems[r.Index] is not { Image: { } item } || Images is not { } images)
+            return null;
+        if (item.Kind != ImageEntryKind.Folder)
+            return item.File?.CloudOnly == false ? item.File.Path : null;
+        return item.Entry.Mode switch
+        {
+            FolderMode.Newest => images.Newest(item)?.Path,
+            FolderMode.Pick => images.PickCandidates(item) is { Count: > 0 } c ? c[Math.Min(_pick, c.Count - 1)].Path : null,
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// The preview appears once the selection has rested on an image row for ~100 ms (no flicker while arrowing
+    /// through), and goes as soon as it moves to anything else.
+    /// </summary>
+    private void SchedulePreview()
+    {
+        if (_preview is null)
+            return;
+        var path = SelectedImagePath();
+        if (path == _previewPath)
+            return;
+        _previewPath = path;
+        _preview.HidePreview();
+        if (path is null)
+        {
+            _previewTimer?.Stop();
+            return;
+        }
+
+        if (_previewTimer is null)
+        {
+            _previewTimer = DispatcherQueue.CreateTimer();
+            _previewTimer.Interval = TimeSpan.FromMilliseconds(PreviewDelayMs);
+            _previewTimer.IsRepeating = false;
+            _previewTimer.Tick += (_, _) =>
+            {
+                if (_visible && _uncloaked && _previewPath is { } p)
+                    _preview?.Show(p, _windowRect);
+            };
+        }
+
+        _previewTimer.Stop();
+        _previewTimer.Start();
+    }
+
+    private const int PreviewDelayMs = 100;
 
     /// <summary>The search line (from the shortcut) shows the query; its caret blinks only while it is visible.</summary>
     private void ShowSearchLine()
@@ -382,6 +531,7 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
             return;
         _first = first;
         FillRows();
+        Position(_anchor, Math.Min(_count, VisibleRows)); // the pick strip may have scrolled out of view
         PublishGeometry();
         e.Handled = true;
     }
@@ -416,7 +566,10 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
     // ------------------------------------------------------------------ geometry
 
     private (int Width, int Height) PhysicalSize(int rows, double scale) =>
-        ((int)Math.Round(WidthEpx * scale), (int)Math.Round(((rows * QuickInsertRow.RowHeight) + HeaderEpx + (2 * PaddingEpx)) * scale));
+        ((int)Math.Round(WidthEpx * scale), (int)Math.Round(((rows * QuickInsertRow.RowHeight) + ExpandedEpx + HeaderEpx + (2 * PaddingEpx)) * scale));
+
+    /// <summary>Extra height of the selected row while it shows the pick strip.</summary>
+    private double ExpandedEpx => _expandedRow >= 0 ? QuickInsertRow.PickStripHeight : 0;
 
     /// <summary>Below the caret; above it near the bottom of the screen; always inside the monitor's work area.</summary>
     private void Position(RECT caret, int rows)
@@ -452,7 +605,7 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
     }
 
     private void PublishGeometry() =>
-        _geometry = new PopupGeometry(_windowRect, (int)Math.Round((PaddingEpx + HeaderEpx) * _scale), (int)Math.Round(QuickInsertRow.RowHeight * _scale), _first, VisibleRows, _shownVersion);
+        _geometry = new PopupGeometry(_windowRect, (int)Math.Round((PaddingEpx + HeaderEpx) * _scale), (int)Math.Round(QuickInsertRow.RowHeight * _scale), _first, VisibleRows, _shownVersion, _expandedRow < 0 ? -1 : _first + _expandedRow, (int)Math.Round(ExpandedEpx * _scale));
 
     // ------------------------------------------------------------------ cloak
 

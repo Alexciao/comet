@@ -3,6 +3,7 @@ using Inlay.Core.Shorthands;
 using Inlay.Core.Emoji;
 using Inlay.Core.Search;
 using Inlay.Core.Settings;
+using Inlay.Platform.Images;
 using Inlay.Platform.Native;
 
 namespace Inlay.Platform.Engine;
@@ -43,6 +44,9 @@ internal sealed record EngineConfig
     /// <summary>Process name → "clipboard" for apps that mishandle Unicode key events.</summary>
     public FrozenDictionary<string, string> InsertionMethods { get; init; } = FrozenDictionary<string, string>.Empty;
 
+    /// <summary>Process name → the clipboard formats an image is pasted with, learned per app.</summary>
+    public FrozenDictionary<string, string> ImagePasteMethods { get; init; } = FrozenDictionary<string, string>.Empty;
+
     public bool ImagesEnabled { get; init; } = true;
 
     public bool QuickInsertEnabled => !Paused && (EmojiEnabled || SnippetsEnabled || ImagesEnabled);
@@ -72,6 +76,7 @@ internal sealed record EngineConfig
         QuickInsertModes = s.QuickInsertApps.DistinctBy(a => a.App, StringComparer.OrdinalIgnoreCase).ToFrozenDictionary(a => a.App, a => a.Mode, StringComparer.OrdinalIgnoreCase),
         ShorthandsExcluded = s.ShorthandsExcludedApps.ToFrozenSet(StringComparer.OrdinalIgnoreCase),
         InsertionMethods = s.InsertionMethods.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase),
+        ImagePasteMethods = s.ImagePasteMethods.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase),
     };
 }
 
@@ -89,18 +94,30 @@ internal enum UserItemKind : byte
 /// One of the user's own entries, in the order of the search engine's snippet index (snippets and images share
 /// that index: same fuzzy matching and ranking, and they win over emoji).
 /// </summary>
-internal sealed record UserItem(UserItemKind Kind, string Name, string FrecencyKey, SnippetDefinition? Snippet = null, ImageEntry? Image = null, string? File = null)
+internal sealed record UserItem(UserItemKind Kind, string Name, string FrecencyKey, SnippetDefinition? Snippet = null, ImageItem? Image = null)
 {
     public static UserItem From(SnippetDefinition s) => new(UserItemKind.Snippet, s.Name, Frecency.SnippetKey(s.Id), Snippet: s);
+
+    public static UserItem From(ImageItem i) =>
+        new(i.Kind == ImageEntryKind.Collection ? UserItemKind.CollectionImage : UserItemKind.Image, i.Name, i.Key, Image: i);
+
+    /// <summary>What the search index matches besides the name: a snippet's text, an image's keywords.</summary>
+    public string SearchText => Snippet?.Text ?? Image?.Keywords ?? "";
+
+    /// <summary>A "Let me pick" folder: Quick Insert shows a strip of its newest images to choose from.</summary>
+    public bool IsPick => Image is { Entry: { Kind: ImageEntryKind.Folder, Mode: FolderMode.Pick } };
 }
 
 /// <summary>
 /// What Quick Insert searches and shorthands match. Built off the hook thread (loading emoji data, building
 /// indexes) and handed over whole; the engine swaps it only while Quick Insert is closed.
 /// </summary>
-internal sealed class EngineData(SearchEngine search, UserItem[] userItems, ShorthandRule[] rules, RecentItem[]? recents = null)
+internal sealed class EngineData(SearchEngine search, UserItem[] userItems, ShorthandRule[] rules, RecentItem[]? recents = null, ImagesService? images = null)
 {
     public static EngineData Empty { get; } = new(new SearchEngine(null, null), [], []);
+
+    /// <summary>Resolves image items (folders, picks) and builds their insertions; null while Images is off.</summary>
+    public ImagesService? Images { get; } = images;
 
     public SearchEngine Search { get; } = search;
 
@@ -146,6 +163,9 @@ internal sealed class PopupFrame
     /// <summary>The last row is "Create snippet :query" (counted in <see cref="Count"/>).</summary>
     public bool CreateRow;
 
+    /// <summary>The selected row is a "Let me pick" folder: which of its images is chosen (←/→).</summary>
+    public int Pick;
+
     /// <summary>No caret: <see cref="Anchor"/> is the foreground window, and Quick Insert sits at its bottom center.</summary>
     public bool AnchorIsWindow;
 
@@ -158,7 +178,26 @@ internal sealed class PopupFrame
 /// Where the popup's rows are on screen, for the frame <paramref name="Version"/> it shows. A class, so the hook
 /// thread always reads a whole value the UI thread published, never half of an old one and half of a new one.
 /// </summary>
-internal sealed record PopupGeometry(RECT Window, int ListTop, int RowHeight, int FirstVisible, int VisibleRows, int Version);
+/// <param name="ExpandedRow">The row (result index) that is taller by <paramref name="ExpandedExtra"/> pixels (the pick strip), or -1.</param>
+internal sealed record PopupGeometry(RECT Window, int ListTop, int RowHeight, int FirstVisible, int VisibleRows, int Version, int ExpandedRow = -1, int ExpandedExtra = 0)
+{
+    /// <summary>The result index under <paramref name="y"/> (pixels below the list's top), or -1 above the list.</summary>
+    public int RowAt(int y)
+    {
+        if (y < 0 || RowHeight <= 0)
+            return -1;
+        if (ExpandedRow >= FirstVisible)
+        {
+            var expandedTop = (ExpandedRow - FirstVisible) * RowHeight;
+            if (y >= expandedTop + RowHeight + ExpandedExtra)
+                y -= ExpandedExtra; // below the taller row
+            else if (y >= expandedTop)
+                return ExpandedRow; // on it, strip included
+        }
+
+        return FirstVisible + (y / RowHeight);
+    }
+}
 
 /// <summary>The popup as seen from the hook thread. Calls must return immediately.</summary>
 internal interface IPopupSink

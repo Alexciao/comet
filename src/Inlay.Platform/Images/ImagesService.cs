@@ -47,6 +47,9 @@ internal sealed class ImagesService : IDisposable
     private ImageItem[] _items = [];
     private bool _disposed;
 
+    /// <summary>Pixel sizes of image files for Quick Insert's captions, read in the background.</summary>
+    public ImageSizes Sizes { get; } = new();
+
     public ImagesService(ImageLibrary library)
     {
         Library = library;
