@@ -28,13 +28,13 @@ jobs:
             runner: windows-11-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
@@ -59,7 +59,7 @@ jobs:
 
       # The end-to-end tests (tests/Inlay.E2E) drive a real desktop with real keystrokes and are run locally.
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && matrix.arch == 'x64'
         with:
           name: test-results
