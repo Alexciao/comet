@@ -101,22 +101,13 @@ public sealed class AppUpdateCheckerTests : IDisposable
 
         public ReleaseServer()
         {
-            var port = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Max(e => e.Port) + 1;
-            for (var attempt = 0; ; attempt++)
-            {
-                try
-                {
-                    Endpoint = new Uri($"http://localhost:{port + attempt}/repos/owner/comet/releases/latest/");
-                    _listener.Prefixes.Clear();
-                    _listener.Prefixes.Add(Endpoint.AbsoluteUri);
-                    _listener.Start();
-                    break;
-                }
-                catch (HttpListenerException) when (attempt < 20)
-                {
-                }
-            }
-
+            var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+            probe.Start();
+            var port = ((IPEndPoint)probe.LocalEndpoint).Port;
+            probe.Stop();
+            Endpoint = new Uri($"http://localhost:{port}/repos/owner/comet/releases/latest/");
+            _listener.Prefixes.Add(Endpoint.AbsoluteUri);
+            _listener.Start();
             new Thread(Serve) { IsBackground = true }.Start();
         }
 
