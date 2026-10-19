@@ -140,7 +140,11 @@ internal sealed class AppHost : IDisposable
     {
         _engine.SetConfig(Config());
         if (parts.HasFlag(SettingsParts.Settings))
+        {
             ApplyShortcut();
+            if (!_settings.Settings.Features.Emoji)
+                _shortcodeChecker = null; // Emoji is off: let go of the dataset (L6)
+        }
         if (parts.HasFlag(SettingsParts.Settings))
             StartupRegistration.Apply(_settings.Settings.StartAtLogin);
         RebuildData(prefetch: parts.HasFlag(SettingsParts.Settings)); // emoji may have been turned on, or the skin tone changed

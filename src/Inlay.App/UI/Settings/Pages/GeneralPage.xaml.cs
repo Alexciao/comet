@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Inlay.App.Services;
+using Inlay.App.UI.Settings.Dialogs;
 using Inlay.Core.Settings;
 using Inlay.Platform;
 using Microsoft.UI.Xaml;
@@ -124,14 +125,22 @@ public sealed partial class GeneralPage : SettingsPage
     {
         try
         {
-            var json = ImportExport.ExportBackup(Settings, Store.Snippets, Store.Shorthands);
-            var name = await FilePickers.SaveJsonAsync(OwnerWindow, "Inlay backup", json).ConfigureAwait(true);
-            if (name is not null)
-                ShowStatus(InfoBarSeverity.Success, $"Saved to {name}.");
+            var path = await FilePickers.SaveBackupAsync(OwnerWindow, "Inlay backup").ConfigureAwait(true);
+            if (path is null)
+                return;
+            var json = ImportExport.ExportBackup(Settings, Store.Snippets, Store.Shorthands, Store.Images);
+            var images = Store.Images.ToList();
+            var library = Store.ImageLibraryDirectory;
+            await Task.Run(() =>
+            {
+                using var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+                ImportExport.ExportBackupArchive(file, json, images, library);
+            }).ConfigureAwait(true);
+            ShowStatus(InfoBarSeverity.Success, $"Saved to {Path.GetFileName(path)}");
         }
         catch (Exception ex) when (FilePickers.IsFileError(ex))
         {
-            ShowStatus(InfoBarSeverity.Error, $"Couldn't export: {ex.Message}");
+            ShowStatus(InfoBarSeverity.Error, $"Couldn't save the backup. {ex.Message}");
         }
     }
 
@@ -142,33 +151,38 @@ public sealed partial class GeneralPage : SettingsPage
         _dialogOpen = true;
         try
         {
-            var json = await FilePickers.OpenJsonAsync(OwnerWindow).ConfigureAwait(true);
-            if (json is null)
+            var path = await FilePickers.OpenBackupAsync(OwnerWindow).ConfigureAwait(true);
+            if (path is null)
                 return;
-            var backup = ImportExport.ImportBackup(json);
-            var confirm = new ContentDialog
+            var library = Store.ImageLibraryDirectory;
+            var backup = await Task.Run(() =>
+            {
+                using var file = File.OpenRead(path);
+                return ImportExport.ImportBackupFile(file, library);
+            }).ConfigureAwait(true);
+            var confirm = new ReplaceSettingsDialog(
+                $"Your settings, {Count(Store.Snippets.Count, "snippet")}, {Count(Store.Images.Count, "image")} and {Count(Store.Shorthands.Count, "shorthand")} will be replaced with the backup's {Count(backup.Snippets!.Count, "snippet")}, {Count(backup.Images!.Count, "image")} and {Count(backup.Shorthands!.Count, "shorthand")}.")
             {
                 XamlRoot = XamlRoot,
-                Title = "Replace your settings?",
-                Content = $"Your settings, {Store.Snippets.Count} snippets and {Store.Shorthands.Count} replacements will be replaced by the backup's {backup.Snippets!.Count} snippets and {backup.Shorthands!.Count} replacements.",
-                PrimaryButtonText = "Replace",
-                CloseButtonText = "Cancel",
-                DefaultButton = ContentDialogButton.Close,
             };
             if (await confirm.ShowAsync() != ContentDialogResult.Primary)
                 return;
             Store.Restore(backup);
-            ShowStatus(InfoBarSeverity.Success, "Settings imported.");
+            ShowStatus(InfoBarSeverity.Success, "Settings imported");
         }
         catch (Exception ex) when (FilePickers.IsFileError(ex) || ex is FormatException)
         {
-            ShowStatus(InfoBarSeverity.Error, $"Couldn't import: {ex.Message}");
+            ShowStatus(InfoBarSeverity.Error, ex is FormatException
+                ? "This file isn't an Inlay backup. Choose a file made with Export settings"
+                : $"Couldn't read the backup. {ex.Message}");
         }
         finally
         {
             _dialogOpen = false;
         }
     }
+
+    private static string Count(int n, string noun) => n == 1 ? $"1 {noun}" : $"{n} {noun}s";
 
     private void OnOpenRepository(object sender, RoutedEventArgs e) => AppHost.OpenInBrowser(AppPaths.RepositoryUrl);
 

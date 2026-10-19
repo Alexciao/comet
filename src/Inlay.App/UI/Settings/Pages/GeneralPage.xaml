@@ -53,13 +53,13 @@
                     </toolkit:SettingsCard>
 
                     <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Backup" />
-                    <toolkit:SettingsCard Header="Export settings" Description="Save your settings, snippets and replacements in one file">
+                    <toolkit:SettingsCard Header="Export settings" Description="Save your settings, snippets, images and shorthands in one file">
                         <toolkit:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xEDE1;" />
                         </toolkit:SettingsCard.HeaderIcon>
                         <Button Click="OnExport" Content="Export" />
                     </toolkit:SettingsCard>
-                    <toolkit:SettingsCard Header="Import settings" Description="Replace your settings, snippets and replacements with the ones in a backup file">
+                    <toolkit:SettingsCard Header="Import settings" Description="Replace them with the ones in a backup file">
                         <toolkit:SettingsCard.HeaderIcon>
                             <FontIcon Glyph="&#xE8B5;" />
                         </toolkit:SettingsCard.HeaderIcon>

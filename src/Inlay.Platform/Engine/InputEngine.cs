@@ -553,6 +553,8 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         _caretRequested = false;
         _anchorKnown = false;
         _anchorIsWindow = false;
+        lock (_frame.Gate)
+            _frame.Data = EngineData.Empty; // a closed Quick Insert keeps no dataset alive (Emoji may have been turned off)
         ApplyPendingData();
     }
 

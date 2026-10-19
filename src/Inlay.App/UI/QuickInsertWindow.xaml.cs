@@ -193,6 +193,7 @@ public sealed partial class QuickInsertWindow : Window, IPopupSink
                 _awaitingFrame = false;
                 CompositionTarget.Rendered -= OnFrameRendered;
                 Cloak(true);
+                _data = EngineData.Empty; // hidden: hold no dataset
                 if (SearchLine.Visibility == Visibility.Visible)
                 {
                     CaretBlink.Stop(); // nothing animates while Quick Insert is hidden

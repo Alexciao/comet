@@ -126,6 +126,9 @@ internal sealed class SettingsService : IDisposable
 
     public string DataDirectory => AppPaths.DataDirectory;
 
+    /// <summary>Where images added to Inlay are kept (named by content hash).</summary>
+    public string ImageLibraryDirectory => Path.Combine(AppPaths.DataDirectory, "Images");
+
     private void LoadAll()
     {
         var settings = _settingsStore.Load();
