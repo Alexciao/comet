@@ -33,7 +33,7 @@
             IsPaneToggleButtonVisible="False"
             IsSettingsVisible="False"
             OpenPaneLength="{StaticResource SettingsPaneLength}"
-            PaneDisplayMode="Left"
+            PaneDisplayMode="Auto"
             DisplayModeChanged="OnDisplayModeChanged"
             SelectionChanged="OnSelectionChanged">
             <NavigationView.Resources>

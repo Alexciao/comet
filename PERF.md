@@ -81,3 +81,37 @@ Flat after the first 1,000 (caches and pools filling): +3.5 MB private over the 
 off, handles −37, GDI/USER objects unchanged; no errors logged. Latency over the run: keystroke → popup p50 6.1 ms,
 p95 9.6 ms, p99 10.8 ms (n = 4,096 most recent); hook cost per keystroke p50 67 µs idle / 161 µs with the popup
 open.
+
+## Settings window (Release, Native AOT, 500 snippets + 500 replacements)
+
+Measured inside Comet with `COMET_PERF=1` (time from the action to the composed frame that shows its result,
+split into the frame's own layout + render work), on a 165 Hz display; 60 Hz has a 16.7 ms frame.
+
+| Action | Target | Measured |
+|---|---|---:|
+| Tray click → Settings fully drawn, first open after start | < 500 ms | 217–243 ms |
+| Tray click → Settings fully drawn, warm (window destroyed and rebuilt) | < 250 ms | 154–168 ms |
+| Switching pages, first visit in a window | < 50 ms | 27–44 ms (frame work 9–17 ms) |
+| Switching pages, page already visited | < 50 ms | 15–32 ms (frame work 9–17 ms) |
+| Filtering 500 entries, per typed keystroke | one frame | 3.8–19 ms to the frame (list update ≤ 3.1 ms, frame work ≤ 3.4 ms) |
+| Filtering: select all + delete (25 → 500 cards at once) | one frame | 33 ms (frame work 6 ms) — the one case over a frame |
+| Scrolling 500 cards with the wheel (flick and normal speed) | smooth | UI-thread frames p95 ≤ 2.9 ms, max 5.4 ms, none over 16.7 ms |
+
+Scrolling itself runs on the compositor thread; what can make it stutter is the UI thread realizing cards, which is
+what the scroll row measures. First visits stay under 50 ms because each page builds what is on screen in its first
+frame and the rest (list cards, the sections below the fold) in the next one, behind the entrance transition.
+
+**Memory.** The window is destroyed on close and its objects are collected (checked with heap dumps and weak
+references; an E2E test fails if closed windows stay in memory). Then Comet trims its working set and re-renders one
+cloaked popup frame, so the popup's own pages are back before the next keystroke.
+
+| | Working set | Private bytes |
+|---|---:|---:|
+| Idle, before Settings was opened | 136 MB | 212 MB |
+| After opening and closing Settings | 31 MB | 262 MB |
+| After 6 more opens and closes | 43–46 MB | 270 MB |
+
+Private bytes don't come back: WinUI keeps ~50 MB of XAML/DirectX state after the first window and ~1.3 MB of
+native memory per window created (measured with an empty `Window` too, so it is the framework's). Keystroke → popup
+right after Settings was closed: p95 13.2 ms (12.2 ms without opening Settings; target 16 ms). Without the re-render
+it was 16.3 ms, which is why it is there.
