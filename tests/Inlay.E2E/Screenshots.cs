@@ -1,13 +1,14 @@
 using Inlay.E2E.Harness;
-using FlaUI.Core.AutomationElements;
+using System.Drawing.Imaging;
+using System.Text.Json.Nodes;
 using FlaUI.Core.Capturing;
 using FlaUI.Core.Definitions;
 
 namespace Inlay.E2E;
 
 /// <summary>
-/// Screenshots for visual review, written to the folder in <c>INLAY_SCREENSHOTS</c> (skipped when unset). Both
-/// themes come from <c>INLAY_THEME</c>, so the system setting is never changed.
+/// The README screenshots, written to the folder in <c>INLAY_SCREENSHOTS</c> (skipped when unset). Both themes come
+/// from <c>INLAY_THEME</c>, so the system setting is never changed.
 /// </summary>
 [Collection(Desktop.Name)]
 public sealed class Screenshots : IDisposable
@@ -15,6 +16,7 @@ public sealed class Screenshots : IDisposable
     private static readonly string? s_folder = Environment.GetEnvironmentVariable("INLAY_SCREENSHOTS");
 
     private readonly InlayApp _inlay = new();
+    private readonly string _work = Path.Combine(Path.GetTempPath(), "inlay-shots-" + Guid.NewGuid().ToString("N"));
 
     private EdgePage? _edge;
 
@@ -22,25 +24,72 @@ public sealed class Screenshots : IDisposable
     {
         _edge?.Dispose();
         _inlay.Dispose();
+        try { Directory.Delete(_work, true); } catch (IOException) { }
     }
 
-    private void Start(string theme, bool withEntries = true)
+    private string Picture(string name, Color from, Color to)
+    {
+        Directory.CreateDirectory(_work);
+        var path = Path.Combine(_work, name + ".png");
+        using var bmp = new Bitmap(320, 200);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            using var brush = new System.Drawing.Drawing2D.LinearGradientBrush(new Rectangle(0, 0, 320, 200), from, to, 35f);
+            g.FillRectangle(brush, 0, 0, 320, 200);
+        }
+
+        bmp.Save(path, ImageFormat.Png);
+        return path;
+    }
+
+    private static JsonObject Entry(string name, string file) => new()
+    {
+        ["id"] = Guid.NewGuid().ToString("N"), ["name"] = name, ["kind"] = "Image", ["insertAs"] = "Image", ["file"] = file,
+    };
+
+    private void Start(string theme)
     {
         if (s_folder is null)
             Assert.Skip("Set INLAY_SCREENSHOTS to a folder to take screenshots.");
         Directory.CreateDirectory(s_folder);
-        if (withEntries)
-        {
-            _inlay.WithSnippets(("website", "https://example.com/"), ("addr", "1 Example Street\nSpringfield 12345"), ("sig", "Best regards,\n{date:d MMMM yyyy}"))
-                .WithShorthands(("cmq", "comunque"), ("pk", "perché"), ("ty", "thank you"));
-        }
-
+        _inlay.WithSnippets(
+                ("email", "alex@example.com"),
+                ("address", "1 Example Street\nSpringfield 12345"),
+                ("signature", "Best regards,\nAlex\n{date:d MMMM yyyy}"))
+            .WithShorthands(("brb", "be right back"), ("btw", "by the way"), ("omw", "on my way"), ("ty", "thank you"))
+            .WithImages(
+                Entry("lgtm", _inlay.AddToLibrary(Picture("lgtm", Color.FromArgb(0x2E, 0xB8, 0x9A), Color.FromArgb(0x0E, 0x5E, 0x6B)))),
+                Entry("logo", _inlay.AddToLibrary(Picture("logo", Color.FromArgb(0xF2, 0x9E, 0x4C), Color.FromArgb(0xC4, 0x3D, 0x6B)))),
+                Entry("diagram", _inlay.AddToLibrary(Picture("diagram", Color.FromArgb(0x5B, 0x8D, 0xEF), Color.FromArgb(0x2A, 0x2F, 0x7E)))));
         _inlay.Environment["INLAY_THEME"] = theme;
         _inlay.Start();
     }
 
     private static void Save(Rectangle area, string name) =>
         Capture.Rectangle(area).ToFile(Path.Combine(s_folder!, name + ".png"));
+
+    [Theory]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    public void Quick_Insert(string theme)
+    {
+        Start(theme);
+        Thread.Sleep(3000); // let the emoji and thumbnail caches warm up
+        _edge = new EdgePage();
+        var t = theme.ToLowerInvariant();
+        var field = _edge.Textarea;
+        field.Focus();
+
+        Keyboard.Type("Send it to :em");
+        Save(Around(_inlay.WaitForPopup(), field.Bounds), $"quick-insert-{t}");
+        Keyboard.Press(Keyboard.VK_ESCAPE);
+        _inlay.WaitForPopupClosed();
+
+        Keyboard.Type(" and :l");
+        Keyboard.Type("g");
+        Save(Around(_inlay.WaitForPopup(), field.Bounds), $"quick-insert-images-{t}");
+        Keyboard.Press(Keyboard.VK_ESCAPE);
+    }
 
     [Theory]
     [InlineData("Light")]
@@ -55,191 +104,20 @@ public sealed class Screenshots : IDisposable
         Thread.Sleep(800); // entrance animation and Mica
         Save(Native.FrameBounds(window), $"settings-general-{t}");
 
-        foreach (var (page, file) in new[] { ("Snippets", "snippets"), ("Shorthands", "shorthands"), ("Excluded apps", "excluded"), ("About", "about") })
+        foreach (var (page, file) in new[] { ("Quick Insert", "quick-insert"), ("Snippets", "snippets"), ("Images", "images"), ("Emoji", "emoji"), ("Shorthands", "shorthands") })
         {
             window.FindFirstDescendant(c => c.ByName(page).And(c.ByControlType(ControlType.ListItem)))!.Click();
-            Thread.Sleep(600);
+            Thread.Sleep(700);
             Save(Native.FrameBounds(window), $"settings-{file}-{t}");
         }
 
         window.FindFirstDescendant(c => c.ByName("Snippets").And(c.ByControlType(ControlType.ListItem)))!.Click();
         Thread.Sleep(400);
         window.FindFirstDescendant(c => c.ByName("Add snippet"))!.Click();
-        Thread.Sleep(600);
+        Thread.Sleep(700);
         Save(Native.FrameBounds(window), $"settings-snippet-dialog-{t}");
         Keyboard.Target = Native.GetForegroundWindow();
         Keyboard.Press(Keyboard.VK_ESCAPE);
-    }
-
-    /// <summary>A snippets file broken by a hand edit: Inlay keeps a copy, starts with what it can, and says so.</summary>
-    [Fact]
-    public void Corrupt_file_notice()
-    {
-        Start("Light", withEntries: false);
-        _inlay.Stop();
-        File.WriteAllText(Path.Combine(_inlay.DataDirectory, "snippets.json"), "{ \"schemaVersion\": 1, \"snippets\": [ { \"name\": \"addr\", ");
-        _inlay.Start();
-        _inlay.OpenSettings();
-        var window = Automation.WaitForWindow(w => w.Name == "Inlay Settings", TimeSpan.FromSeconds(10), "Settings");
-        Automation.Foreground(window);
-        Thread.Sleep(800);
-        Save(Native.FrameBounds(window), "settings-corrupt-file-light");
-        Assert.Single(Directory.GetFiles(_inlay.DataDirectory, "snippets.corrupt-*.json"));
-        Assert.NotNull(window.FindFirstDescendant(c => c.ByControlType(ControlType.StatusBar).Or(c.ByClassName("InfoBar"))));
-    }
-
-    /// <summary>The lists ship empty: this is what the Snippets and Shorthands pages look like at first.</summary>
-    [Theory]
-    [InlineData("Light")]
-    [InlineData("Dark")]
-    public void Empty_lists(string theme)
-    {
-        Start(theme, withEntries: false);
-        _inlay.OpenSettings();
-        var window = Automation.WaitForWindow(w => w.Name == "Inlay Settings", TimeSpan.FromSeconds(10), "Settings");
-        Automation.Foreground(window);
-        foreach (var (page, file) in new[] { ("Snippets", "snippets"), ("Shorthands", "shorthands") })
-        {
-            window.FindFirstDescendant(c => c.ByName(page).And(c.ByControlType(ControlType.ListItem)))!.Click();
-            Thread.Sleep(600);
-            Save(Native.FrameBounds(window), $"settings-{file}-empty-{theme.ToLowerInvariant()}");
-        }
-    }
-
-    [Theory]
-    [InlineData("Light")]
-    [InlineData("Dark")]
-    public void Popup(string theme)
-    {
-        Start(theme);
-        Wait.Until(() => _inlay.Log.Contains("emoji bitmaps ready", StringComparison.Ordinal), TimeSpan.FromSeconds(60), "emoji warm-up");
-        _edge = new EdgePage();
-        var t = theme.ToLowerInvariant();
-        var field = _edge.Textarea;
-        field.Focus();
-
-        Keyboard.Type("Ciao :smi");
-        Save(Around(_inlay.WaitForPopup(), field.Bounds), $"popup-smi-{t}");
-        Keyboard.Press(Keyboard.VK_DOWN);
-        Keyboard.Press(Keyboard.VK_DOWN);
-        Thread.Sleep(150);
-        Save(Around(_inlay.WaitForPopup(), field.Bounds), $"popup-selection-{t}");
-        Keyboard.Press(Keyboard.VK_ESCAPE);
-        _inlay.WaitForPopupClosed();
-
-        Keyboard.Type(" :web");
-        Save(Around(_inlay.WaitForPopup(), field.Bounds), $"popup-snippet-{t}");
-        Keyboard.Press(Keyboard.VK_ESCAPE);
-        _inlay.WaitForPopupClosed();
-
-        Keyboard.Type(" :heart");
-        Save(Around(_inlay.WaitForPopup(), field.Bounds), $"popup-heart-{t}");
-        Keyboard.Press(Keyboard.VK_ESCAPE);
-        _inlay.WaitForPopupClosed();
-
-        // Bottom-right corner of the primary screen: the popup must flip above the caret and stay on screen.
-        var screen = System.Windows.Forms.Screen.PrimaryScreen!.WorkingArea;
-        var window = _edge.Window.AsWindow();
-        window.Move(screen.Right - 260, screen.Bottom - 230);
-        Thread.Sleep(500);
-        field.Focus();
-        Keyboard.Type(" :smi");
-        var popup = _inlay.WaitForPopup();
-        Save(Rectangle.Intersect(screen, Around(popup, field.Bounds)), $"popup-edge-{t}");
-        Assert.InRange(popup.Right, screen.Left, screen.Right);
-        Assert.InRange(popup.Bottom, screen.Top, screen.Bottom);
-        Keyboard.Press(Keyboard.VK_ESCAPE);
-    }
-
-    /// <summary>
-    /// Flicker check: the popup's area is captured as fast as GDI allows while the popup opens, updates and closes;
-    /// every distinct frame goes on a contact sheet. A frame with an empty, unstyled or half-drawn popup would show.
-    /// </summary>
-    [Theory]
-    [InlineData("Light")]
-    [InlineData("Dark")]
-    public void Popup_frames(string theme)
-    {
-        Start(theme);
-        Wait.Until(() => _inlay.Log.Contains("emoji bitmaps ready", StringComparison.Ordinal), TimeSpan.FromSeconds(60), "emoji warm-up");
-        _edge = new EdgePage();
-        var field = _edge.Textarea;
-        field.Focus();
-        Keyboard.Type(":hea");
-        var area = Around(_inlay.WaitForPopup(), field.Bounds);
-        Keyboard.Press(Keyboard.VK_ESCAPE);
-        _inlay.WaitForPopupClosed();
-        Keyboard.Type(" ");
-
-        var frames = new List<(long Ms, System.Drawing.Bitmap Image)>();
-        var stop = false;
-        var clock = System.Diagnostics.Stopwatch.StartNew();
-        var capture = new Thread(() =>
-        {
-            while (!Volatile.Read(ref stop))
-                frames.Add((clock.ElapsedMilliseconds, Capture.Rectangle(area).Bitmap));
-        });
-        capture.Start();
-        Thread.Sleep(100);
-        Keyboard.Type(":he");
-        _inlay.WaitForPopup();
-        Keyboard.Type("a");
-        Thread.Sleep(150);
-        Keyboard.Press(Keyboard.VK_DOWN);
-        Thread.Sleep(150);
-        Keyboard.Press(Keyboard.VK_ESCAPE);
-        _inlay.WaitForPopupClosed();
-        Thread.Sleep(150);
-        Volatile.Write(ref stop, true);
-        capture.Join();
-
-        var distinct = new List<(long Ms, System.Drawing.Bitmap Image)>();
-        foreach (var f in frames)
-        {
-            if (distinct.Count == 0 || !SameImage(distinct[^1].Image, f.Image))
-                distinct.Add(f);
-        }
-
-        Console.WriteLine($"{frames.Count} frames captured in {clock.ElapsedMilliseconds} ms, {distinct.Count} distinct");
-        SaveSheet(distinct, $"frames-{theme.ToLowerInvariant()}");
-    }
-
-    private static bool SameImage(System.Drawing.Bitmap a, System.Drawing.Bitmap b)
-    {
-        var rect = new System.Drawing.Rectangle(0, 0, a.Width, a.Height);
-        var da = a.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        var db = b.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        try
-        {
-            unsafe
-            {
-                return new ReadOnlySpan<byte>((void*)da.Scan0, da.Stride * a.Height).SequenceEqual(new ReadOnlySpan<byte>((void*)db.Scan0, db.Stride * b.Height));
-            }
-        }
-        finally
-        {
-            a.UnlockBits(da);
-            b.UnlockBits(db);
-        }
-    }
-
-    private static void SaveSheet(List<(long Ms, System.Drawing.Bitmap Image)> frames, string name)
-    {
-        const int Columns = 4;
-        var w = frames[0].Image.Width;
-        var h = frames[0].Image.Height + 20;
-        using var sheet = new System.Drawing.Bitmap(w * Columns, h * ((frames.Count + Columns - 1) / Columns));
-        using var g = System.Drawing.Graphics.FromImage(sheet);
-        g.Clear(System.Drawing.Color.Gray);
-        using var font = new System.Drawing.Font("Segoe UI", 10);
-        for (var i = 0; i < frames.Count; i++)
-        {
-            var (x, y) = (i % Columns * w, i / Columns * h);
-            g.DrawString($"#{i}  t={frames[i].Ms} ms", font, System.Drawing.Brushes.White, x + 4, y + 2);
-            g.DrawImage(frames[i].Image, x, y + 20);
-        }
-
-        sheet.Save(Path.Combine(s_folder!, name + ".png"), System.Drawing.Imaging.ImageFormat.Png);
     }
 
     /// <summary>The popup with some of the text field around it.</summary>

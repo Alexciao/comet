@@ -9,7 +9,6 @@ Sources
 Writes
     assets/icon/out/        PNGs, Inlay.ico, InlayTray.ico, InlayTrayPaused.ico, AppIcon*.scale-*.png, Inlay.png
     docs/images/            logo.svg, logo.png, social-preview.png
-    screenshots/icon/       contact sheets: every size on light/dark, tray icon on light/dark taskbars
 """
 import io
 import shutil
@@ -24,7 +23,6 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 OUT = HERE / "out"
 DOCS = ROOT / "docs" / "images"
-SHOTS = ROOT / "screenshots" / "icon"
 
 MAIN = HERE / "inlay.svg"
 SMALL = {16: HERE / "inlay-16.svg", 20: HERE / "inlay-20.svg", 24: HERE / "inlay-24.svg"}
@@ -249,9 +247,6 @@ def main() -> None:
     save_png(render(MAIN, 192), DOCS / "logo.png")
     save_png(social_preview().convert("RGB"), DOCS / "social-preview.png")
 
-    SHOTS.mkdir(parents=True, exist_ok=True)
-    save_png(sizes_sheet().convert("RGB"), SHOTS / "sizes.png")
-    save_png(tray_sheet().convert("RGB"), SHOTS / "tray.png")
 
     for ico in ("Inlay.ico", "InlayTray.ico", "InlayTrayPaused.ico"):
         path = OUT / ico

@@ -15,6 +15,11 @@
 
 Inlay runs in the system tray and works in any app. Type `:` followed by a few letters to open a menu of your snippets, images, emoji and symbols, then press Enter to insert one. You can also set up shorthands, which expand as you type without opening a menu.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/quick-insert-dark.png">
+  <img src="screenshots/quick-insert-light.png" alt="Quick Insert open next to the cursor, listing matches for :em">
+</picture>
+
 > [!NOTE]
 > **Notice on AI-generated code**
 >
@@ -34,9 +39,19 @@ You can choose, per app, whether Quick Insert shows everything, only your own sn
 
 A snippet is a piece of text saved under a name, such as `:email` for your email address. Snippets can contain placeholders for the date, the time, the clipboard and where the cursor should end up. The snippet editor's **Insert placeholder** menu lists them all.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/settings-snippets-dark.png">
+  <img src="screenshots/settings-snippets-light.png" alt="The Snippets page in Settings">
+</picture>
+
 #### Images
 
 Images and GIFs can be saved under a name and inserted the same way as snippets. A name can point to a single image or to a folder, in which case Inlay inserts the newest image, a random one, or lets you choose. The **Latest screenshot** preset sets up `:screenshot` for your most recent screenshot. Each image can be inserted as a picture, as a file attachment, or as its file path.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/quick-insert-images-dark.png">
+  <img src="screenshots/quick-insert-images-light.png" alt="Quick Insert showing image matches with thumbnails">
+</picture>
 
 #### Emoji
 
@@ -67,6 +82,11 @@ Inlay requires Windows 11. The builds aren't code-signed yet, so SmartScreen may
 ## Settings
 
 Click the tray icon to open Settings. Changes are saved immediately.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/settings-general-dark.png">
+  <img src="screenshots/settings-general-light.png" alt="The General page in Settings">
+</picture>
 
 | Page | Contents |
 |---|---|
