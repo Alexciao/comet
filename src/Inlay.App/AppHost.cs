@@ -12,6 +12,7 @@ using Inlay.Core.Search;
 using Inlay.Platform;
 using Inlay.Platform.Engine;
 using Inlay.Platform.Native;
+using Inlay.Platform.Updates;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
@@ -202,6 +203,17 @@ internal sealed class AppHost : IDisposable
             return;
         _tray.UpdateVersion = version;
         AppUpdateChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// The General page's "Check for updates" button: the app and the emoji data checks, once, in parallel on their own
+    /// threads, whatever the automatic toggles say. One log line.
+    /// </summary>
+    internal async Task<ManualCheckResult> CheckForUpdatesAsync()
+    {
+        var result = await ManualUpdateCheck.RunAsync(_appUpdates.CheckNowAsync, _updates.CheckNowAsync).ConfigureAwait(true);
+        Log.Info($"manual update check: {string.Join("; ", result.Lines)}");
+        return result;
     }
 
     /// <summary>Opens the release page of the newer version in the browser.</summary>

@@ -74,6 +74,28 @@ internal sealed class EmojiUpdateService : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// The "Check for updates" button: the same request, verification and swap as the daily check, now, whatever the
+    /// schedule, the automatic-update toggle or the connection's cost say. Null when Emoji is off (no data in use to
+    /// check). Logs nothing (the caller logs one line for both checks).
+    /// </summary>
+    public async Task<(UpdateResult Result, int DataVersion)?> CheckNowAsync()
+    {
+        if (_factory.CurrentEmoji is not { } current)
+            return null;
+        var (version, count) = (current.DataVersion, current.Count);
+        var result = await DailyCheck.InBackground(() => _updater.CheckAsync(_state, version, count, () => true)).ConfigureAwait(true);
+        Save();
+        if (result.Data is { } data)
+        {
+            _factory.ReplaceEmoji(data);
+            _dataReplaced();
+            version = data.DataVersion;
+        }
+
+        return (result, version);
+    }
+
     private void Save()
     {
         try
