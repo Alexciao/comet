@@ -17,14 +17,16 @@ public sealed partial class SnippetDialog : ContentDialog
     private readonly IReadOnlyList<string> _otherNames;
     private readonly Func<string, bool> _isEmojiShortcode;
     private readonly string _trigger;
+    private readonly IReadOnlyList<string> _imageNames;
     private readonly PreviewEnvironment _environment = new();
 
     /// <param name="newName">A name to start a new snippet with (from Quick Insert); the text box gets the focus.</param>
-    internal SnippetDialog(SnippetDefinition? editing, IReadOnlyList<string> otherNames, Func<string, bool> isEmojiShortcode, string trigger, string? newName = null)
+    internal SnippetDialog(SnippetDefinition? editing, IReadOnlyList<string> otherNames, Func<string, bool> isEmojiShortcode, string trigger, IReadOnlyList<string> imageNames, string? newName = null)
     {
         _otherNames = otherNames;
         _isEmojiShortcode = isEmojiShortcode;
         _trigger = trigger;
+        _imageNames = imageNames;
         InitializeComponent();
         Title = editing is null ? "Add snippet" : "Edit snippet";
         foreach (var (placeholder, description) in SnippetTemplate.Catalog)
@@ -75,7 +77,7 @@ public sealed partial class SnippetDialog : ContentDialog
 
     private void Validate()
     {
-        var messages = EntryValidation.ValidateSnippet(NameBox.Text, SnippetText, _otherNames, _isEmojiShortcode, _trigger);
+        var messages = EntryValidation.ValidateSnippet(NameBox.Text, SnippetText, _otherNames, _imageNames, _isEmojiShortcode, _trigger);
         // Don't scold an empty, untouched dialog: only show problems once something was typed.
         var pristine = NameBox.Text.Length == 0 && TextBox.Text.Length == 0;
         FieldMessage.Show(NameError, NameWarning, messages, ValidationField.Name, pristine);

@@ -1,6 +1,6 @@
 # Rebuilds the emoji data from the latest upstream datasets with the same builder as the app, runs the golden
 # search tests against it, and publishes it to the fixed `emoji-data` release only when the tests pass and the
-# data actually changed. Installed copies of Inlay pick it up silently (at most one check a week).
+# data actually changed. Installed copies of Inlay pick it up silently (they check at launch and once a day).
 name: Emoji data
 
 on:
@@ -108,7 +108,7 @@ jobs:
           gh release view emoji-data 2>$null | Out-Null
           if ($LASTEXITCODE -ne 0) {
             gh release create emoji-data --prerelease --latest=false --title "Emoji data" `
-              --notes "Emoji data for Inlay's silent updates. Rebuilt weekly from upstream; the app checks at most once a week."
+              --notes "Emoji data for Inlay's silent updates. Rebuilt weekly from upstream; the app checks at launch and once a day."
           }
           # The pack first, then the manifest that announces it: a client never sees a manifest for a missing pack.
           gh release upload emoji-data artifacts/emoji-data/emoji-data.bin --clobber

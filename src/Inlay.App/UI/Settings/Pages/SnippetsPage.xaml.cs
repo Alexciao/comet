@@ -150,7 +150,7 @@ public sealed partial class SnippetsPage : SettingsPage, ICardHost<SnippetItem>
         try
         {
             var others = Snippets.Where(s => s != existing).Select(s => s.Name).ToList();
-            var dialog = new SnippetDialog(existing, others, Host.IsEmojiShortcode, Settings.TriggerCharacter, newName) { XamlRoot = XamlRoot };
+            var dialog = new SnippetDialog(existing, others, Host.IsEmojiShortcode, Settings.TriggerCharacter, Host.Images.Names(null), newName) { XamlRoot = XamlRoot };
             if (await dialog.ShowAsync() != ContentDialogResult.Primary && !dialog.SavedWithShortcut)
                 return null;
 

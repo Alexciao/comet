@@ -93,7 +93,7 @@ public sealed partial class SettingsWindow : Window
     /// <summary>Raised when Inlay is paused or resumed.</summary>
     internal event Action? PausedChanged;
 
-    /// <summary>Raised when the weekly app update check finds (or stops finding) a newer version.</summary>
+    /// <summary>Raised when the app update check finds (or stops finding) a newer version.</summary>
     internal event Action? AppUpdateChanged;
 
     private double Scale => User32.GetDpiForWindow(_hwnd) / 96.0;

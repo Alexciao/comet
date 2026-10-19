@@ -289,7 +289,7 @@ public sealed class EmojiUpdateState
     public DateTimeOffset? LastChecked { get; set; }
 }
 
-/// <summary><c>app-update.json</c>: state of the weekly check for a newer Inlay.</summary>
+/// <summary><c>app-update.json</c>: state of the check for a newer Inlay (at launch and once a day).</summary>
 public sealed class AppUpdateState
 {
     public const int CurrentVersion = 1;
