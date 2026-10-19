@@ -1,0 +1,32 @@
+name: Bug report
+description: Something doesn't work as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+      description: Steps to reproduce help most.
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2 (Settings › System › About)
+    validations:
+      required: true
+  - type: input
+    id: comet
+    attributes:
+      label: Comet version
+      placeholder: Settings › General › About
+    validations:
+      required: true
+  - type: input
+    id: app
+    attributes:
+      label: The app you were typing in
+      placeholder: Notepad, Edge, Slack, …
+    validations:
+      required: true

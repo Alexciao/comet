@@ -10,3 +10,6 @@ TestResults/
 artifacts/
 bin/
 obj/
+.dev/
+AGENTS.md
+TODO.md

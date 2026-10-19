@@ -27,11 +27,19 @@ DisableDirPage=yes
 DisableProgramGroupPage=yes
 DisableReadyPage=yes
 PrivilegesRequired=lowest
+#ifndef Arch
+  #define Arch "x64"
+#endif
+#if Arch == "arm64"
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
+#else
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+#endif
 MinVersion=10.0.22000
 OutputDir=..\artifacts\installer
-OutputBaseFilename=Comet-{#AppVersion}-setup
+OutputBaseFilename=Comet-Setup-{#Arch}
 SetupIconFile=..\src\Comet.App\Assets\Comet.ico
 UninstallDisplayIcon={app}\Comet.exe
 UninstallDisplayName=Comet

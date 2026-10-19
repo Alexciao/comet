@@ -5,13 +5,28 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
   DOTNET_NOLOGO: "1"
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+          - arch: arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -19,34 +34,33 @@ jobs:
         with:
           global-json-file: global.json
 
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-${{ matrix.arch }}-
+
       # Warnings are errors (Directory.Build.props), so this is also the analyzer gate.
-      - name: Build
+      - name: Build (x64, whole solution)
+        if: matrix.arch == 'x64'
         run: dotnet build Comet.sln -c Release
 
-      - name: Unit tests (core, search golden set)
+      - name: Build (arm64, app)
+        if: matrix.arch == 'arm64'
+        run: dotnet build src/Comet.App/Comet.App.csproj -c Release -r win-arm64 -p:Platform=ARM64
+
+      - name: Unit tests (core, incl. the search golden set and the network-usage guard)
+        if: matrix.arch == 'x64'
         run: dotnet test tests/Comet.Core.Tests -c Release --no-build --logger trx --results-directory artifacts/test-results
 
-      - name: "Unit tests (platform: key translation, SendInput encoding, font check, updater over local HTTP)"
+      - name: Unit tests (platform)
+        if: matrix.arch == 'x64'
         run: dotnet test tests/Comet.Platform.Tests -c Release --no-build --logger trx --results-directory artifacts/test-results
 
       # The end-to-end tests (tests/Comet.E2E) drive a real desktop with real keystrokes and are run locally.
 
-      - name: Inno Setup
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
-
-      - name: Native AOT publish, installer, portable zip
-        shell: pwsh
-        run: ./installer/build.ps1
-
       - uses: actions/upload-artifact@v4
-        with:
-          name: comet
-          path: artifacts/installer/
-
-      - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && matrix.arch == 'x64'
         with:
           name: test-results
           path: artifacts/test-results/

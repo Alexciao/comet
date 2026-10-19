@@ -1,0 +1,10 @@
+name: Feature request
+description: An idea for Comet
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Comet to do, and why?
+    validations:
+      required: true

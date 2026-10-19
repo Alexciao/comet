@@ -1,135 +1,141 @@
+<div align="center">
+
+<img src="src/Comet.App/Assets/Comet.png" width="96" alt="">
+
 # Comet
 
-Emoji, snippets and auto-replace for any text field on Windows 11.
+**Slack-style emoji, snippets and auto-replace for any app on Windows 11.**
 
-- **Emoji picker.** Type `:` and two letters anywhere (`:fir`) and a small list appears at the caret. Keep typing
-  to filter, use ↑/↓ or Tab/Shift+Tab to move, Enter or Tab to insert, Esc to cancel, or click a row. Typing a
-  whole code such as `:fire:` replaces it directly. Search knows GitHub and Slack shortcodes, CLDR names and
-  keywords and everyday words (`:love`, `:lol`, `:ok`), forgives typos and abbreviations (`:thnmbs`, `:hrt`),
-  and learns which emoji you use. Your default skin tone is applied automatically.
-- **Snippets.** Saved text with a name, offered in the same `:` list (`:addr` → your address). Snippets can
-  contain `{date}`, `{time}`, `{date:dddd d MMMM yyyy}`, `{date+7d}` / `{date-1d}` / `{date+2w}` / `{date+1m}`
-  (optionally with a format: `{date+1d:dd/MM}`), `{weekday}`, `{clipboard}`, and `{cursor}` (where the caret ends
-  up). `{{` and `}}` insert literal braces; anything malformed is inserted as typed and flagged in the editor.
-- **Auto-replace.** Abbreviations that expand when you finish the word (`cmq` + space → `comunque `). The
-  replacement follows the case you typed (`Cmq` → `Comunque`) unless you tick *Match case*; the space, Enter or
-  punctuation you typed is kept; Backspace right after undoes the replacement.
+[![Latest release](https://img.shields.io/github/v/release/Alexciao/comet?label=release)](https://github.com/Alexciao/comet/releases/latest)
+[![CI](https://github.com/Alexciao/comet/actions/workflows/ci.yml/badge.svg)](https://github.com/Alexciao/comet/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![Windows 11](https://img.shields.io/badge/Windows-11-0078D4)
 
-Each feature can be switched off on its own. The snippet and auto-replace lists start empty — they are yours.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/popup-dark.png">
+  <img src="docs/images/popup-light.png" width="520" alt="Typing :smi in Notepad shows a list of emoji at the caret">
+</picture>
 
-Comet stays out of the way: it never takes focus, ignores password fields and windows running as
-administrator, and has its own exclusion lists (apps with their own `:` picker — Slack, Discord, Teams,
-Telegram — are excluded from the picker by default). Pause everything from the tray icon.
+</div>
+
+> [!NOTE]
+> **Built with AI, private by design.** Most of Comet's code was written with AI (Claude Code).
+> Comet never sends what you type anywhere: it has no telemetry, never logs your keystrokes, and works fully offline.
+> The only network requests are two optional weekly update checks to GitHub (emoji data and new Comet versions), which you can turn off in Settings.
+
+## Features
+
+### Emoji picker
+Type `:` and two letters in any text field and a list of emoji appears at the caret. Keep typing to filter; search
+knows GitHub and Slack shortcodes, Unicode names and everyday words (`:love`, `:lol`), forgives typos (`:thnmbs`)
+and abbreviations (`:hrt`), and learns what you use. Typing a whole code such as `:fire:` replaces it directly.
+
+| Key | Does |
+|---|---|
+| `:` + letters | opens the list (two letters by default) |
+| ↑ / ↓, Tab / Shift+Tab | move the selection |
+| Enter or Tab | insert the selected emoji |
+| Esc | close the list |
+| `:code:` or `:code` + space | insert that exact emoji |
+
+Your default skin tone is applied automatically. Apps with their own `:` picker (Slack, Discord, Teams, Telegram)
+are excluded by default.
+
+### Snippets
+Saved text with a short name, offered in the same `:` list: `:addr` becomes your address.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/snippet-dark.png">
+  <img src="docs/images/snippet-light.png" width="520" alt="A snippet in the : list">
+</picture>
+
+| Placeholder | Inserts |
+|---|---|
+| `{date}`, `{time}` | today's date, the current time |
+| `{date:dddd d MMMM yyyy}` | a date or time in any .NET format |
+| `{date+7d}`, `{date-1d}`, `{date+2w}`, `{date+1m}` | an offset date (`{date+1d:dd/MM}` with a format) |
+| `{weekday}` | today's weekday |
+| `{clipboard}` | the text on the clipboard |
+| `{cursor}` | where the caret ends up |
+| `{{`, `}}` | literal braces |
+
+### Auto-replace
+Abbreviations that expand when you finish the word: `btw` + space becomes `by the way `. The replacement follows
+how you typed it (`Btw` → `By the way`, `BTW` → `BY THE WAY`) unless *Match case exactly* is on, and the space,
+Enter or punctuation you typed is kept. **Backspace** right after an expansion undoes it. Each app can be excluded.
+
+Emoji, Snippets and Auto-replace can each be switched off; Pause from the tray stops everything. Comet never takes
+focus, and stays out of password fields, apps running as administrator and IME input.
 
 ## Install
 
-Download from the releases page (or build, below):
+| | x64 | Arm64 |
+|---|---|---|
+| **Installer** (per user, no admin rights) | [Comet-Setup-x64.exe](https://github.com/Alexciao/comet/releases/latest/download/Comet-Setup-x64.exe) | [Comet-Setup-arm64.exe](https://github.com/Alexciao/comet/releases/latest/download/Comet-Setup-arm64.exe) |
+| **Portable** (unzip and run; data stays in the folder) | [Comet-Portable-x64.zip](https://github.com/Alexciao/comet/releases/latest/download/Comet-Portable-x64.zip) | [Comet-Portable-arm64.zip](https://github.com/Alexciao/comet/releases/latest/download/Comet-Portable-arm64.zip) |
 
-- `Comet-<version>-setup.exe` — installs for your user only (no administrator rights) into
-  `%LocalAppData%\Programs\Comet`, adds a Start menu entry and starts Comet. Running a newer setup updates in
-  place: the running Comet is asked to quit, replaced, and started again. Uninstall from *Settings → Apps*;
-  your settings and lists are kept in `%LocalAppData%\Comet`.
-- `Comet-<version>-portable.zip` — unzip anywhere and run `Comet.exe`. Before deleting the folder, turn off
-  *Start at login* in Settings (or remove the `Comet` value under
-  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
+Checksums: [SHA256SUMS.txt](https://github.com/Alexciao/comet/releases/latest/download/SHA256SUMS.txt).
 
-The installer isn't code-signed, so SmartScreen may ask for confirmation the first time.
+**Requirements:** Windows 11 (build 22000 or later). Windows 10 is not supported: the installer and the app
+require Windows 11, and it hasn't been tested there.
 
-## Settings and files
+**SmartScreen:** the builds aren't code-signed yet, so Windows may say it protected your PC. Click **More info** →
+**Run anyway**.
 
-Left-click the tray icon (or launch Comet again) to open Settings. Right-click for Settings, Pause/Resume and
-Quit.
+## Settings
 
-Everything lives in `%LocalAppData%\Comet`:
+Left-click the tray icon (or start Comet again) to open Settings. Changes apply and save at once.
 
-| File | Contents |
+| | |
 |---|---|
-| `settings.json` | features, start at login, trigger character, minimum letters, skin tone, excluded apps |
-| `snippets.json` | your snippets |
-| `autoreplace.json` | your replacements |
-| `frecency.json` | which emoji and snippets you use (for ranking); *Reset* in Settings clears it |
-| `emoji-update.json`, `emoji-data.bin` | state and data of the silent emoji updates |
-| `logs\comet.log` | events and timings only — never what you type |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-emoji-dark.png"><img src="docs/images/settings-emoji-light.png" alt="Emoji page"></picture> | **Emoji:** switch the picker on or off, choose the default skin tone, clear recently used emoji. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-snippets-dark.png"><img src="docs/images/settings-snippets-light.png" alt="Snippets page"></picture> | **Snippets:** add, search, edit, duplicate, import and export snippets, with a live preview. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-autoreplace-dark.png"><img src="docs/images/settings-autoreplace-light.png" alt="Auto-replace page"></picture> | **Auto-replace:** your abbreviations, each with its own switch, and the apps where they don't expand. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-general-dark.png"><img src="docs/images/settings-general-light.png" alt="General page"></picture> | **General:** start with Windows, the trigger character and minimum letters, excluded apps, updates, backup and about. |
 
-The files are plain JSON with a schema version, written atomically with a `.bak` copy of the previous version.
-Edits made by hand while Comet runs are picked up immediately. A file that can't be read is set aside as
-`*.corrupt-<time>.json`, the backup is used if it's good, and Settings shows what happened. Snippets and
-replacements can be exported and imported as JSON from their pages.
+## Performance
 
-## Emoji updates
+Release build (Native AOT), measured; details in [docs/performance.md](docs/performance.md).
 
-New emoji arrive without an app update: at most once a week (and not in the first two minutes after start),
-while Emoji is on and Comet isn't paused, Comet makes one small HTTPS request for a manifest. Only when it
-announces newer data does it download the data pack (≈650 KB), verify its size, SHA-256 and contents, and swap
-it in while the list is closed. Checks are skipped on metered connections and fail silently offline. Turn it off
-with *Update emoji automatically* in Settings → General. Nothing else is ever sent anywhere.
+| | |
+|---|---:|
+| Keystroke → popup on screen (p95) | 12.5 ms |
+| Search, worst case per keystroke | 0.32 ms |
+| Start → ready | 113–148 ms |
+| Tray click → Settings drawn (warm / first) | 154–168 ms / 217–243 ms |
+| CPU while idle | ≈ 0 (Comet's threads: 0 cycles) |
+| Download (installer) | ~25 MB |
 
-The packs are built every week by `.github/workflows/emoji-data.yml` from the upstream datasets, with the same
-builder and the same golden search tests as the built-in data, and published to the `emoji-data` release.
+## Privacy
 
-At load time Comet checks every emoji against the installed Segoe UI Emoji and hides the ones it can't draw as
-a single picture, so a Windows font update reveals new emoji by itself.
+Comet contacts exactly two addresses, once a week each, with only a `User-Agent: Comet/<version>` header:
 
-## Build
+| Address | Why | Turn off |
+|---|---|---|
+| `https://github.com/Alexciao/comet/releases/download/emoji-data/manifest.json` | newer emoji data | Settings › General › Update emoji automatically |
+| `https://api.github.com/repos/Alexciao/comet/releases/latest` | newer Comet version (it only tells you) | Settings › General › Notify me about Comet updates |
 
-Requirements: Windows 11, the .NET 10 SDK, and for Native AOT publishing the "Desktop development with C++"
-workload of Visual Studio Build Tools (the linker; the IDE isn't needed). Rider or VS Code work as editors.
+Neither runs while Comet is paused or on a metered connection. A test fails the build if any other network code
+appears. The local log in `%LocalAppData%\Comet\logs` records events and timings, never typed text.
 
-```powershell
-dotnet build Comet.sln                     # everything, warnings are errors
-dotnet run --project src/Comet.App         # run (Debug, JIT)
-dotnet test tests/Comet.Core.Tests         # search (incl. the golden set), picker, auto-replace, snippets, settings
-dotnet test tests/Comet.Platform.Tests     # key translation (Italian/US layouts), SendInput encoding, font check, updater
-pwsh installer/build.ps1                   # Native AOT publish + installer + portable zip -> artifacts/installer
+## Build from source
+
+Prerequisites: the [.NET 10 SDK](https://dotnet.microsoft.com/download), Visual Studio 2022 Build Tools with the
+**Desktop development with C++** workload (for Native AOT), and the Windows 11 SDK (10.0.26100).
+
+```pwsh
+dotnet build Comet.sln                      # Debug build
+dotnet test tests/Comet.Core.Tests          # unit tests incl. the search golden set
+dotnet test tests/Comet.Platform.Tests
+./installer/build.ps1 -Version 1.0.0        # Native AOT publish, installer and portable zip (needs Inno Setup 6)
 ```
 
-The version comes from `Directory.Build.props` only.
+The end-to-end tests (`tests/Comet.E2E`) drive a real desktop with real keystrokes; run them when you're away from
+the keyboard. The solution opens in Rider or Visual Studio.
 
-`tools/Comet.DataBuilder` compiles the emoji datasets in `data/sources` into `src/Comet.Core/Data/emoji.bin`;
-`tools/Comet.IconBuilder` draws the app and tray icons.
+## License and acknowledgements
 
-### End-to-end tests
-
-`tests/Comet.E2E` launches Comet and real apps (Notepad, Edge, Windows Terminal, and VS Code and Word when
-installed) and types with real, layout-aware keystrokes. It takes over keyboard and focus while it runs, only
-ever types into windows it opened itself, and keeps the display awake. Run it when you're not using the PC:
-
-```powershell
-dotnet build tests/Comet.E2E; tests/Comet.E2E/bin/Debug/net10.0-windows10.0.26100.0/Comet.E2E.exe
-```
-
-| Variable | Effect |
-|---|---|
-| `COMET_EXE` | test a published build (the latency target is asserted only then) |
-| `COMET_SCREENSHOTS=<folder>` | take the review screenshots and flicker frame captures |
-| `COMET_SOAK=10000` | run the soak test (about 20 minutes) |
-| `COMET_E2E_PACE_MS` | delay between keystrokes (default 60) |
-
-Performance numbers are in [PERF.md](PERF.md), design decisions in [DECISIONS.md](DECISIONS.md).
-
-## Known limitations
-
-- **Windows 11 Notepad** applies keys typed in the same instant as an insertion against the live keyboard
-  state; Comet edits Notepad directly to avoid this, but keys typed faster than ~200 words per minute right
-  after an insertion can still come out wrong in Notepad (not in other apps).
-- **Administrator windows** get no picker or replacements unless Comet itself runs as administrator (Windows
-  doesn't let a normal app type into them).
-- **Password fields** are detected through UI Automation and the classic Edit style; a custom control that
-  exposes neither isn't recognized as a password field.
-- **Country flags** aren't offered: Segoe UI Emoji draws them as two letters. Emoji newer than the installed
-  font are hidden until Windows updates the font.
-- **Remote desktop and virtual machine windows** receive text through the clipboard (they mistranslate typed
-  Unicode); Comet restores the clipboard afterwards. Apps where typed emoji arrive broken can be switched to the
-  clipboard method in `settings.json` (`insertionMethods`).
-- **IME composition** (Chinese, Japanese, Korean input) cancels the picker; Comet doesn't interfere with it.
-- The first time an emoji outside the ~500 most popular is shown costs one glyph rasterization (~20 ms); after
-  that it's cached.
-- Memory: about 130 MB working set once the emoji pictures are pre-rendered (most of it is the WinUI 3 runtime).
-- Display scaling other than 100% is supported (per-monitor DPI aware) but was not visually checked.
-- The emoji update URL points at `github.com/Alexciao/comet`; see [BLOCKERS.md](BLOCKERS.md).
-
-## Credits
-
-Emoji data: [emojibase](https://emojibase.dev) (MIT), [gemoji](https://github.com/github/gemoji) (MIT),
-[emojilib](https://github.com/muan/emojilib) (MIT), and the Unicode Consortium's emoji frequency data. Licenses
-are in `data/sources`.
+[MIT](LICENSE). Inspired by [Rocket](https://matthewpalmer.net/rocket/) for macOS. Emoji data from
+[emojibase](https://github.com/milesj/emojibase), [gemoji](https://github.com/github/gemoji),
+[emojilib](https://github.com/muan/emojilib) and [Unicode CLDR](https://cldr.unicode.org/); see
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

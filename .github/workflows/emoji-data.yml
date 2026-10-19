@@ -31,6 +31,12 @@ jobs:
         with:
           global-json-file: global.json
 
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-x64-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-x64-
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
