@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using Inlay.Core.Settings;
 using Inlay.Core.Shorthands;
 using Inlay.Core.Snippets;
 using Inlay.Core.Text;
@@ -39,13 +40,16 @@ internal sealed record InsertionJob(
     public KBDLLHOOKSTRUCT[]? Replay { get; init; }
 
     public bool[]? ReplayKeyUp { get; init; }
+
+    /// <summary>An image to insert instead of text (see <see cref="ImageInsertion"/>); Text and SnippetTemplate are then null.</summary>
+    public ImageInsertion? Image { get; init; }
 }
 
 /// <summary>
 /// Sends insertions from its own thread. Keeping <c>SendInput</c> off the hook thread matters: injected events
 /// pass through the hook again, and the hook thread must be free to wave them through.
 /// </summary>
-internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
+internal sealed unsafe partial class TextInjector : IDisposable, ISnippetEnvironment
 {
     private const uint CF_UNICODETEXT = 13;
 
@@ -58,9 +62,12 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
     private readonly ManualResetEventSlim _ready = new();
     private readonly uint _excludeFromHistory;
     private readonly uint _canIncludeInHistory;
+    private readonly uint _pngFormat;
+    private readonly uint _dropEffectFormat;
     private nint _window;
-    private string? _pendingRender;
-    private bool _rendered;
+
+    /// <summary>What Inlay last put on the clipboard with delayed rendering; null once nothing more may be handed out.</summary>
+    private PendingRender? _render;
 
     /// <param name="completed">Called on the injector thread after each job with the number of events Windows accepted.</param>
     public TextInjector(Action<InsertionJob, uint> completed)
@@ -68,13 +75,19 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
         _completed = completed;
         _excludeFromHistory = User32.RegisterClipboardFormatW("ExcludeClipboardContentFromMonitorProcessing");
         _canIncludeInHistory = User32.RegisterClipboardFormatW("CanIncludeInClipboardHistory");
+        _pngFormat = User32.RegisterClipboardFormatW("PNG");
+        _dropEffectFormat = User32.RegisterClipboardFormatW("Preferred DropEffect");
         s_instance = this;
         _thread = new Thread(Run) { IsBackground = true, Name = "Inlay injector", Priority = ThreadPriority.AboveNormal };
         _thread.Start();
         _ready.Wait();
     }
 
-    public void Enqueue(InsertionJob job) => _queue.TryAdd(job);
+    public void Enqueue(InsertionJob job)
+    {
+        if (_queue.TryAdd(job))
+            User32.PostMessageW(_window, User32.WM_NULL, 0, 0); // wakes the thread while it serves clipboard reads
+    }
 
     /// <summary>Sends a watchdog probe key (swallowed by a live hook).</summary>
     public void SendProbe() => new InputBatch().Key(0xFF, InputSignature.Probe).Send();
@@ -111,11 +124,23 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
         _ready.Set();
         while (!_queue.IsCompleted)
         {
-            // Idle: wait forever. With the user's clipboard still to restore: wait only until insertions pause.
-            if (!_queue.TryTake(out var job, _clipboardToRestore is null ? Timeout.Infinite : ClipboardRestoreDelayMs))
+            InsertionJob? job;
+            if (_clipboardToRestore is null)
             {
-                RestorePendingClipboard();
-                continue;
+                // Idle: wait forever.
+                if (!_queue.TryTake(out job, Timeout.Infinite))
+                    continue;
+            }
+            else if (!_queue.TryTake(out job))
+            {
+                // The user's clipboard is still to restore: wait until insertions pause, pumping messages so an app
+                // that reads a pasted format late (delayed rendering) is still served. Enqueue wakes the pump.
+                PumpUntil(() => _queue.Count > 0 || _queue.IsAddingCompleted, TimeSpan.FromMilliseconds(_restoreDelayMs));
+                if (!_queue.TryTake(out job))
+                {
+                    RestorePendingClipboard();
+                    continue;
+                }
             }
 
             uint accepted = 0;
@@ -144,6 +169,8 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
 
     private uint Execute(InsertionJob job)
     {
+        if (job.Image is { } image)
+            return (image.InsertAs == ImageInsertAs.Path ? InsertText(job, image.Path, "") : PasteImage(job, image)) + Replay(job);
         if (job.Text is null && job.SnippetTemplate is null)
             return Replay(job);
 
@@ -156,14 +183,16 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
             afterCursor = expansion.AfterCursor.ToString();
         }
 
-        uint accepted;
+        return InsertText(job, text, afterCursor) + Replay(job);
+    }
+
+    private uint InsertText(InsertionJob job, string text, string afterCursor)
+    {
         if (job.Method == InsertionMethod.Clipboard)
-            accepted = PasteViaClipboard(job, text, afterCursor);
-        else if (job.PacedEditor != 0 && EditDirectly(job, text, afterCursor) is { } direct)
-            accepted = direct;
-        else
-            accepted = TypeBatch(job, text, afterCursor);
-        return accepted + Replay(job);
+            return PasteViaClipboard(job, text, afterCursor);
+        if (job.PacedEditor != 0 && EditDirectly(job, text, afterCursor) is { } direct)
+            return direct;
+        return TypeBatch(job, text, afterCursor);
     }
 
     /// <summary>
@@ -325,13 +354,15 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
             after = null;
         }
 
+        var bytes = new byte[(text.Length + 1) * 2];
+        MemoryMarshal.AsBytes(text.AsSpan()).CopyTo(bytes);
+        PendingRender render;
         try
         {
             User32.EmptyClipboard();
             // Delayed rendering: the text is handed over in WM_RENDERFORMAT, which tells us exactly when the
             // target app has pasted, so the old clipboard can be restored without guessing a delay.
-            _pendingRender = text;
-            _rendered = false;
+            _render = render = new PendingRender(null, [CF_UNICODETEXT], _ => bytes);
             User32.SetClipboardData(CF_UNICODETEXT, 0);
             MarkPrivate();
         }
@@ -341,15 +372,19 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
         }
 
         var accepted = _batch.Clear().ReleaseModifiers().Backspaces(job.DeleteCount).PressCtrlV().Send();
+        render.Pasted();
 
         // Ctrl stays down until the app has read the clipboard: an app that handles the V key late must still see it.
         var sw = Stopwatch.StartNew();
-        PumpUntil(() => _rendered, TimeSpan.FromMilliseconds(1000));
-        if (!_rendered)
+        PumpUntil(() => render.Read, TimeSpan.FromMilliseconds(1000));
+        if (!render.Read)
+        {
             Log.Warn($"clipboard paste was not picked up within {sw.ElapsedMilliseconds} ms");
-        _pendingRender = null;
+            _render = null; // a late read gets nothing: the text is typed below
+        }
+
         accepted += _batch.Clear().ReleaseCtrl().Send();
-        if (!_rendered)
+        if (!render.Read)
         {
             // The app ignored Ctrl+V: type the text instead so it isn't lost.
             accepted += _batch.Clear().Text(text).Send();
@@ -365,10 +400,17 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
 
     private const int ClipboardRestoreDelayMs = 250;
 
+    /// <summary>How long insertions must pause before the user's clipboard comes back (longer after an image paste).</summary>
+    private int _restoreDelayMs = ClipboardRestoreDelayMs;
+
     private List<(uint Format, byte[] Data)>? _clipboardToRestore;
 
     private void RestorePendingClipboard()
     {
+        if (_render is { Image: { } image } render)
+            LearnReadTime(image, render);
+        _render = null;
+        _restoreDelayMs = ClipboardRestoreDelayMs;
         if (_clipboardToRestore is { } saved)
         {
             _clipboardToRestore = null;
@@ -533,22 +575,24 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
         {
             try
             {
-                var text = self._pendingRender ?? "";
-                var bytes = new byte[(text.Length + 1) * 2];
-                MemoryMarshal.AsBytes(text.AsSpan()).CopyTo(bytes);
-                if (msg == User32.WM_RENDERALLFORMATS)
+                if (self._render is not { } render)
+                    return 0;
+                if (msg == User32.WM_RENDERFORMAT)
                 {
-                    if (!User32.OpenClipboard(hwnd))
-                        return 0;
-                    SetData(CF_UNICODETEXT, bytes);
+                    if (render.Render((uint)wParam) is { } data)
+                        SetData((uint)wParam, data);
+                }
+                else if (User32.OpenClipboard(hwnd))
+                {
+                    // Inlay is closing while its paste is still on the clipboard: hand everything over.
+                    foreach (var format in render.Formats)
+                    {
+                        if (render.Render(format) is { } data)
+                            SetData(format, data);
+                    }
+
                     User32.CloseClipboard();
                 }
-                else
-                {
-                    SetData(CF_UNICODETEXT, bytes);
-                }
-
-                self._rendered = true;
             }
             catch (Exception ex)
             {
@@ -564,6 +608,7 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
     public void Dispose()
     {
         _queue.CompleteAdding();
+        User32.PostMessageW(_window, User32.WM_NULL, 0, 0);
         if (_thread.Join(TimeSpan.FromSeconds(2)))
         {
             _queue.Dispose();
