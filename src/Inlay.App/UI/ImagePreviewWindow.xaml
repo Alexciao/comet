@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="Inlay.App.UI.ImagePreviewWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Inlay preview">
+    <!-- The selected image, larger, beside Quick Insert. GIFs play while it is shown. -->
+    <Grid x:Name="Root" Padding="8">
+        <Image x:Name="Picture" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Grid>
+</Window>

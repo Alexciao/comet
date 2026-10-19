@@ -222,6 +222,7 @@ internal static partial class User32
     public const int WS_EX_TOOLWINDOW = 0x00000080;
     public const int WS_EX_APPWINDOW = 0x00040000;
     public const int WS_EX_NOACTIVATE = 0x08000000;
+    public const int WS_EX_TRANSPARENT = 0x00000020;
 
     public const int SW_HIDE = 0;
     public const int SW_SHOWNOACTIVATE = 4;
