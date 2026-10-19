@@ -15,7 +15,8 @@ public enum BoundaryKind : byte
     Tab,
 }
 
-public readonly record struct Boundary(BoundaryKind Kind, char Char = '\0');
+/// <param name="Shift">Enter or Tab was pressed with Shift (a new line in chat apps, backwards in forms): re-sent the same way.</param>
+public readonly record struct Boundary(BoundaryKind Kind, char Char = '\0', bool Shift = false);
 
 public enum AutoReplaceAction : byte
 {
@@ -26,30 +27,36 @@ public enum AutoReplaceAction : byte
     Undo,
 }
 
-public readonly record struct AutoReplaceDecision(bool Swallow, AutoReplaceAction Action, int DeleteCount = 0, string? Text = null, Boundary Boundary = default);
+/// <param name="DeleteCount">Characters (graphemes) to erase before typing.</param>
+/// <param name="Deleted">The exact text those characters are, for editors that need UTF-16 positions.</param>
+public readonly record struct AutoReplaceDecision(bool Swallow, AutoReplaceAction Action, int DeleteCount = 0, string? Text = null, Boundary Boundary = default, string? Deleted = null);
 
 /// <summary>
-/// Tracks the word being typed in a fixed buffer and expands abbreviations at word boundaries.
+/// Expands abbreviations at word boundaries, from a short history of what was typed since the last reset.
 /// <list type="bullet">
-/// <item>Fires only on a whole word: the word must start after whitespace, opening punctuation or a reset,
-/// never inside a word or after a letter or digit.</item>
-/// <item>Case follows the typed word (<c>cmq</c>/<c>Cmq</c>/<c>CMQ</c>) unless the rule matches case exactly.</item>
-/// <item>Backspace right after an expansion restores exactly what was typed, and that word does not
-/// expand again until something else is typed.</item>
+/// <item>Fires only on a whole word: after whitespace or opening punctuation, or at the start of what Comet saw
+/// (after a click or focus change). Never inside a word, right after closing punctuation (<c>comet.it</c>,
+/// <c>3.5</c>) or after an apostrophe inside a word (<c>you're</c>).</item>
+/// <item>Case follows the typed word (<c>cmq</c>/<c>Cmq</c>/<c>CMQ</c>) unless the rule matches case exactly; a
+/// word typed exactly as the abbreviation is written gives the replacement exactly as written.</item>
+/// <item>Backspace right after an expansion restores exactly what was typed, and that word does not expand
+/// again until something else is typed. Not after Enter or Tab: they may already have sent a message or moved
+/// focus, and undoing would press them again.</item>
+/// <item>Backspace edits the history, so erasing back into a word continues that word.</item>
 /// </list>
-/// Lookups use span-keyed dictionaries, so tracking and matching allocate nothing.
 /// </summary>
 public sealed class AutoReplaceEngine
 {
     private const int MaxWord = 48;
+    private const int MaxHistory = 256;
 
-    private readonly char[] _word = new char[MaxWord];
-    private int _length;
-    private bool _valid = true;
+    // What was typed since the last reset, as the field should now contain it (up to the caret).
+    private readonly char[] _history = new char[MaxHistory];
+    private int _count;
 
-    // The word before the last boundary, restored when Backspace erases that boundary; -1 = unknown.
-    private readonly char[] _previous = new char[MaxWord];
-    private int _previousLength = -1;
+    // True when the start of the history is a word start: right after a reset (DECISIONS: unknown text before the
+    // caret counts as a word start). False once the history was trimmed (it then starts mid-text).
+    private bool _startIsWordStart = true;
 
     private Dictionary<string, AutoReplaceRule> _ignoreCase = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, AutoReplaceRule> _exactCase = new(StringComparer.Ordinal);
@@ -91,17 +98,22 @@ public sealed class AutoReplaceEngine
     }
 
     /// <summary>The word typed so far (for tests and diagnostics).</summary>
-    public ReadOnlySpan<char> CurrentWord => _word.AsSpan(0, _length);
+    public ReadOnlySpan<char> CurrentWord => _history.AsSpan(WordStart(), _count - WordStart());
 
     /// <summary>True when the current word could still become an abbreviation (used to prefetch the focus context).</summary>
-    public bool IsCandidate => _valid && _length > 0 && RuleCount > 0;
+    public bool IsCandidate => RuleCount > 0 && _count > 0 && CanExpandAt(WordStart()) && _count - WordStart() is > 0 and <= MaxWord;
 
-    /// <summary>Forgets the word (focus change, click, caret moved).</summary>
+    /// <summary>
+    /// True while Comet knows something about the text before the caret (a word, an undo it could offer). A click
+    /// then moves the caret away from it, so the caller should watch for clicks.
+    /// </summary>
+    public bool HasState => _count > 0 || _undoWord is not null;
+
+    /// <summary>Forgets everything (focus change, click, caret moved): the text before the caret is unknown.</summary>
     public void Reset()
     {
-        _length = 0;
-        _valid = true;
-        _previousLength = -1;
+        _count = 0;
+        _startIsWordStart = true;
         _undoWord = null;
         _undoText = null;
         _suppressed = null;
@@ -124,103 +136,149 @@ public sealed class AutoReplaceEngine
             {
                 // The original word and boundary are typed back; erasing that boundary again brings the word back.
                 _suppressed = word;
-                ClearWord();
-                word.CopyTo(_previous);
-                _previousLength = word.Length;
-                return new AutoReplaceDecision(true, AutoReplaceAction.Undo, SearchText.GraphemeCount(text) + 1, word, boundary);
+                Remove(text.Length + 1);
+                Append(word);
+                Append(boundary.Char);
+                return new AutoReplaceDecision(true, AutoReplaceAction.Undo, SearchText.GraphemeCount(text) + 1, word, boundary, text + boundary.Char);
             }
         }
 
         switch (key.Kind)
         {
-            case KeyKind.Char when key.Char == ' ' || TextClass.IsWhitespace(key.Char):
+            case KeyKind.Char when TextClass.IsWhitespace(key.Char):
                 return OnBoundary(new Boundary(BoundaryKind.Char, key.Char), allowed);
-            case KeyKind.Char when TextClass.IsClosingPunctuation(key.Char) && _length > 0:
+            case KeyKind.Char when TextClass.IsClosingPunctuation(key.Char) && _count > 0 && !IsSeparator(_history[_count - 1]):
                 return OnBoundary(new Boundary(BoundaryKind.Char, key.Char), allowed);
-            case KeyKind.Char when TextClass.IsOpeningPunctuation(key.Char) || TextClass.IsClosingPunctuation(key.Char):
-                EndWord();
-                return default;
             case KeyKind.Char:
+                _suppressed = null;
                 Append(key.Char);
                 return default;
             case KeyKind.Enter:
-                return OnBoundary(new Boundary(BoundaryKind.Enter), allowed);
+                return OnBoundary(new Boundary(BoundaryKind.Enter, '\n', key.Shift), allowed);
             case KeyKind.Tab:
-                return OnBoundary(new Boundary(BoundaryKind.Tab), allowed);
+                return OnBoundary(new Boundary(BoundaryKind.Tab, '\t', key.Shift), allowed);
             case KeyKind.Backspace:
-                if (_length > 0)
-                {
-                    _length--;
-                }
-                else if (_previousLength >= 0)
-                {
-                    // Erased the boundary: the caret is at the end of the previous word again.
-                    _previous.AsSpan(0, _previousLength).CopyTo(_word);
-                    _length = _previousLength;
-                    _previousLength = -1;
-                }
-
-                // Otherwise the text before the caret is unknown, as after a click: the next word counts as fresh.
+                // Past the start of the history the text is unknown, as after a click: the next word still counts as
+                // a fresh word (select all, Backspace, then an abbreviation is the common case).
+                if (_count > 0)
+                    RemoveGrapheme();
                 return default;
             case KeyKind.Ignored:
             case KeyKind.DeadKey: // the composed character arrives with the next key
                 return default;
             default:
-                // Caret moved, shortcut or IME: forget the word. The next word is assumed to start fresh.
+                // Caret moved, shortcut, paste or IME: forget the text. The next word is assumed to start fresh.
                 Reset();
                 return default;
         }
     }
 
+    private AutoReplaceDecision OnBoundary(Boundary boundary, bool allowed)
+    {
+        var start = WordStart();
+        var word = _history.AsSpan(start, _count - start);
+        var result = default(AutoReplaceDecision);
+        if (allowed && word.Length is > 0 and <= MaxWord && CanExpandAt(start)
+            && !(_suppressed is not null && word.SequenceEqual(_suppressed)) && TryMatch(word, out var replacement))
+        {
+            var typed = new string(word);
+            result = new AutoReplaceDecision(true, AutoReplaceAction.Expand, SearchText.GraphemeCount(word), replacement, boundary, typed);
+            if (boundary.Kind == BoundaryKind.Char)
+            {
+                _undoWord = typed;
+                _undoText = replacement;
+                _undoBoundary = boundary;
+            }
+
+            Remove(word.Length);
+            Append(replacement);
+        }
+
+        _suppressed = null;
+        if (boundary.Kind == BoundaryKind.Char)
+            Append(boundary.Char);
+        else
+            Reset(); // Enter may have sent the message, Tab moved to another field: what follows is unknown
+        return result;
+    }
+
+    /// <summary>Where the current word starts in the history: after the last separator.</summary>
+    private int WordStart()
+    {
+        var i = _count;
+        while (i > 0 && !IsSeparator(_history[i - 1], i - 1))
+            i--;
+        return i;
+    }
+
+    /// <summary>
+    /// A word starting at <paramref name="start"/> may expand when what comes before it is whitespace or opening
+    /// punctuation, or the start of the history when that is a word start.
+    /// </summary>
+    private bool CanExpandAt(int start)
+    {
+        if (start == 0)
+            return _startIsWordStart;
+        var before = _history[start - 1];
+        return TextClass.IsWhitespace(before) || (TextClass.IsOpeningPunctuation(before) && !IsApostropheInWord(start - 1));
+    }
+
+    /// <summary>
+    /// Characters that end a word. An apostrophe right after a letter is part of the word (<c>you're</c>,
+    /// <c>l'altro</c>), not the opening quote it would be before one.
+    /// </summary>
+    private bool IsSeparator(char c, int index) =>
+        TextClass.IsWhitespace(c) || TextClass.IsClosingPunctuation(c)
+        || (TextClass.IsOpeningPunctuation(c) && !IsApostropheInWord(index));
+
+    private bool IsSeparator(char c) => IsSeparator(c, _count - 1);
+
+    private bool IsApostropheInWord(int index) =>
+        _history[index] is '\'' or '’' && index > 0 && char.IsLetterOrDigit(_history[index - 1]);
+
     private void Append(char c)
     {
-        _suppressed = null;
-        if (_length == MaxWord)
+        if (_count == MaxHistory)
         {
-            _valid = false;
+            // Keep the recent half; what came before is now unknown (and not a word start).
+            Array.Copy(_history, MaxHistory / 2, _history, 0, MaxHistory / 2);
+            _count = MaxHistory / 2;
+            _startIsWordStart = false;
+        }
+
+        _history[_count++] = c;
+    }
+
+    private void Append(ReadOnlySpan<char> text)
+    {
+        foreach (var c in text)
+            Append(c);
+    }
+
+    private void Remove(int units)
+    {
+        if (units > _count)
+        {
+            _count = 0;
+            _startIsWordStart = false;
             return;
         }
 
-        _word[_length++] = c;
+        _count -= units;
     }
 
-    private void ClearWord()
+    /// <summary>Backspace erases one character as the user sees it: a surrogate pair, or a letter with its marks.</summary>
+    private void RemoveGrapheme()
     {
-        _length = 0;
-        _valid = true;
-    }
-
-    /// <summary>A boundary ended the word: remember it (for Backspace over the boundary) and start a new one.</summary>
-    private void EndWord()
-    {
-        if (_valid)
+        var text = _history.AsSpan(0, _count);
+        int position = 0, last = 0;
+        while (position < text.Length)
         {
-            CurrentWord.CopyTo(_previous);
-            _previousLength = _length;
-        }
-        else
-        {
-            _previousLength = -1;
+            last = position;
+            position += StringInfo.GetNextTextElementLength(text[position..]);
         }
 
-        ClearWord();
-    }
-
-    private AutoReplaceDecision OnBoundary(Boundary boundary, bool allowed)
-    {
-        var word = CurrentWord;
-        var result = default(AutoReplaceDecision);
-        if (allowed && _valid && _length > 0 && !(_suppressed is not null && word.SequenceEqual(_suppressed)) && TryMatch(word, out var replacement))
-        {
-            _undoWord = new string(word);
-            _undoText = replacement;
-            _undoBoundary = boundary;
-            result = new AutoReplaceDecision(true, AutoReplaceAction.Expand, SearchText.GraphemeCount(word), replacement, boundary);
-        }
-
-        _suppressed = null;
-        EndWord();
-        return result;
+        _count = last;
     }
 
     private bool TryMatch(ReadOnlySpan<char> word, out string replacement)
@@ -233,7 +291,8 @@ public sealed class AutoReplaceEngine
 
         if (_ignoreCaseLookup.TryGetValue(word, out var rule))
         {
-            replacement = ApplyCase(word, rule.Replacement);
+            // Typed exactly as the abbreviation is written (IIRC for "IIRC"): the replacement exactly as written.
+            replacement = word.SequenceEqual(rule.Abbreviation) ? rule.Replacement : ApplyCase(word, rule.Replacement);
             return true;
         }
 
@@ -241,7 +300,7 @@ public sealed class AutoReplaceEngine
         return false;
     }
 
-    /// <summary><c>cmq</c> → as defined, <c>Cmq</c> → Capitalized, <c>CMQ</c> → UPPERCASE.</summary>
+    /// <summary><c>cmq</c> → as defined, <c>Cmq</c> → Capitalized, <c>CMQ</c> → UPPERCASE (in the user's culture).</summary>
     internal static string ApplyCase(ReadOnlySpan<char> typed, string replacement)
     {
         var letters = 0;
@@ -262,14 +321,18 @@ public sealed class AutoReplaceEngine
             return replacement.ToUpper(culture);
         if (char.IsUpper(FirstLetter(typed)))
         {
-            var i = replacement.AsSpan().IndexOfAnyExcept(" \t\r\n");
-            if (i < 0)
+            // The first letter, wherever it is: «perché» → «Perché».
+            var i = 0;
+            while (i < replacement.Length && !char.IsLetter(replacement[i]))
+                i++;
+            if (i == replacement.Length)
                 return replacement;
             return string.Concat(replacement.AsSpan(0, i), char.ToUpper(replacement[i], culture).ToString(), replacement.AsSpan(i + 1));
         }
 
         return replacement;
     }
+
 
     private static char FirstLetter(ReadOnlySpan<char> s)
     {

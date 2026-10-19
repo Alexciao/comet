@@ -140,6 +140,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         var vk = k.vkCode & 0xFF;
         if (!isKeyDown)
         {
+            _translator.KeyUp(vk);
             if (_swallowedDown[vk])
             {
                 _swallowedDown[vk] = false;
@@ -266,7 +267,7 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
         {
             case AutoReplaceAction.Expand:
             case AutoReplaceAction.Undo:
-                StartInjection(new InsertionJob(a.DeleteCount, a.Text, null, a.Boundary, MethodFor(_context.ProcessName), _keyTimestamp, _context.PacedEditor));
+                StartInjection(new InsertionJob(a.DeleteCount, a.Text, null, a.Boundary, MethodFor(_context.ProcessName), _keyTimestamp, _context.PacedEditor) { DeleteUnits = a.Deleted?.Length });
                 return true;
         }
 
@@ -464,10 +465,14 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
 
     private static bool Contains(RECT r, POINT p) => p.X >= r.Left && p.X < r.Right && p.Y >= r.Top && p.Y < r.Bottom;
 
-    /// <summary>The mouse hook costs a context switch per mouse event, so it is installed only while a click must reset state.</summary>
+    /// <summary>
+    /// The mouse hook costs a context switch per mouse event, so it is installed only while a click must reset
+    /// state: a picker session, or auto-replace knowing the text before the caret (a click moves the caret away
+    /// from it, and a Backspace after an expansion would otherwise undo it wherever the caret now is).
+    /// </summary>
     private void UpdateMouseHook()
     {
-        var want = _picker.IsActive || _autoReplace.CurrentWord.Length > 0;
+        var want = _picker.IsActive || _autoReplace.HasState;
         if (want != _mouseHookWanted)
         {
             _mouseHookWanted = want;

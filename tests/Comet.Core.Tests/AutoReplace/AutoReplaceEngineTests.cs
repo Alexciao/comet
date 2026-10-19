@@ -61,14 +61,19 @@ public sealed class AutoReplaceEngineTests
     [InlineData("3cmq ")]
     [InlineData("cmqx ")]
     [InlineData("é" + "cmq ")]
+    [InlineData("end.cmq ")]    // closing punctuation directly followed by letters is one token (A7)
+    [InlineData("comet.cmq ")]
+    [InlineData("3,cmq ")]
     public void Never_fires_inside_a_word_or_after_a_letter_or_digit(string text) =>
         Assert.Equal(AutoReplaceAction.None, Type(Engine(), text).Action);
 
     [Theory]
     [InlineData("(cmq ")]
     [InlineData("hello cmq ")]
-    [InlineData("end.cmq ")]
+    [InlineData("end. cmq ")]
     [InlineData("\"cmq\"")]
+    [InlineData("'cmq ")]
+    [InlineData("«cmq»")]
     public void Fires_after_whitespace_or_punctuation(string text) =>
         Assert.Equal(AutoReplaceAction.Expand, Type(Engine(), text).Action);
 

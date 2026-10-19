@@ -35,11 +35,38 @@ public sealed partial class KeyTranslatorTests : IDisposable
             UnloadKeyboardLayout(hkl);
     }
 
-    private KeyInput[] Press(nint layout, uint vk, Modifiers modifiers = Modifiers.None)
+    /// <summary>A key-down, then (unless <paramref name="hold"/>) its key-up.</summary>
+    private KeyInput[] Press(nint layout, uint vk, Modifiers modifiers = Modifiers.None, bool hold = false)
     {
         Span<KeyInput> output = stackalloc KeyInput[2];
         var n = _translator.Translate(vk, MapVirtualKeyExW(vk, MapVkToVsc, layout), modifiers, layout, output);
+        if (!hold)
+            _translator.KeyUp(vk);
         return output[..n].ToArray();
+    }
+
+    /// <summary>H9 (AUDIT.md): holding Caps Lock auto-repeats its key-down; Windows toggles once, so must Comet.</summary>
+    [Fact]
+    public void Holding_caps_lock_toggles_once()
+    {
+        var us = Layout("00000409");
+        var initial = Char(us, 'A');
+        Press(us, VkCapital, hold: true);
+        Press(us, VkCapital, hold: true);
+        Press(us, VkCapital, hold: true);
+        _translator.KeyUp(VkCapital);
+        Assert.NotEqual(initial, Char(us, 'A'));
+        Press(us, VkCapital);
+        Assert.Equal(initial, Char(us, 'A'));
+    }
+
+    /// <summary>A5 (AUDIT.md): Insert (Shift+Insert pastes, Ctrl+Insert copies) resets the word like the caret keys.</summary>
+    [Fact]
+    public void Insert_is_navigation()
+    {
+        var us = Layout("00000409");
+        Assert.Equal(KeyKind.Navigation, Press(us, 0x2D, Modifiers.Shift).Single().Kind);
+        Assert.Equal(KeyKind.Navigation, Press(us, 0x2D).Single().Kind);
     }
 
     private char Char(nint layout, uint vk, Modifiers modifiers = Modifiers.None)

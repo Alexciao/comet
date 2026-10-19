@@ -54,6 +54,7 @@ internal sealed unsafe class KeyTranslator
 
     private readonly byte[] _state = new byte[256];
     private bool _capsLock;
+    private bool _capsDown;
     private char _pendingDead;
 
     public KeyTranslator() => Resync();
@@ -62,7 +63,15 @@ internal sealed unsafe class KeyTranslator
     public void Resync()
     {
         _capsLock = (User32.GetKeyState(VK_CAPITAL) & 1) != 0;
+        _capsDown = false;
         _pendingDead = '\0';
+    }
+
+    /// <summary>A key went up (only Caps Lock matters: its next press toggles again).</summary>
+    public void KeyUp(uint vk)
+    {
+        if (vk == VK_CAPITAL)
+            _capsDown = false;
     }
 
     /// <summary>Translates a key-down. Writes 1–2 inputs (2 when a dead key could not compose) and returns the count.</summary>
@@ -71,7 +80,10 @@ internal sealed unsafe class KeyTranslator
     {
         if (vk == VK_CAPITAL)
         {
-            _capsLock = !_capsLock;
+            // Windows toggles on the press, not on auto-repeat while the key is held.
+            if (!_capsDown)
+                _capsLock = !_capsLock;
+            _capsDown = true;
             output[0] = KeyInput.Of(KeyKind.Ignored);
             return 1;
         }
@@ -111,7 +123,8 @@ internal sealed unsafe class KeyTranslator
             VK_ESCAPE => KeyKind.Escape,
             VK_UP => KeyKind.Up,
             VK_DOWN => KeyKind.Down,
-            VK_LEFT or VK_RIGHT or VK_HOME or VK_END or VK_PRIOR or VK_NEXT or VK_DELETE => KeyKind.Navigation,
+            // Insert: Shift+Insert pastes and Ctrl+Insert copies; either way the text is no longer what was typed.
+            VK_LEFT or VK_RIGHT or VK_HOME or VK_END or VK_PRIOR or VK_NEXT or VK_DELETE or VK_INSERT => KeyKind.Navigation,
             _ => null,
         };
 

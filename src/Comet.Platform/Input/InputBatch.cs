@@ -14,8 +14,19 @@ internal sealed class InputBatch
     private const uint MAPVK_VK_TO_VSC = 0;
 
     private readonly List<INPUT> _inputs = new(64);
-    private bool _leftShiftReleased;
-    private bool _rightShiftReleased;
+
+    /// <summary>Modifiers the user was holding when the batch started (released for it, pressed again after).</summary>
+    private readonly List<(ushort Vk, ushort Scan, bool Extended)> _released = new(4);
+
+    private static readonly (ushort Vk, ushort Scan, bool Extended)[] s_modifiers =
+    [
+        (VirtualKey.VK_LSHIFT, 0x2A, false),
+        (VirtualKey.VK_RSHIFT, 0x36, false),
+        (VirtualKey.VK_LCONTROL, LeftCtrlScan, false),
+        (VirtualKey.VK_RCONTROL, LeftCtrlScan, true),
+        (VirtualKey.VK_LMENU, 0x38, false),
+        (VirtualKey.VK_RMENU, 0x38, true),
+    ];
 
     public int Count => _inputs.Count;
 
@@ -31,29 +42,31 @@ internal sealed class InputBatch
     }
 
     /// <summary>
-    /// The user is usually still holding Shift from typing the closing ":" (Shift+period on many layouts) when an
-    /// insertion starts, and their key-up is held until it finishes. Shift would turn caret moves into
-    /// selections and Ctrl+V into Ctrl+Shift+V, so it is released for the batch and pressed again at the end.
+    /// The user is usually still holding Shift from typing the closing ":" (Shift+period on many layouts), or
+    /// AltGr (Ctrl+Alt) when the trigger is an AltGr character, when an insertion starts; their key-up is held
+    /// until it finishes. Held modifiers would turn caret moves into selections, Backspace into Ctrl+Backspace and
+    /// Ctrl+V into Ctrl+Shift+V, so they are released for the batch and pressed again at the end.
     /// </summary>
-    public InputBatch ReleaseShift()
+    public InputBatch ReleaseModifiers()
     {
-        _leftShiftReleased = (User32.GetAsyncKeyState(VirtualKey.VK_LSHIFT) & 0x8000) != 0;
-        _rightShiftReleased = (User32.GetAsyncKeyState(VirtualKey.VK_RSHIFT) & 0x8000) != 0;
-        if (_leftShiftReleased)
-            Add(VirtualKey.VK_LSHIFT, 0x2A, User32.KEYEVENTF_KEYUP, InputSignature.Comet);
-        if (_rightShiftReleased)
-            Add(VirtualKey.VK_RSHIFT, 0x36, User32.KEYEVENTF_KEYUP, InputSignature.Comet);
+        _released.Clear();
+        foreach (var m in s_modifiers)
+        {
+            if ((User32.GetAsyncKeyState(m.Vk) & 0x8000) == 0)
+                continue;
+            _released.Add(m);
+            Add(m.Vk, m.Scan, User32.KEYEVENTF_KEYUP | (m.Extended ? User32.KEYEVENTF_EXTENDEDKEY : 0), InputSignature.Comet);
+        }
+
         return this;
     }
 
-    /// <summary>Puts back a Shift released by <see cref="ReleaseShift"/> (the user's own key-up arrives later).</summary>
-    public InputBatch RestoreShift()
+    /// <summary>Puts back the modifiers released by <see cref="ReleaseModifiers"/> (the user's own key-ups arrive later).</summary>
+    public InputBatch RestoreModifiers()
     {
-        if (_leftShiftReleased)
-            Add(VirtualKey.VK_LSHIFT, 0x2A, 0, InputSignature.Comet);
-        if (_rightShiftReleased)
-            Add(VirtualKey.VK_RSHIFT, 0x36, 0, InputSignature.Comet);
-        _leftShiftReleased = _rightShiftReleased = false;
+        foreach (var m in _released)
+            Add(m.Vk, m.Scan, m.Extended ? User32.KEYEVENTF_EXTENDEDKEY : 0, InputSignature.Comet);
+        _released.Clear();
         return this;
     }
 
@@ -127,12 +140,18 @@ internal sealed class InputBatch
         Add(VirtualKey.VK_LSHIFT, 0x2A, User32.KEYEVENTF_KEYUP, InputSignature.Comet);
     }
 
-    public InputBatch Boundary(Boundary boundary) => boundary.Kind switch
+    /// <summary>The key that ended the word, as it was pressed: Shift+Enter stays a new line in chat apps, Shift+Tab goes back.</summary>
+    public InputBatch Boundary(Boundary boundary)
     {
-        BoundaryKind.Enter => Key(VirtualKey.VK_RETURN),
-        BoundaryKind.Tab => Key(VirtualKey.VK_TAB),
-        _ => Text([boundary.Char]),
-    };
+        if (boundary.Kind == BoundaryKind.Char)
+            return Text([boundary.Char]);
+        if (boundary.Shift)
+            Add(VirtualKey.VK_LSHIFT, 0x2A, 0, InputSignature.Comet);
+        Key((ushort)(boundary.Kind == BoundaryKind.Enter ? VirtualKey.VK_RETURN : VirtualKey.VK_TAB));
+        if (boundary.Shift)
+            Add(VirtualKey.VK_LSHIFT, 0x2A, User32.KEYEVENTF_KEYUP, InputSignature.Comet);
+        return this;
+    }
 
     /// <summary>Ctrl down, V down, V up. Ctrl stays down until <see cref="ReleaseCtrl"/>.</summary>
     public InputBatch PressCtrlV()

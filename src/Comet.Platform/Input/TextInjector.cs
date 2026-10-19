@@ -29,6 +29,12 @@ internal sealed record InsertionJob(
     long KeyTimestamp,
     nint PacedEditor = 0)
 {
+    /// <summary>
+    /// UTF-16 units to remove when the editor is edited directly by index (the text being replaced may contain
+    /// surrogate pairs, which <see cref="DeleteCount"/> counts as one character each). Defaults to DeleteCount.
+    /// </summary>
+    public int? DeleteUnits { get; init; }
+
     /// <summary>Keys the user typed while this job was in flight, replayed after it (set by the engine).</summary>
     public KBDLLHOOKSTRUCT[]? Replay { get; init; }
 
@@ -78,7 +84,26 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
 
     CultureInfo ISnippetEnvironment.Culture => CultureInfo.CurrentCulture;
 
-    string ISnippetEnvironment.ClipboardText() => ReadClipboardText();
+    /// <summary>
+    /// The user's clipboard text. While one of Comet's own pastes is still on the clipboard (it is restored once
+    /// insertions pause), that is the user's saved copy, not Comet's previous insertion.
+    /// </summary>
+    string ISnippetEnvironment.ClipboardText() =>
+        _clipboardToRestore is { } saved ? SavedText(saved) : ReadClipboardText();
+
+    private static string SavedText(List<(uint Format, byte[] Data)> saved)
+    {
+        foreach (var (format, data) in saved)
+        {
+            if (format != CF_UNICODETEXT)
+                continue;
+            var text = System.Text.Encoding.Unicode.GetString(data);
+            var nul = text.IndexOf('\0');
+            return nul < 0 ? text : text[..nul];
+        }
+
+        return "";
+    }
 
     private void Run()
     {
@@ -123,33 +148,38 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
             return Replay(job);
 
         var text = job.Text ?? "";
-        var caretBack = 0;
-        var cursorFromEnd = 0;
+        var afterCursor = "";
         if (job.SnippetTemplate is not null)
         {
             var expansion = SnippetTemplate.Expand(job.SnippetTemplate, this);
             text = expansion.Text;
-            caretBack = SearchText.GraphemeCount(expansion.AfterCursor);
-            cursorFromEnd = expansion.AfterCursor.Length;
+            afterCursor = expansion.AfterCursor.ToString();
         }
 
         uint accepted;
         if (job.Method == InsertionMethod.Clipboard)
-            accepted = PasteViaClipboard(job, text, caretBack);
-        else if (job.PacedEditor != 0 && EditDirectly(job, text, cursorFromEnd) is { } direct)
+            accepted = PasteViaClipboard(job, text, afterCursor);
+        else if (job.PacedEditor != 0 && EditDirectly(job, text, afterCursor) is { } direct)
             accepted = direct;
         else
-            accepted = TypeBatch(job, text, caretBack);
+            accepted = TypeBatch(job, text, afterCursor);
         return accepted + Replay(job);
     }
 
+    /// <summary>
+    /// How far the caret goes back after the text and its boundary, in characters as the app sees them: the part
+    /// after <c>{cursor}</c>, plus a typed boundary character (the commit space goes at the end, not at the caret).
+    /// </summary>
+    internal static int CaretBack(InsertionJob job, string afterCursor) =>
+        afterCursor.Length == 0 ? 0 : SearchText.GraphemeCount(afterCursor) + (job.After is { Kind: BoundaryKind.Char } ? 1 : 0);
+
     /// <summary>The normal path: one atomic SendInput batch.</summary>
-    private uint TypeBatch(InsertionJob job, string text, int caretBack)
+    private uint TypeBatch(InsertionJob job, string text, string afterCursor)
     {
-        _batch.Clear().ReleaseShift().Backspaces(job.DeleteCount).Text(text).Lefts(caretBack);
+        _batch.Clear().ReleaseModifiers().Backspaces(job.DeleteCount).Text(text);
         if (job.After is { } after)
             _batch.Boundary(after);
-        return _batch.RestoreShift().Send();
+        return _batch.Lefts(CaretBack(job, afterCursor)).RestoreModifiers().Send();
     }
 
     /// <summary>
@@ -160,14 +190,14 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
     /// character is selected with Shift held until EM_GETSEL reports that selection — proof that everything typed
     /// so far was applied, and an exact index. Returns null (use the key-event path) if the editor doesn't answer.
     /// </summary>
-    private uint? EditDirectly(InsertionJob job, string text, int cursorFromEnd)
+    private uint? EditDirectly(InsertionJob job, string text, string afterCursor)
     {
         var hwnd = job.PacedEditor;
         uint accepted = 0;
         int end;
         if (job.DeleteCount > 0)
         {
-            accepted += _batch.Clear().ReleaseShift().ShiftLeftHeld().Send();
+            accepted += _batch.Clear().ReleaseModifiers().ShiftLeftHeld().Send();
             var deadline = Environment.TickCount64 + 500;
             (int Start, int End)? selection;
             while ((selection = Selection(hwnd)) is { } sel && sel.End - sel.Start != 1 && Environment.TickCount64 < deadline)
@@ -176,7 +206,7 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
             if (selection is not { } found || found.End - found.Start != 1)
             {
                 Log.Warn("direct edit: the editor did not report the selection; typing instead");
-                accepted += _batch.Clear().RestoreShift().Send();
+                accepted += _batch.Clear().RestoreModifiers().Send();
                 return null;
             }
 
@@ -191,22 +221,30 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
             return null;
         }
 
-        // The boundary key becomes part of the edit: a paragraph mark for Enter, a tab for Tab.
-        var insert = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\n', '\r');
-        if (job.After is { } boundary)
-            insert += boundary.Kind switch { BoundaryKind.Enter => '\r', BoundaryKind.Tab => '\t', _ => boundary.Char };
-
-        var start = end - job.DeleteCount;
+        var (start, insert, cursor) = PlanDirectEdit(end, job.DeleteUnits ?? job.DeleteCount, text, afterCursor, job.After);
         Log.Debug($"direct edit: replace {start}-{end} with {insert.Length} units");
         User32.SendMessageTimeoutW(hwnd, User32.EM_SETSEL, (nuint)start, end, User32.SMTO_ABORTIFHUNG, 200, out _);
         ReplaceSelection(hwnd, insert);
-        if (cursorFromEnd > 0)
-        {
-            var cursor = start + insert.Length - cursorFromEnd;
-            User32.SendMessageTimeoutW(hwnd, User32.EM_SETSEL, (nuint)cursor, cursor, User32.SMTO_ABORTIFHUNG, 200, out _);
-        }
+        if (cursor is { } at)
+            User32.SendMessageTimeoutW(hwnd, User32.EM_SETSEL, (nuint)at, at, User32.SMTO_ABORTIFHUNG, 200, out _);
 
-        return accepted + _batch.Clear().RestoreShift().Send();
+        return accepted + _batch.Clear().RestoreModifiers().Send();
+    }
+
+    /// <summary>
+    /// What a direct edit replaces and inserts, and where the caret goes, in the editor's UTF-16 units. The text is
+    /// measured as it is inserted (a line break is one <c>\r</c> there), and the boundary key becomes part of the
+    /// edit: a paragraph mark for Enter, a tab for Tab, the character itself otherwise, always at the end.
+    /// </summary>
+    internal static (int Start, string Insert, int? Cursor) PlanDirectEdit(int end, int deleteUnits, string text, string afterCursor, Boundary? after)
+    {
+        static string AsEdited(string s) => s.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\n', '\r');
+        var beforeCursor = AsEdited(text[..^afterCursor.Length]);
+        var insert = beforeCursor + AsEdited(afterCursor);
+        if (after is { } boundary)
+            insert += boundary.Kind switch { BoundaryKind.Enter => '\r', BoundaryKind.Tab => '\t', _ => boundary.Char };
+        var start = end - deleteUnits;
+        return (start, insert, afterCursor.Length > 0 ? start + beforeCursor.Length : null);
     }
 
     /// <summary>EM_REPLACESEL (undoable). The window manager marshals the string for this system edit message.</summary>
@@ -266,21 +304,26 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
 
     // ---------------- clipboard fallback ----------------
 
-    private uint PasteViaClipboard(InsertionJob job, string text, int caretBack)
+    private uint PasteViaClipboard(InsertionJob job, string text, string afterCursor)
     {
-        // A character boundary (the space after an abbreviation) is pasted with the text: one edit, not two.
-        var after = job.After;
-        if (after is { Kind: BoundaryKind.Char } boundary && caretBack == 0)
-        {
-            text += boundary.Char;
-            after = null;
-        }
-
         // The user's clipboard is restored once insertions pause (see Run), not between back-to-back pastes:
         // replacing and restoring it in quick succession made apps miss some pastes (measured in Notepad).
         _clipboardToRestore ??= SaveClipboard();
         if (_clipboardToRestore is null || !OpenClipboardRetry())
-            return 0;
+        {
+            // Another program holds the clipboard: type the text rather than lose it (the commit key is gone).
+            Log.Warn("clipboard busy; typing instead");
+            return TypeBatch(job, text, afterCursor);
+        }
+
+        var caretBack = CaretBack(job, afterCursor);
+        // A character boundary (the space after an abbreviation) is pasted with the text: one edit, not two.
+        var after = job.After;
+        if (after is { Kind: BoundaryKind.Char } boundary)
+        {
+            text += boundary.Char;
+            after = null;
+        }
 
         try
         {
@@ -297,7 +340,7 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
             User32.CloseClipboard();
         }
 
-        var accepted = _batch.Clear().ReleaseShift().Backspaces(job.DeleteCount).PressCtrlV().Send();
+        var accepted = _batch.Clear().ReleaseModifiers().Backspaces(job.DeleteCount).PressCtrlV().Send();
 
         // Ctrl stays down until the app has read the clipboard: an app that handles the V key late must still see it.
         var sw = Stopwatch.StartNew();
@@ -316,7 +359,7 @@ internal sealed unsafe class TextInjector : IDisposable, ISnippetEnvironment
         _batch.Clear().Lefts(caretBack);
         if (after is { } b)
             _batch.Boundary(b);
-        accepted += _batch.RestoreShift().Send();
+        accepted += _batch.RestoreModifiers().Send();
         return accepted;
     }
 
