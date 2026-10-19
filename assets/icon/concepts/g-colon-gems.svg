@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2EC7B8"/><stop offset="1" stop-color="#0A7E78"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="url(#tile)"/>
+  <!-- a colon whose dots are inlaid: the top one sunk, the bottom one a set gem -->
+  <circle cx="104" cy="84" r="22" fill="#065E59"/>
+  <circle cx="104" cy="84" r="15" fill="#FFFFFF" opacity=".55"/>
+  <path d="M104 126 L146 168 L104 210 L62 168 Z" fill="#065E59" stroke="#065E59" stroke-width="14" stroke-linejoin="round"/>
+  <path d="M104 136 L136 168 L104 200 L72 168 Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="168" y="60" width="14" height="136" rx="7" fill="#FFFFFF"/>
+</svg>
