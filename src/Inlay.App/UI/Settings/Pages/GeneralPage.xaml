@@ -36,33 +36,6 @@
                         <ToggleSwitch OffContent="Off" OnContent="On" x:Name="StartupToggle" AutomationProperties.Name="Start with Windows" Toggled="OnStartupToggled" />
                     </toolkit:SettingsCard>
 
-                    <TextBlock x:Name="MenuHeader" Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="The : menu" />
-                    <toolkit:SettingsCard Header="Trigger character" Description="Type it, then a few letters, to open the menu of emoji and snippets">
-                        <toolkit:SettingsCard.HeaderIcon>
-                            <FontIcon Glyph="&#xE765;" />
-                        </toolkit:SettingsCard.HeaderIcon>
-                        <TextBox
-                            x:Name="TriggerBox"
-                            AutomationProperties.Name="Trigger character"
-                            KeyDown="OnTriggerKeyDown"
-                            LostFocus="OnTriggerLostFocus"
-                            MaxLength="1"
-                            TextAlignment="Center" />
-                    </toolkit:SettingsCard>
-                    <toolkit:SettingsCard Header="Minimum characters" Description="How many letters after the trigger before the menu appears">
-                        <toolkit:SettingsCard.HeaderIcon>
-                            <FontIcon Glyph="&#xE8E9;" />
-                        </toolkit:SettingsCard.HeaderIcon>
-                        <NumberBox
-                            x:Name="MinCharsBox"
-                            AutomationProperties.Name="Minimum characters"
-                            Maximum="4"
-                            Minimum="1"
-                            SmallChange="1"
-                            SpinButtonPlacementMode="Compact"
-                            ValueChanged="OnMinCharsChanged" />
-                    </toolkit:SettingsCard>
-
                     <!-- At or below the bottom edge at the default size: built right after the page's first frame. -->
                     <StackPanel x:Name="LaterSections" x:Load="False" Spacing="{StaticResource SettingsCardSpacing}">
                     <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="Updates" />

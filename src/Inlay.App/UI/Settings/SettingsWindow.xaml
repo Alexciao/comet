@@ -62,10 +62,16 @@
                 </Grid>
             </NavigationView.PaneHeader>
 
+            <!-- General, then Quick Insert and its sources, then Shorthands. Nothing in the footer. -->
             <NavigationView.MenuItems>
-                <NavigationViewItem x:Name="EmojiItem" Content="Emoji" Tag="emoji">
+                <NavigationViewItem x:Name="GeneralItem" Content="General" Tag="general">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE76E;" />
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="QuickInsertItem" Content="Quick Insert" Tag="quickinsert">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE765;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem x:Name="SnippetsItem" Content="Snippets" Tag="snippets">
@@ -73,20 +79,17 @@
                         <FontIcon Glyph="&#xE70B;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="ShorthandItem" Content="Shorthands" Tag="autoreplace">
+                <NavigationViewItem x:Name="EmojiItem" Content="Emoji" Tag="emoji">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE76E;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem x:Name="ShorthandsItem" Content="Shorthands" Tag="shorthands">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8AC;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
-
-            <NavigationView.FooterMenuItems>
-                <NavigationViewItem x:Name="GeneralItem" Content="General" Tag="general">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE713;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-            </NavigationView.FooterMenuItems>
 
             <Frame x:Name="ContentFrame" />
         </NavigationView>

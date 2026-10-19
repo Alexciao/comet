@@ -4,8 +4,6 @@ using Inlay.Core.Settings;
 using Inlay.Platform;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using Windows.System;
 
 namespace Inlay.App.UI.Settings.Pages;
 
@@ -24,7 +22,6 @@ public sealed partial class GeneralPage : SettingsPage
 
     protected override void OnAttached()
     {
-        OwnerWindow.Closing += ApplyTrigger; // a character typed but not yet confirmed still counts
         ShowProblems();
         OnAppUpdateChanged();
         Load();
@@ -49,9 +46,6 @@ public sealed partial class GeneralPage : SettingsPage
     {
         _loading = true;
         StartupToggle.IsOn = Settings.StartAtLogin;
-        TriggerBox.Text = Settings.TriggerCharacter;
-        MenuHeader.Text = $"The {Settings.TriggerCharacter} menu";
-        MinCharsBox.Value = Settings.MinimumCharacters;
         if (LaterSections is not null)
         {
             EmojiUpdatesToggle.IsOn = Settings.UpdateEmojiAutomatically;
@@ -105,52 +99,6 @@ public sealed partial class GeneralPage : SettingsPage
         if (_loading || Settings.StartAtLogin == StartupToggle.IsOn)
             return;
         Settings.StartAtLogin = StartupToggle.IsOn;
-        Store.SaveSettings();
-    }
-
-    private void OnTriggerKeyDown(object sender, KeyRoutedEventArgs e)
-    {
-        if (e.Key != VirtualKey.Enter)
-            return;
-        ApplyTrigger();
-        e.Handled = true;
-    }
-
-    private void OnTriggerLostFocus(object sender, RoutedEventArgs e) => ApplyTrigger();
-
-    /// <summary>Accepts one character that isn't a letter, digit or space; anything else goes back to the current one.</summary>
-    private void ApplyTrigger()
-    {
-        if (_loading)
-            return;
-        var text = TriggerBox.Text.Trim();
-        var valid = text.Length == 1 && !char.IsLetterOrDigit(text[0]);
-        if (!valid || text == Settings.TriggerCharacter)
-        {
-            TriggerBox.Text = Settings.TriggerCharacter;
-            return;
-        }
-
-        Settings.TriggerCharacter = text;
-        Store.SaveSettings();
-    }
-
-    private void OnMinCharsChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
-    {
-        if (_loading)
-            return;
-        if (double.IsNaN(args.NewValue))
-        {
-            sender.Value = Settings.MinimumCharacters; // cleared: put the current value back
-            return;
-        }
-
-        var value = (int)Math.Clamp(Math.Round(args.NewValue, MidpointRounding.AwayFromZero), 1, AppSettings.MaxMinimumCharacters);
-        if (value != args.NewValue)
-            sender.Value = value; // show what is stored (2.5 → 3), so the spin buttons step from there
-        if (value == Settings.MinimumCharacters)
-            return;
-        Settings.MinimumCharacters = value;
         Store.SaveSettings();
     }
 

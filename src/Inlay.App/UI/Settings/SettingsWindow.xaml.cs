@@ -66,7 +66,7 @@ public sealed partial class SettingsWindow : Window
 
         try
         {
-            Nav.SelectedItem = ItemFor(_host.Settings.UiState.SettingsPage) ?? EmojiItem;
+            Nav.SelectedItem = ItemFor(_host.Settings.UiState.SettingsPage) ?? GeneralItem;
         }
         catch
         {
@@ -138,7 +138,7 @@ public sealed partial class SettingsWindow : Window
         return await page.AddAsync(name).ConfigureAwait(true);
     }
 
-    /// <summary>Opens a page by its tag ("emoji", "snippets", "autoreplace", "general").</summary>
+    /// <summary>Opens a page by its tag ("general", "quickinsert", "snippets", "images", "emoji", "shorthands").</summary>
     internal void Navigate(string tag)
     {
         if (ItemFor(tag) is { } item)
@@ -147,10 +147,11 @@ public sealed partial class SettingsWindow : Window
 
     private NavigationViewItem? ItemFor(string? tag) => tag switch
     {
-        "emoji" => EmojiItem,
-        "snippets" => SnippetsItem,
-        "autoreplace" => ShorthandItem,
         "general" => GeneralItem,
+        "quickinsert" => QuickInsertItem,
+        "snippets" => SnippetsItem,
+        "emoji" => EmojiItem,
+        "shorthands" or "autoreplace" => ShorthandsItem,
         _ => null,
     };
 
@@ -160,10 +161,11 @@ public sealed partial class SettingsWindow : Window
             return;
         Type page = tag switch
         {
+            "quickinsert" => typeof(QuickInsertPage),
             "snippets" => typeof(SnippetsPage),
-            "autoreplace" => typeof(ShorthandsPage),
-            "general" => typeof(GeneralPage),
-            _ => typeof(EmojiPage),
+            "emoji" => typeof(EmojiPage),
+            "shorthands" => typeof(ShorthandsPage),
+            _ => typeof(GeneralPage),
         };
         if (ContentFrame.CurrentSourcePageType == page)
             return;
