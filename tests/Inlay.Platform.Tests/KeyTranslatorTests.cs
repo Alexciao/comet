@@ -135,7 +135,7 @@ public sealed partial class KeyTranslatorTests : IDisposable
         Assert.Equal(new KeyInput(KeyKind.Enter, Shift: true), Press(it, VkReturn, Modifiers.Shift).Single());
         Assert.Equal(KeyKind.Backspace, Press(it, VkBack).Single().Kind);
         Assert.Equal(KeyKind.Escape, Press(it, VkEscape).Single().Kind);
-        Assert.Equal(KeyKind.Navigation, Press(it, VkLeft).Single().Kind);
+        Assert.Equal(KeyKind.Left, Press(it, VkLeft).Single().Kind);
         Assert.Equal(KeyKind.Ignored, Press(it, VkShift).Single().Kind);
     }
 

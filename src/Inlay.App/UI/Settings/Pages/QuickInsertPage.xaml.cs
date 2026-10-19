@@ -2,6 +2,7 @@ using System.Globalization;
 using Inlay.App.Services;
 using Inlay.Core.Settings;
 using Inlay.Core.Text;
+using Inlay.Platform.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -26,6 +27,10 @@ public sealed partial class QuickInsertPage : SettingsPage
     protected override void OnAttached()
     {
         OwnerWindow.Closing += ApplyTrigger; // a character typed but not yet confirmed still counts
+        ShortcutRecorder.CanRegister = Host.CanRegisterShortcut;
+        ShortcutRecorder.RecordingChanged += (_, recording) => Host.SuspendShortcut(recording);
+        Host.ShortcutChanged += ShowShortcutStatus;
+        OwnerWindow.Closing += () => Host.ShortcutChanged -= ShowShortcutStatus;
         Load();
         AfterFirstFrame(() => AppModes.Attach(Store));
     }
@@ -51,12 +56,30 @@ public sealed partial class QuickInsertPage : SettingsPage
         DelaySlider.Value = Settings.RecentsDelayMs;
         DelayCard.Description = Delay(Settings.RecentsDelayMs);
         DelayCard.IsEnabled = Settings.ShowRecentsOnPause;
+        ShortcutRecorder.Shortcut = Settings.QuickInsertShortcut;
+        ShowShortcutStatus();
         CreateToggle.IsOn = Settings.OfferCreateSnippet;
         CreateToggle.IsEnabled = f.Snippets;
         CreateCard.Description = f.Snippets
             ? TriggerFormat.Fill("Adds a row that starts a new snippet with the name you typed after {trigger}", Settings.TriggerCharacter)
             : "Needs Snippets to be on";
         _loading = false;
+    }
+
+    /// <summary>The card says when the shortcut couldn't be registered (another app holds it).</summary>
+    private void ShowShortcutStatus() => ShortcutCard.Description = Host.ShortcutStatus switch
+    {
+        ShortcutRegistration.InUse => "Another app is using this shortcut. Choose a different one",
+        ShortcutRegistration.Failed => "Couldn't turn on this shortcut. Choose a different one",
+        _ => "Open Quick Insert without typing the trigger",
+    };
+
+    private void OnShortcutChanged(object? sender, EventArgs e)
+    {
+        if (_loading || Settings.QuickInsertShortcut == ShortcutRecorder.Shortcut)
+            return;
+        Settings.QuickInsertShortcut = ShortcutRecorder.Shortcut;
+        Store.SaveSettings();
     }
 
     private static string Delay(int ms) => string.Create(CultureInfo.CurrentCulture, $"{ms} ms");

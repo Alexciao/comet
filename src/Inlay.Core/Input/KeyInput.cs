@@ -11,6 +11,9 @@ public enum KeyKind : byte
     Escape,
     Up,
     Down,
+    /// <summary>← and →: they move the caret, except in Quick Insert's "Let me pick" strip.</summary>
+    Left,
+    Right,
     /// <summary>Left, Right, Home, End, Page Up/Down, Delete: the caret moves or text changes outside our view.</summary>
     Navigation,
     /// <summary>A Ctrl/Alt/Win combination (shortcut), not text input.</summary>

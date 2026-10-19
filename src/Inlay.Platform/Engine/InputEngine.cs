@@ -213,10 +213,20 @@ internal sealed class InputEngine : IHookClient, IExactMatcher, IDisposable
             ResetForNewFocus();
 
         var layout = User32.GetKeyboardLayout(_context.ThreadId);
+        // The key that completes a dead key must reach the app, or the accent it holds lands on whatever comes next.
+        var deadKeyPending = _translator.DeadKeyPending;
         var n = _translator.Translate(vk, k.scanCode, ModifierState.Read(k.flags), layout, inputs);
         var swallow = false;
+        if (deadKeyPending && _picker.IsActive)
+        {
+            _picker.Reset();
+            EndSession();
+        }
+
         for (var i = 0; i < n; i++)
             swallow |= Process(inputs[i]);
+        if (deadKeyPending)
+            swallow = false;
 
         if (swallow)
             _swallowedDown[vk] = true;

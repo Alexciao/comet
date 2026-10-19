@@ -59,10 +59,11 @@
                             SpinButtonPlacementMode="Compact"
                             ValueChanged="OnMinCharsChanged" />
                     </toolkit:SettingsCard>
-                    <toolkit:SettingsCard x:Name="ShortcutCard" Header="Keyboard shortcut" Description="Open Quick Insert without typing the trigger">
+                    <toolkit:SettingsCard x:Name="ShortcutCard" Header="Keyboard shortcut">
                         <toolkit:SettingsCard.HeaderIcon>
-                            <FontIcon Glyph="&#xE765;" />
+                            <FontIcon Glyph="&#xE92E;" />
                         </toolkit:SettingsCard.HeaderIcon>
+                        <local:ShortcutRecorder x:Name="ShortcutRecorder" DialogTitle="Keyboard shortcut" ShortcutChanged="OnShortcutChanged" />
                     </toolkit:SettingsCard>
                     <toolkit:SettingsExpander x:Name="RecentsExpander" Header="Show recent items when you pause after the trigger" Description="Quick Insert opens with the items you use most">
                         <toolkit:SettingsExpander.HeaderIcon>

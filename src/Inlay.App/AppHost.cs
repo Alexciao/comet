@@ -4,6 +4,8 @@ using System.Globalization;
 using Inlay.App.UI;
 using Inlay.App.UI.Settings;
 using Inlay.Core.Emoji;
+using Inlay.Core.Input;
+using Inlay.Platform.Input;
 using Inlay.Core.Updates;
 using Inlay.Core.Search;
 using Inlay.Platform;
@@ -29,6 +31,8 @@ internal sealed class AppHost : IDisposable
     private QuickInsertWindow _popup = null!;
     private MessageWindow _messages = null!;
     private TrayIcon _tray = null!;
+    private GlobalShortcut _shortcut = null!;
+    private const int QuickInsertHotKeyId = 1; // GlobalShortcut also uses id + 1 to test a combination
     private SettingsWindow? _settingsWindow;
     private bool _paused;
     private int _rebuildVersion;
@@ -81,6 +85,8 @@ internal sealed class AppHost : IDisposable
         _engine.Picked += _settings.RecordPick;
         _engine.CreateSnippetRequested += (name, window) => _dispatcher.TryEnqueue(() => _ = CreateSnippetAsync(name, window));
         _engine.Start(Config(), BuildData());
+        _shortcut = new GlobalShortcut(_messages.Handle, QuickInsertHotKeyId);
+        ApplyShortcut();
         _settings.Changed += OnSettingsChanged;
         PrefetchEmoji();
 
@@ -108,9 +114,33 @@ internal sealed class AppHost : IDisposable
     private EngineData BuildData() =>
         _dataFactory.Build(_settings.Settings, [.. _settings.Snippets], [.. _settings.Shorthands], _settings.FrecencyScores());
 
+    /// <summary>Registers the Quick Insert shortcut from the settings; none while paused or with Quick Insert off.</summary>
+    private void ApplyShortcut()
+    {
+        var active = !_paused && Config().QuickInsertEnabled;
+        var status = _shortcut.Set(active ? Shortcut.FromSetting(_settings.Settings.QuickInsertShortcut) : Shortcut.None);
+        if (status is ShortcutRegistration.InUse or ShortcutRegistration.Failed)
+            Log.Warn($"Quick Insert shortcut {_settings.Settings.QuickInsertShortcut}: {status}");
+        ShortcutChanged?.Invoke();
+    }
+
+    /// <summary>Whether the Quick Insert shortcut is registered, off, or held by another app (for Settings).</summary>
+    internal ShortcutRegistration ShortcutStatus => _shortcut.Status;
+
+    /// <summary>Raised on the UI thread after the shortcut was registered again (or couldn't be).</summary>
+    internal event Action? ShortcutChanged;
+
+    /// <summary>True when <paramref name="shortcut"/> could be registered (Inlay's own counts as free).</summary>
+    internal bool CanRegisterShortcut(Shortcut shortcut) => _shortcut.Test(shortcut) == ShortcutRegistration.Registered;
+
+    /// <summary>While the recorder listens, the registered shortcut is released so its keys reach the dialog.</summary>
+    internal void SuspendShortcut(bool suspended) => _shortcut.IsSuspended = suspended;
+
     private void OnSettingsChanged(SettingsParts parts)
     {
         _engine.SetConfig(Config());
+        if (parts.HasFlag(SettingsParts.Settings))
+            ApplyShortcut();
         if (parts.HasFlag(SettingsParts.Settings))
             StartupRegistration.Apply(_settings.Settings.StartAtLogin);
         RebuildData(prefetch: parts.HasFlag(SettingsParts.Settings)); // emoji may have been turned on, or the skin tone changed
@@ -238,6 +268,7 @@ internal sealed class AppHost : IDisposable
         _tray.Paused = paused;
         _tray.Status = Status();
         _engine.SetConfig(Config());
+        ApplyShortcut();
         _updates.Schedule();
         _appUpdates.Schedule();
         Log.Info(paused ? "paused" : "resumed");
@@ -389,6 +420,11 @@ internal sealed class AppHost : IDisposable
     {
         if (_popup.HandleMessage(message) || _tray.HandleMessage(message, wParam, lParam))
             return true;
+        if (_shortcut.IsPressed(message, wParam))
+        {
+            _engine.OpenFromShortcut();
+            return true;
+        }
 
         switch (message)
         {
@@ -459,6 +495,7 @@ internal sealed class AppHost : IDisposable
 
     public void Dispose()
     {
+        _shortcut?.Dispose();
         _engine?.Dispose();
         _updates?.Dispose();
         _appUpdates?.Dispose();

@@ -57,6 +57,9 @@ internal sealed unsafe class KeyTranslator
     private bool _capsDown;
     private char _pendingDead;
 
+    /// <summary>A dead key was typed and its accent is waiting for the next key (US-International <c>'</c>).</summary>
+    public bool DeadKeyPending => _pendingDead != '\0';
+
     public KeyTranslator() => Resync();
 
     /// <summary>Re-reads toggle state (at hook install, after resume or unlock).</summary>
@@ -124,7 +127,9 @@ internal sealed unsafe class KeyTranslator
             VK_UP => KeyKind.Up,
             VK_DOWN => KeyKind.Down,
             // Insert: Shift+Insert pastes and Ctrl+Insert copies; either way the text is no longer what was typed.
-            VK_LEFT or VK_RIGHT or VK_HOME or VK_END or VK_PRIOR or VK_NEXT or VK_DELETE or VK_INSERT => KeyKind.Navigation,
+            VK_LEFT => KeyKind.Left,
+            VK_RIGHT => KeyKind.Right,
+            VK_HOME or VK_END or VK_PRIOR or VK_NEXT or VK_DELETE or VK_INSERT => KeyKind.Navigation,
             _ => null,
         };
 
