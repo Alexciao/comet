@@ -9,15 +9,15 @@ using Microsoft.UI.Dispatching;
 namespace Inlay.App.Services;
 
 /// <summary>
-/// Keeps the emoji data current without the user noticing: one one-shot timer (re-armed after each check, after
-/// settings or pause changes, and after waking), never a polling loop. A verified new pack replaces the dataset
-/// through <see cref="EngineDataFactory"/>; the engine applies it only while the popup is closed. Also runs the
+/// Keeps the emoji data current without the user noticing: a check at launch and then daily (<see cref="DailyCheck"/>,
+/// one one-shot timer, never a polling loop). A verified new pack replaces the dataset through
+/// <see cref="EngineDataFactory"/>; the engine applies it only while the popup is closed. Also runs the
 /// installed-font check for whichever dataset is in use.
 /// </summary>
 internal sealed class EmojiUpdateService : IDisposable
 {
     private readonly DispatcherQueue _dispatcher;
-    private readonly WeeklyCheck _check;
+    private readonly DailyCheck _check;
     private readonly JsonStore<EmojiUpdateState> _store;
     private readonly EmojiUpdater _updater;
     private readonly EngineDataFactory _factory;
@@ -26,7 +26,6 @@ internal sealed class EmojiUpdateService : IDisposable
     private readonly Action _dataReplaced;
     private readonly Lock _fontGate = new();
     private EmojiUpdateState _state;
-    private bool _running;
     private EmojiData? _fontCheckedFor;
     private bool[]? _fontVisible;
 
@@ -45,7 +44,7 @@ internal sealed class EmojiUpdateService : IDisposable
         factory.LoadEmoji = () => EmojiUpdater.LoadStartupData(dir);
         factory.Visibility = FontVisibility;
 
-        _check = new WeeklyCheck(dispatcher, () => EmojiUpdatePolicy.Enabled(_settings(), _paused()), () => _state.LastChecked, CheckAsync, "INLAY_EMOJI_UPDATE_NOW");
+        _check = new DailyCheck(dispatcher, () => EmojiUpdatePolicy.Enabled(_settings(), _paused()), () => _state.LastChecked, CheckAsync, "INLAY_EMOJI_UPDATE_NOW");
     }
 
     public DateTimeOffset? LastChecked => _state.LastChecked;
@@ -53,35 +52,26 @@ internal sealed class EmojiUpdateService : IDisposable
     /// <summary>Arms the timer for the next due check, or disarms it when updates are off.</summary>
     public void Schedule() => _check.Schedule();
 
-    private async Task CheckAsync()
+    private async Task<bool> CheckAsync()
     {
-        if (_running || !EmojiUpdatePolicy.Enabled(_settings(), _paused()) || _factory.CurrentEmoji is not { } current)
-            return;
-        _running = true;
-        TimeSpan? retry = null;
-        try
-        {
-            var started = Stopwatch.GetTimestamp();
-            var (version, count) = (current.DataVersion, current.Count);
-            var result = await Task.Run(() => _updater.CheckAsync(_state, version, count, EmojiUpdater.NetworkUsable)).ConfigureAwait(true);
-            Log.Info($"emoji update check: {result.Outcome}, {result.Detail} ({Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0} ms)");
-            if (result.Outcome == UpdateOutcome.Skipped)
-                retry = WeeklyCheck.RetryAfterSkip;
-            else
-                Save();
+        if (_factory.CurrentEmoji is not { } current)
+            return false; // the data is still loading: try again later
+        var started = Stopwatch.GetTimestamp();
+        var (version, count) = (current.DataVersion, current.Count);
+        var result = await DailyCheck.InBackground(() => _updater.CheckAsync(_state, version, count, EmojiUpdater.NetworkUsable)).ConfigureAwait(true);
+        Log.Info($"emoji update check: {result.Outcome}, {result.Detail} ({Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0} ms)");
+        if (result.Outcome == UpdateOutcome.Skipped)
+            return false;
+        Save();
 
-            if (result.Data is { } data)
-            {
-                // Frecency and the skin tone are keyed by the emoji themselves, so they carry over to the new data.
-                _factory.ReplaceEmoji(data);
-                _dataReplaced();
-            }
-        }
-        finally
+        if (result.Data is { } data)
         {
-            _running = false;
-            _check.Schedule(retry);
+            // Frecency and the skin tone are keyed by the emoji themselves, so they carry over to the new data.
+            _factory.ReplaceEmoji(data);
+            _dataReplaced();
         }
+
+        return true;
     }
 
     private void Save()

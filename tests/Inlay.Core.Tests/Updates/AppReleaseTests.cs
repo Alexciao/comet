@@ -19,6 +19,19 @@ public sealed class AppReleaseTests
         Assert.False(r.IsNewerThan(new Version(1, 3, 0, 0)));
     }
 
+    [Fact]
+    public void The_tag_notes_and_date_come_along()
+    {
+        var r = Parse("""{ "tag_name": "v1.3.0", "html_url": "https://github.com/x/y", "body": "## What's new\r\n- More", "published_at": "2026-10-20T08:30:00Z" }""");
+        Assert.Equal("v1.3.0", r!.Tag);
+        Assert.Equal("## What's new\r\n- More", r.Notes);
+        Assert.Equal(new DateTimeOffset(2026, 10, 20, 8, 30, 0, TimeSpan.Zero), r.Published);
+
+        var bare = Parse("""{ "tag_name": "v1.3.0", "html_url": "https://github.com/x/y", "body": "", "published_at": null }""");
+        Assert.Null(bare!.Notes);
+        Assert.Null(bare.Published);
+    }
+
     [Theory]
     [InlineData("""{ "tag_name": "v2.0.0", "html_url": "https://github.com/x/y", "prerelease": true }""")]
     [InlineData("""{ "tag_name": "v2.0.0", "html_url": "https://github.com/x/y", "draft": true }""")]

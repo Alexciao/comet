@@ -5,7 +5,7 @@ using Inlay.Platform.Updates;
 
 namespace Inlay.Platform.Tests;
 
-/// <summary>The weekly "newer Inlay?" check against a local server that answers like GitHub's latest-release API.</summary>
+/// <summary>The daily "newer Inlay?" check against a local server that answers like GitHub's latest-release API.</summary>
 public sealed class AppUpdateCheckerTests : IDisposable
 {
     private readonly ReleaseServer _server = new();
@@ -14,8 +14,49 @@ public sealed class AppUpdateCheckerTests : IDisposable
 
     private AppUpdateChecker Checker(string current = "1.0.0") => new(UpdateHttp.Client, _server.Endpoint, new Version(current));
 
-    private static string Release(string tag, bool prerelease = false, string url = "https://github.com/Alexciao/inlay/releases/tag/v1.3.0") =>
-        $$"""{ "tag_name": "{{tag}}", "html_url": "{{url}}", "draft": false, "prerelease": {{(prerelease ? "true" : "false")}}, "assets": [] }""";
+    private static string Release(string tag, bool prerelease = false, string url = "https://github.com/Alexciao/inlay/releases/tag/v1.3.0", string body = "- Notes", string published = "2026-10-20T08:30:00Z") =>
+        $$"""{ "tag_name": "{{tag}}", "html_url": "{{url}}", "draft": false, "prerelease": {{(prerelease ? "true" : "false")}}, "body": "{{body}}", "published_at": "{{published}}", "assets": [] }""";
+
+    [Fact]
+    public async Task The_release_notes_are_kept_and_replaced_only_when_the_tag_changes()
+    {
+        var state = new AppUpdateState();
+        var checker = Checker();
+        _server.Set(Release("v1.3.0", body: "- First"), "\"r1\"");
+        var (_, newer) = await checker.CheckAsync(state, () => true, TestContext.Current.CancellationToken);
+        Assert.Equal(("v1.3.0", "- First"), (state.LatestTag, state.LatestNotes));
+        Assert.Equal(new DateTimeOffset(2026, 10, 20, 8, 30, 0, TimeSpan.Zero), state.LatestPublished);
+        Assert.Equal("- First", newer!.Notes);
+
+        // The same release answered again (a new ETag): the notes stay as they were.
+        _server.Set(Release("v1.3.0", body: "- Edited"), "\"r2\"");
+        await checker.CheckAsync(state, () => true, TestContext.Current.CancellationToken);
+        Assert.Equal("- First", state.LatestNotes);
+
+        // A 304 changes nothing.
+        await checker.CheckAsync(state, () => true, TestContext.Current.CancellationToken);
+        Assert.Equal("\"r2\"", _server.LastIfNoneMatch);
+        Assert.Equal("- First", state.LatestNotes);
+
+        // A new release brings its own notes and date.
+        _server.Set(Release("v1.4.0", body: "- Second", published: "2026-11-02T10:00:00Z"), "\"r3\"");
+        (_, newer) = await checker.CheckAsync(state, () => true, TestContext.Current.CancellationToken);
+        Assert.Equal(("v1.4.0", "- Second"), (state.LatestTag, state.LatestNotes));
+        Assert.Equal(new DateTimeOffset(2026, 11, 2, 10, 0, 0, TimeSpan.Zero), newer!.Published);
+    }
+
+    [Fact]
+    public async Task A_state_from_before_the_notes_asks_once_without_its_etag()
+    {
+        _server.Set(Release("v1.3.0", body: "- First"), "\"r1\"");
+        var state = new AppUpdateState { ETag = "\"r1\"", LatestVersion = "1.3.0", LatestUrl = "https://github.com/Alexciao/inlay/releases/tag/v1.3.0" };
+
+        var (outcome, newer) = await Checker().CheckAsync(state, () => true, TestContext.Current.CancellationToken);
+
+        Assert.Equal(UpdateOutcome.UpToDate, outcome);
+        Assert.Null(_server.LastIfNoneMatch);
+        Assert.Equal("- First", newer!.Notes);
+    }
 
     [Fact]
     public async Task A_newer_release_is_reported_and_remembered()

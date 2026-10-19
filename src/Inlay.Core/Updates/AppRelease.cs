@@ -6,6 +6,14 @@ namespace Inlay.Core.Updates;
 /// <summary>The parts of GitHub's "latest release" answer that the update notification needs.</summary>
 public sealed record AppRelease(Version Version, string DisplayVersion, Uri Page)
 {
+    /// <summary>The release's tag as published ("v1.3.0").</summary>
+    public string? Tag { get; init; }
+
+    /// <summary>The release notes (Markdown), or null when the release has none.</summary>
+    public string? Notes { get; init; }
+
+    public DateTimeOffset? Published { get; init; }
+
     /// <summary>
     /// Reads <c>GET /repos/{owner}/{repo}/releases/latest</c>. Returns null for anything that isn't a published,
     /// non-prerelease release with a <c>v1.2.3</c>-style tag and an https page on github.com.
@@ -25,12 +33,17 @@ public sealed record AppRelease(Version Version, string DisplayVersion, Uri Page
                 return null;
             if (!root.TryGetProperty("html_url", out var url) || url.ValueKind != JsonValueKind.String)
                 return null;
-            if (TryParseTag(tag.GetString()!, out var version, out var display)
-                && Uri.TryCreate(url.GetString(), UriKind.Absolute, out var page)
-                && page.Scheme == Uri.UriSchemeHttps
-                && page.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
-                return new AppRelease(version, display, page);
-            return null;
+            if (!TryParseTag(tag.GetString()!, out var version, out var display)
+                || !Uri.TryCreate(url.GetString(), UriKind.Absolute, out var page)
+                || page.Scheme != Uri.UriSchemeHttps
+                || !page.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+                return null;
+            return new AppRelease(version, display, page)
+            {
+                Tag = tag.GetString(),
+                Notes = root.TryGetProperty("body", out var body) && body.ValueKind == JsonValueKind.String && body.GetString() is { Length: > 0 } notes ? notes : null,
+                Published = root.TryGetProperty("published_at", out var date) && date.ValueKind == JsonValueKind.String && date.TryGetDateTimeOffset(out var published) ? published : null,
+            };
         }
         catch (JsonException)
         {
