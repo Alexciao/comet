@@ -19,9 +19,12 @@
 </div>
 
 > [!NOTE]
-> **Built with AI, private by design.** Most of Comet's code was written with AI (Claude Code).
-> Comet never sends what you type anywhere: it has no telemetry, never logs your keystrokes, and works fully offline.
-> The only network requests are two optional weekly update checks to GitHub (emoji data and new Comet versions), which you can turn off in Settings.
+> **Notice on AI-generated code**
+> Most of Comet's code was written with the help of AI coding agents.
+> Extensive unit testing and manual testing was performed to help avoid bugs and keep a high quality bar for the app.
+> Comet is private: it works fully offline. No keystrokes are ever logged or sent to any servers. The only optional network requests it performs are to GitHub servers to check for updates for emoji data and for Comet itself. 
+> Any feature, including these requests, is fully toggleable in Settings.
+> Comet is modular, fast and lightweight, and every feature you don't need can be fully disabled.
 
 ## Features
 
