@@ -212,7 +212,7 @@ def social_preview() -> Image.Image:
     d = ImageDraw.Draw(img)
     title = font(150, 600, 36)
     tag = font(38, 400, 20)
-    lines = ["Everything you type often,", "a few keys away."]
+    lines = ["Everything you reach for,", "right where you type."]
     mark_size, gap = 288, 56
     text_w = max(d.textlength("Inlay", font=title), *(d.textlength(t, font=tag) for t in lines))
     x = round((w - (mark_size + gap + text_w)) / 2)  # mark and text centred as one group

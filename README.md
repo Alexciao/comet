@@ -4,7 +4,7 @@
 
 # Inlay
 
-**Snippets, images, emoji and text expansion for any text field on Windows.**
+**Everything you reach for, right where you type.**
 
 [![Latest release](https://img.shields.io/github/v/release/Alexciao/inlay?label=release)](https://github.com/Alexciao/inlay/releases/latest)
 [![CI](https://github.com/Alexciao/inlay/actions/workflows/ci.yml/badge.svg)](https://github.com/Alexciao/inlay/actions/workflows/ci.yml)
