@@ -13,7 +13,7 @@ namespace Comet.App.UI.Settings.Pages;
 /// count and an Import/Export menu, and one card per snippet with its own "…" menu. The list is virtualized and
 /// updated item by item, so filtering hundreds of snippets keeps up with typing.
 /// </summary>
-public sealed partial class SnippetsPage : SettingsPage
+public sealed partial class SnippetsPage : SettingsPage, ICardHost<SnippetItem>
 {
     private readonly Dictionary<SnippetDefinition, SnippetItem> _cache = new(ReferenceEqualityComparer.Instance);
     private readonly MenuFlyout _itemMenu = new();
@@ -65,7 +65,7 @@ public sealed partial class SnippetsPage : SettingsPage
                 && !snippet.Text.Contains(query, StringComparison.CurrentCultureIgnoreCase))
                 continue;
             if (!_cache.TryGetValue(snippet, out var item) || !item.IsCurrent)
-                _cache[snippet] = item = new SnippetItem(snippet);
+                _cache[snippet] = item = new SnippetItem(snippet, this);
             shown.Add(item);
         }
 
@@ -114,18 +114,16 @@ public sealed partial class SnippetsPage : SettingsPage
 
     private void OnAdd(object sender, RoutedEventArgs e) => _ = EditAsync(null);
 
-    private void OnCardClick(object sender, RoutedEventArgs e)
+    void ICardHost<SnippetItem>.Open(SnippetItem item) => _ = EditAsync(item.Definition);
+
+    void ICardHost<SnippetItem>.ShowMenu(SnippetItem item, FrameworkElement anchor)
     {
-        if ((sender as FrameworkElement)?.DataContext is SnippetItem item)
-            _ = EditAsync(item.Definition);
+        _menuItem = item;
+        _itemMenu.ShowAt(anchor);
     }
 
-    private void OnMoreClick(object sender, RoutedEventArgs e)
+    void ICardHost<SnippetItem>.EnabledChanged(SnippetItem item)
     {
-        if (sender is not FrameworkElement button || button.DataContext is not SnippetItem item)
-            return;
-        _menuItem = item;
-        _itemMenu.ShowAt(button);
     }
 
     private async Task EditAsync(SnippetDefinition? existing)

@@ -10,7 +10,7 @@
         <DataTemplate x:Key="ReplacementTemplate" x:DataType="local:ReplacementItem">
             <toolkit:SettingsCard
                 AutomationProperties.Name="{x:Bind Header}"
-                Click="OnCardClick"
+                Click="{x:Bind Open}"
                 Description="{x:Bind Description}"
                 Header="{x:Bind Header}"
                 IsActionIconVisible="False"
@@ -19,10 +19,10 @@
                     <FontIcon Glyph="&#xE8AC;" />
                 </toolkit:SettingsCard.HeaderIcon>
                 <StackPanel Orientation="Horizontal" Spacing="{StaticResource SettingsToolbarSpacing}">
-                    <ToggleSwitch OffContent="Off" OnContent="On" AutomationProperties.Name="{x:Bind ToggleName}" IsOn="{x:Bind IsOn}" Toggled="OnEntryToggled" />
+                    <ToggleSwitch OffContent="Off" OnContent="On" AutomationProperties.Name="{x:Bind ToggleName}" IsOn="{x:Bind IsOn}" Toggled="{x:Bind OnToggled}" />
                     <Button
                         AutomationProperties.Name="{x:Bind MoreOptionsName}"
-                        Click="OnMoreClick"
+                        Click="{x:Bind ShowMenu}"
                         Style="{StaticResource SubtleButtonStyle}"
                         ToolTipService.ToolTip="More options">
                         <FontIcon Glyph="&#xE712;" />

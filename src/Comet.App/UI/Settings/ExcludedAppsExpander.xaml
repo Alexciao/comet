@@ -23,7 +23,7 @@
                     </toolkit:SettingsCard.HeaderIcon>
                     <Button
                         AutomationProperties.Name="{x:Bind RemoveName, Mode=OneWay}"
-                        Click="OnRemove"
+                        Click="{x:Bind Remove}"
                         Style="{StaticResource SubtleButtonStyle}"
                         ToolTipService.ToolTip="Remove">
                         <FontIcon Glyph="&#xE74D;" />

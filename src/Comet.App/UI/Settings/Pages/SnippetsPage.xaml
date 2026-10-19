@@ -10,7 +10,7 @@
         <DataTemplate x:Key="SnippetTemplate" x:DataType="local:SnippetItem">
             <toolkit:SettingsCard
                 AutomationProperties.Name="{x:Bind Name}"
-                Click="OnCardClick"
+                Click="{x:Bind Open}"
                 Header="{x:Bind Name}"
                 IsActionIconVisible="False"
                 IsClickEnabled="True">
@@ -31,7 +31,7 @@
                         ToolTipService.ToolTip="A placeholder isn't written correctly; it will be inserted as typed." />
                     <Button
                         AutomationProperties.Name="{x:Bind MoreOptionsName}"
-                        Click="OnMoreClick"
+                        Click="{x:Bind ShowMenu}"
                         Style="{StaticResource SubtleButtonStyle}"
                         ToolTipService.ToolTip="More options">
                         <FontIcon Glyph="&#xE712;" />

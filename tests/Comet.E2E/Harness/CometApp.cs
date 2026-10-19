@@ -19,6 +19,9 @@ internal sealed class CometApp : IDisposable
         DataDirectory = Path.Combine(Path.GetTempPath(), "comet-e2e-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(DataDirectory);
         Settings = new JsonObject { ["schemaVersion"] = 1, ["startAtLogin"] = false, ["pickerExcludedApps"] = new JsonArray() };
+        // Tests never reach GitHub: both weekly checks go to a closed local port unless a test serves them itself.
+        Environment["COMET_EMOJI_UPDATE_URL"] = "http://127.0.0.1:9/";
+        Environment["COMET_APP_UPDATE_URL"] = "http://127.0.0.1:9/latest";
     }
 
     public string DataDirectory { get; }

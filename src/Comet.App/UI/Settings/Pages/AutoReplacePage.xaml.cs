@@ -12,7 +12,7 @@ namespace Comet.App.UI.Settings.Pages;
 /// Settings › Auto-replace: the same layout as Snippets, with a switch on each entry, and the apps where
 /// abbreviations aren't expanded below the list.
 /// </summary>
-public sealed partial class AutoReplacePage : SettingsPage
+public sealed partial class AutoReplacePage : SettingsPage, ICardHost<ReplacementItem>
 {
     private readonly Dictionary<AutoReplaceDefinition, ReplacementItem> _cache = new(ReferenceEqualityComparer.Instance);
     private readonly MenuFlyout _itemMenu = new();
@@ -69,7 +69,7 @@ public sealed partial class AutoReplacePage : SettingsPage
                 && !entry.Replacement.Contains(query, StringComparison.CurrentCultureIgnoreCase))
                 continue;
             if (!_cache.TryGetValue(entry, out var item) || !item.IsCurrent)
-                _cache[entry] = item = new ReplacementItem(entry);
+                _cache[entry] = item = new ReplacementItem(entry, this);
             shown.Add(item);
         }
 
@@ -109,12 +109,6 @@ public sealed partial class AutoReplacePage : SettingsPage
         Store.SaveSettings();
     }
 
-    private void OnEntryToggled(object sender, RoutedEventArgs e)
-    {
-        // Also raised when a recycled card is bound to another entry: only a real change is saved.
-        if (sender is ToggleSwitch { DataContext: ReplacementItem item } toggle && item.SetEnabled(toggle.IsOn))
-            Store.SaveAutoReplace();
-    }
 
     private void OnSearchChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
@@ -124,19 +118,15 @@ public sealed partial class AutoReplacePage : SettingsPage
 
     private void OnAdd(object sender, RoutedEventArgs e) => _ = EditAsync(null);
 
-    private void OnCardClick(object sender, RoutedEventArgs e)
+    void ICardHost<ReplacementItem>.Open(ReplacementItem item) => _ = EditAsync(item.Definition);
+
+    void ICardHost<ReplacementItem>.ShowMenu(ReplacementItem item, FrameworkElement anchor)
     {
-        if ((sender as FrameworkElement)?.DataContext is ReplacementItem item)
-            _ = EditAsync(item.Definition);
+        _menuItem = item;
+        _itemMenu.ShowAt(anchor);
     }
 
-    private void OnMoreClick(object sender, RoutedEventArgs e)
-    {
-        if (sender is not FrameworkElement button || button.DataContext is not ReplacementItem item)
-            return;
-        _menuItem = item;
-        _itemMenu.ShowAt(button);
-    }
+    void ICardHost<ReplacementItem>.EnabledChanged(ReplacementItem item) => Store.SaveAutoReplace();
 
     private async Task EditAsync(AutoReplaceDefinition? existing)
     {

@@ -26,6 +26,12 @@ public sealed class SettingsTests : IDisposable
         _window = Automation.WaitForWindow(w => w.Name == "Comet Settings", TimeSpan.FromSeconds(10), "Settings");
     }
 
+    private void Close()
+    {
+        _window.Patterns.Window.Pattern.Close();
+        Wait.Until(() => Automation.Instance.GetDesktop().FindFirstChild(c => c.ByName("Comet Settings")) is null, s_wait, "the window to close");
+    }
+
     private AutomationElement Find(string name, ControlType? type = null) =>
         Wait.For(
             () => _window.FindFirstDescendant(c => type is null ? c.ByName(name) : c.ByName(name).And(c.ByControlType(type.Value))),
@@ -47,6 +53,19 @@ public sealed class SettingsTests : IDisposable
     }
 
     private static void Invoke(AutomationElement e) => e.Patterns.Invoke.Pattern.Invoke();
+
+    /// <summary>
+    /// Activates a clickable card with the keyboard. The toolkit's SettingsCard advertises the UI Automation Invoke
+    /// pattern but fails when it is used (toolkit 8.3 preview 2), so tests press Enter on the focused card, as a
+    /// keyboard user would.
+    /// </summary>
+    private void PressCard(string name)
+    {
+        var card = Find(name, ControlType.Button);
+        Automation.Foreground(_window);
+        card.Focus();
+        Keyboard.Press(Keyboard.VK_RETURN);
+    }
 
     private static void Toggle(AutomationElement e) => e.Patterns.Toggle.Pattern.Toggle();
 
@@ -71,6 +90,8 @@ public sealed class SettingsTests : IDisposable
 
     private List<JsonNode> Replacements() => [.. ReadJson("autoreplace.json")["entries"]!.AsArray().Select(n => n!)];
 
+    private JsonNode Settings() => ReadJson("settings.json");
+
     private void AssertNoCrash()
     {
         var crashes = Directory.Exists(Path.Combine(_comet.DataDirectory, "logs"))
@@ -91,94 +112,107 @@ public sealed class SettingsTests : IDisposable
         _comet.Start();
         Open();
 
-        // ---- Snippets: add (with validation while typing), edit, duplicate, delete, undo.
+        // ---- Snippets: add (with validation while typing), edit by clicking the card, duplicate, delete, undo, search.
         Page("Snippets");
         Invoke(Find("Add your first snippet", ControlType.Button));
         Dialog("Add snippet");
         var name = Find("Name", ControlType.Edit);
         SetText(name, "fire");                       // also an emoji shortcode: a warning
-        SetText(name, "web site");                   // a space: an error, Save disabled
+        SetText(name, "web site");                   // a space: an error under the field, Save disabled
+        Find("Names can't contain spaces. Use - or _ instead.");
         Assert.False(Find("Save", ControlType.Button).IsEnabled);
         SetText(name, "website");
-        SetText(Find("Text", ControlType.Edit), "https://example.com/ {date} {unknown}");
+        SetText(Find("Text", ControlType.Edit), "https://example.com/ {cursor}{date} {unknown}");
         Wait.Until(() => Find("Save", ControlType.Button).IsEnabled, s_wait, "Save to be enabled");
         Invoke(Find("Save", ControlType.Button));
         Wait.Until(() => Snippets().SequenceEqual(["website"]), s_wait, "the snippet to be saved");
 
-        Invoke(Find("Edit :website", ControlType.Button));
+        PressCard("website");
         Dialog("Edit snippet");
         SetText(Find("Name", ControlType.Edit), "site");
         Invoke(Find("Save", ControlType.Button));
         Wait.Until(() => Snippets().SequenceEqual(["site"]), s_wait, "the edit to be saved");
 
-        Invoke(Find("More options for :site", ControlType.Button));
+        Invoke(Find("More options for site", ControlType.Button));
         Invoke(Find("Duplicate", ControlType.MenuItem));
         Wait.Until(() => Snippets().Count == 2, s_wait, "the duplicate");
 
-        Invoke(Find("More options for :site-copy", ControlType.Button));
+        Invoke(Find("More options for site-copy", ControlType.Button));
         Invoke(Find("Delete", ControlType.MenuItem));
         Wait.Until(() => Snippets().SequenceEqual(["site"]), s_wait, "the delete");
         Invoke(Find("Undo", ControlType.Button));
         Wait.Until(() => Snippets().Count == 2, s_wait, "the undo");
         SetText(EditIn("Search snippets"), "copy");
-        Wait.Until(() => _window.FindFirstDescendant(c => c.ByName("Edit :site")) is null, s_wait, "the search to filter");
+        Wait.Until(() => _window.FindFirstDescendant(c => c.ByName("More options for site")) is null, s_wait, "the search to filter");
+        Find("1 of 2 snippets");
         AssertNoCrash();
 
-        // ---- Auto-replace: add, switch an entry off, edit.
+        // ---- Auto-replace: add, switch an entry off, edit by clicking the card, exclude an app and remove it.
         Page("Auto-replace");
         Invoke(Find("Add your first replacement", ControlType.Button));
         Dialog("Add replacement");
         SetText(Find("Abbreviation", ControlType.Edit), "c m q");   // an error while typing
+        Find("Abbreviations can't contain spaces.");
         SetText(Find("Abbreviation", ControlType.Edit), "cmq");
-        SetText(Find("Replace with", ControlType.Edit), "comunque");
+        SetText(Find("Replacement", ControlType.Edit), "comunque");
         Wait.Until(() => Find("Save", ControlType.Button).IsEnabled, s_wait, "Save to be enabled");
         Invoke(Find("Save", ControlType.Button));
         Wait.Until(() => Replacements().Count == 1, s_wait, "the replacement to be saved");
-        Toggle(Find("Use cmq  →  comunque"));
+        Toggle(Find("Use cmq"));
         Wait.Until(() => Replacements() is [var r] && (bool?)r["enabled"] == false, s_wait, "the entry to be switched off");
-        Invoke(Find("Edit cmq  →  comunque", ControlType.Button));
+        Invoke(Find("More options for cmq", ControlType.Button));
+        Invoke(Find("Edit", ControlType.MenuItem));
         Dialog("Edit replacement");
         Toggle(Find("Match case exactly", ControlType.CheckBox));
         Invoke(Find("Save", ControlType.Button));
         Wait.Until(() => Replacements() is [var r] && (bool?)r["matchCase"] == true, s_wait, "the edit to be saved");
+
+        Invoke(Find("Add app", ControlType.Button));
+        Dialog("Add an app");
+        var list = Find("Open apps", ControlType.List);
+        var first = Wait.For(() => list.FindFirstChild(c => c.ByControlType(ControlType.ListItem)), e => e is not null, s_wait, "the open apps")!;
+        first.Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => Find("Add", ControlType.Button).IsEnabled, s_wait, "Add to be enabled");
+        Invoke(Find("Add", ControlType.Button));
+        Wait.Until(() => (Settings()["autoReplaceExcludedApps"]?.AsArray() ?? []).Count == 1, s_wait, "the app to be excluded");
+        Invoke(Wait.For(() => _window.FindFirstDescendant(c => c.ByControlType(ControlType.Button).And(c.ByName("Remove", FlaUI.Core.Definitions.PropertyConditionFlags.MatchSubstring))), e => e is not null, s_wait, "the remove button")!);
+        Wait.Until(() => (Settings()["autoReplaceExcludedApps"]?.AsArray() ?? []).Count == 0, s_wait, "the app to be removed");
         AssertNoCrash();
 
-        // ---- Excluded apps: add by typing, remove.
-        Page("Excluded apps");
-        var group = Find("Excluded from auto-replace");
-        // Type the name and press Enter, as a person would (UI Automation's SetValue reaches the AutoSuggestBox's
-        // own Text a dispatcher turn later, so pressing Add straight after it can race).
-        var addBox = Wait.For(() => group.FindFirstDescendant(c => c.ByControlType(ControlType.Edit)), e => e is not null, s_wait, "the add box")!;
-        Automation.Foreground(_window);
-        addBox.Focus();
-        Keyboard.Type("Notepad");
-        Keyboard.Press(Keyboard.VK_RETURN);
-        Wait.Until(() => (ReadJson("settings.json")["autoReplaceExcludedApps"]?.AsArray() ?? []).Any(a => (string?)a == "notepad.exe"), s_wait, "the app to be excluded");
-        Invoke(Find("Remove notepad.exe", ControlType.Button));
-        Wait.Until(() => !(ReadJson("settings.json")["autoReplaceExcludedApps"]?.AsArray() ?? []).Any(a => (string?)a == "notepad.exe"), s_wait, "the app to be removed");
-        AssertNoCrash();
-
-        // ---- General: switches, choices, reset confirmation, pause.
+        // ---- General: start with Windows, minimum characters, updates.
         Page("General");
-        Toggle(Find("Emoji", ControlType.Button));
-        Wait.Until(() => (bool?)ReadJson("settings.json")["features"]?["emoji"] == false, s_wait, "Emoji to be switched off");
-        var minChars = Find("Show the list after", ControlType.ComboBox);
-        minChars.Patterns.ExpandCollapse.Pattern.Expand();
-        Find("3 letters", ControlType.ListItem).Patterns.SelectionItem.Pattern.Select();
-        Wait.Until(() => (int?)ReadJson("settings.json")["minimumCharacters"] == 3, s_wait, "the minimum to be saved");
-        Invoke(Find("Reset", ControlType.Button));
-        Invoke(Wait.For(() => _window.FindAllDescendants(c => c.ByName("Reset").And(c.ByControlType(ControlType.Button))), b => b.Length >= 2, s_wait, "the confirmation")[^1]);
-        Invoke(Find("Excluded apps", ControlType.Button));
-        Wait.Until(() => _window.FindFirstDescendant(c => c.ByName("Emoji and snippets")) is not null, s_wait, "the link card to open Excluded apps");
+        Toggle(Find("Start with Windows", ControlType.Button));
+        Wait.Until(() => (bool?)Settings()["startAtLogin"] == true, s_wait, "Start with Windows to be switched on");
+        Find("Minimum characters", ControlType.Spinner).Patterns.RangeValue.Pattern.SetValue(3);
+        Wait.Until(() => (int?)Settings()["minimumCharacters"] == 3, s_wait, "the minimum to be saved");
+        Toggle(Find("Notify me about Comet updates", ControlType.Button));
+        Wait.Until(() => (bool?)Settings()["notifyAppUpdates"] == false, s_wait, "update notifications to be switched off");
+        var about = Find("About Comet");
+        (about.Patterns.ExpandCollapse.PatternOrDefault ?? about.FindFirstDescendant(c => c.ByControlType(ControlType.Button))!.Patterns.ExpandCollapse.Pattern).Expand();
+        Find("Open logs folder", ControlType.Button);
+        Find("Source code", ControlType.Button);
         AssertNoCrash();
 
-        // ---- About, then close (hides) and reopen.
-        Page("About");
-        Find("Logs");
-        _window.Patterns.Window.Pattern.Close();
-        Wait.Until(() => Automation.Instance.GetDesktop().FindFirstChild(c => c.ByName("Comet Settings")) is null, s_wait, "the window to hide");
-        Open();
-        Find("About", ControlType.ListItem);
+        // ---- Emoji: the feature switch and the skin tone.
+        Page("Emoji");
+        Toggle(Find("Emoji", ControlType.Button));
+        Wait.Until(() => (bool?)Settings()["features"]?["emoji"] == false, s_wait, "Emoji to be switched off");
+        Assert.StartsWith("Active · v", _window.FindFirstDescendant(c => c.ByAutomationId("Status"))!.Name, StringComparison.Ordinal);
+        var tone = Find("Default skin tone", ControlType.ComboBox);
+        tone.Patterns.ExpandCollapse.Pattern.Expand();
+        Find("✋🏽  Medium", ControlType.ListItem).Patterns.SelectionItem.Pattern.Select();
+        Wait.Until(() => (int?)Settings()["skinTone"] == 3, s_wait, "the skin tone to be saved");
+
+        // ---- Closing destroys the window; it comes back on the page it was on, and closed windows don't pile up.
+        for (var i = 0; i < 3; i++)
+        {
+            Close();
+            Wait.Until(() => _comet.Log.Split("settings released").Length - 1 > i, TimeSpan.FromSeconds(15), "the window to be released");
+            Open();
+            Find("Default skin tone", ControlType.ComboBox);
+        }
+
+        Assert.DoesNotContain("closed Settings windows are still in memory", _comet.Log, StringComparison.Ordinal);
         AssertNoCrash();
         Assert.True(_comet.IsRunning);
     }

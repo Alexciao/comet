@@ -95,7 +95,7 @@
                     </toolkit:SettingsCard>
 
                     <TextBlock Style="{StaticResource SettingsSectionHeaderTextBlockStyle}" Text="About" />
-                    <toolkit:SettingsExpander x:Name="AboutExpander" Header="Comet" Description="Emoji, snippets and auto-replace for any app">
+                    <toolkit:SettingsExpander x:Name="AboutExpander" AutomationProperties.Name="About Comet" Header="Comet" Description="Emoji, snippets and auto-replace for any app">
                         <toolkit:SettingsExpander.HeaderIcon>
                             <ImageIcon Source="ms-appx:///Assets/AppIcon16.png" />
                         </toolkit:SettingsExpander.HeaderIcon>

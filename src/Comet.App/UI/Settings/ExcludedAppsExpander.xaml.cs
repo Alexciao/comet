@@ -52,7 +52,7 @@ public sealed partial class ExcludedAppsExpander : UserControl
                 continue;
             }
 
-            item = new AppItem(ProgramInfo.FromFileName(name));
+            item = new AppItem(ProgramInfo.FromFileName(name), Remove);
             target.Add(item);
             _ = ResolveAsync(item, _store.UiState.AppPaths.GetValueOrDefault(name));
         }
@@ -99,9 +99,9 @@ public sealed partial class ExcludedAppsExpander : UserControl
         }
     }
 
-    private void OnRemove(object sender, RoutedEventArgs e)
+    private void Remove(AppItem item)
     {
-        if (_list is null || _store is null || (sender as FrameworkElement)?.DataContext is not AppItem item)
+        if (_list is null || _store is null)
             return;
         _list().RemoveAll(a => string.Equals(a, item.FileName, StringComparison.OrdinalIgnoreCase));
         _store.SaveSettings();

@@ -3,16 +3,35 @@ using System.ComponentModel;
 using Comet.Core.Settings;
 using Comet.Core.Snippets;
 using Comet.Platform.Context;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace Comet.App.UI.Settings;
 
+/// <summary>
+/// The page behind a list of cards. Cards call it through their items with compiled event bindings
+/// (<c>Click="{x:Bind Open}"</c>): plain handler names inside a page's DataTemplate are not connected.
+/// </summary>
+internal interface ICardHost<in T>
+{
+    void Open(T item);
+
+    void ShowMenu(T item, FrameworkElement anchor);
+
+    /// <summary>The card's switch was flipped (Auto-replace entries).</summary>
+    void EnabledChanged(T item);
+}
+
 /// <summary>A snippet as its card shows it. Immutable: an edit produces a new item (the list replaces the card).</summary>
 public sealed partial class SnippetItem
 {
-    internal SnippetItem(SnippetDefinition definition)
+    private readonly ICardHost<SnippetItem> _host;
+
+    internal SnippetItem(SnippetDefinition definition, ICardHost<SnippetItem> host)
     {
+        _host = host;
         Definition = definition;
         Name = definition.Name;
         Text = definition.Text;
@@ -35,6 +54,10 @@ public sealed partial class SnippetItem
 
     internal bool IsCurrent => Definition.Name == Name && Definition.Text == Text;
 
+    public void Open() => _host.Open(this);
+
+    public void ShowMenu(object sender, RoutedEventArgs e) => _host.ShowMenu(this, (FrameworkElement)sender);
+
     /// <summary>One line of text, whitespace collapsed, for list previews (the card trims it with an ellipsis).</summary>
     internal static string OneLine(string text)
     {
@@ -48,8 +71,11 @@ public sealed partial class SnippetItem
 /// <summary>An auto-replace entry as its card shows it ("cmq → comunque").</summary>
 public sealed partial class ReplacementItem
 {
-    internal ReplacementItem(AutoReplaceDefinition definition)
+    private readonly ICardHost<ReplacementItem> _host;
+
+    internal ReplacementItem(AutoReplaceDefinition definition, ICardHost<ReplacementItem> host)
     {
+        _host = host;
         Definition = definition;
         Abbreviation = definition.Abbreviation;
         Replacement = definition.Replacement;
@@ -73,7 +99,7 @@ public sealed partial class ReplacementItem
 
     public string Description { get; }
 
-    /// <summary>Read when a card is bound to this item; the switch then owns the state and reports it through <see cref="SetEnabled"/>.</summary>
+    /// <summary>Read when a card is bound to this item; the switch then owns the state and reports it through <see cref="OnToggled"/>.</summary>
     public bool IsOn => _enabled;
 
     public string MoreOptionsName => $"More options for {Abbreviation}";
@@ -83,14 +109,18 @@ public sealed partial class ReplacementItem
     internal bool IsCurrent => Definition.Abbreviation == Abbreviation && Definition.Replacement == Replacement
         && Definition.MatchCase == MatchCase && Definition.Enabled == _enabled;
 
-    /// <summary>The card's switch was flipped. Returns false when nothing changed (a recycled card being bound).</summary>
-    internal bool SetEnabled(bool on)
+    public void Open() => _host.Open(this);
+
+    public void ShowMenu(object sender, RoutedEventArgs e) => _host.ShowMenu(this, (FrameworkElement)sender);
+
+    /// <summary>The card's switch was flipped. Also raised when a recycled card is bound to another entry: only a real change counts.</summary>
+    public void OnToggled(object sender, RoutedEventArgs e)
     {
-        if (on == _enabled)
-            return false;
-        _enabled = on;
-        Definition.Enabled = on;
-        return true;
+        if (sender is not ToggleSwitch toggle || toggle.IsOn == _enabled)
+            return;
+        _enabled = toggle.IsOn;
+        Definition.Enabled = toggle.IsOn;
+        _host.EnabledChanged(this);
     }
 }
 
@@ -100,11 +130,13 @@ public sealed partial class ReplacementItem
 /// </summary>
 public sealed partial class AppItem : INotifyPropertyChanged
 {
+    private readonly Action<AppItem>? _remove;
     private ImageSource? _icon;
 
-    internal AppItem(ProgramInfo program)
+    internal AppItem(ProgramInfo program, Action<AppItem>? remove = null)
     {
         Program = program;
+        _remove = remove;
     }
 
     internal ProgramInfo Program { get; private set; }
@@ -117,6 +149,8 @@ public sealed partial class AppItem : INotifyPropertyChanged
     public string Location => Program.Path ?? Program.FileName;
 
     public string RemoveName => $"Remove {Program.DisplayName}";
+
+    public void Remove() => _remove?.Invoke(this);
 
     public ImageSource? Icon
     {
