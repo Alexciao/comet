@@ -219,6 +219,8 @@ internal sealed class InlayApp : IDisposable
                 File.Copy(LogPath, Path.Combine(Path.GetTempPath(), "inlay-e2e-last.log"), overwrite: true);
                 var logs = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "inlay-e2e-logs"));
                 File.Copy(LogPath, Path.Combine(logs.FullName, $"{DateTime.Now:HHmmss}-{Path.GetFileName(DataDirectory)}.log"), overwrite: true);
+                foreach (var crash in Directory.GetFiles(Path.GetDirectoryName(LogPath)!, "crash-*.log"))
+                    File.Copy(crash, Path.Combine(logs.FullName, $"{Path.GetFileName(DataDirectory)}-{Path.GetFileName(crash)}"), overwrite: true);
             }
         }
         catch (IOException)

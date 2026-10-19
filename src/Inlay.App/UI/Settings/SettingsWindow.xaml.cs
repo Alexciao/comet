@@ -318,7 +318,15 @@ public sealed partial class SettingsWindow : Window
         CompositionTarget.Rendered -= OnFirstFrameRendered;
         // WinUI never releases a closed Window (even an empty one stays referenced from native code), so cut the
         // content loose: the pages, their cached lists and the backdrop can then go, and only the empty shell stays.
-        ContentFrame.BackStack.Clear();
+        try
+        {
+            ContentFrame.BackStack.Clear();
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            // Closed in the middle of a page change: the stack can't change now, and the content goes below anyway.
+        }
+
         ContentFrame.Content = null;
         SetTitleBar(null);
         SystemBackdrop = null;

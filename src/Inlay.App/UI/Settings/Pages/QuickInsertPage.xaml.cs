@@ -22,6 +22,8 @@ public sealed partial class QuickInsertPage : SettingsPage
     public QuickInsertPage()
     {
         InitializeComponent();
+        // Subscribed after the page is built: setting the slider's Minimum in XAML moves its value, before settings exist.
+        DelaySlider.ValueChanged += OnDelayChanged;
     }
 
     protected override void OnAttached()
@@ -29,8 +31,9 @@ public sealed partial class QuickInsertPage : SettingsPage
         OwnerWindow.Closing += ApplyTrigger; // a character typed but not yet confirmed still counts
         ShortcutRecorder.CanRegister = Host.CanRegisterShortcut;
         ShortcutRecorder.RecordingChanged += (_, recording) => Host.SuspendShortcut(recording);
-        Host.ShortcutChanged += ShowShortcutStatus;
-        OwnerWindow.Closing += () => Host.ShortcutChanged -= ShowShortcutStatus;
+        // The host outlives the window: listen only while the page is on screen, or it would keep a closed window alive.
+        Loaded += (_, _) => Host.ShortcutChanged += ShowShortcutStatus;
+        Unloaded += (_, _) => Host.ShortcutChanged -= ShowShortcutStatus;
         Load();
         AfterFirstFrame(() => AppModes.Attach(Store));
     }

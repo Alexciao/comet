@@ -41,7 +41,15 @@ public sealed class SettingsTests : IDisposable
 
     private void Page(string name)
     {
-        Find(name, ControlType.ListItem).Patterns.SelectionItem.Pattern.Select();
+        var item = Find(name, ControlType.ListItem);
+        try
+        {
+            item.Patterns.SelectionItem.Pattern.Select();
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            item.Click(); // UIA refuses Select while the frame is still navigating: a real click works then
+        }
         Wait.Until(() => _window.FindFirstDescendant(c => c.ByControlType(ControlType.Text).And(c.ByName(name))) is not null, s_wait, $"the {name} page");
     }
 
@@ -114,7 +122,7 @@ public sealed class SettingsTests : IDisposable
 
         // ---- Snippets: add (with validation while typing), edit by clicking the card, duplicate, delete, undo, search.
         Page("Snippets");
-        Invoke(Find("Add your first snippet", ControlType.Button));
+        Invoke(Find("Add snippet", ControlType.Button));
         Dialog("Add snippet");
         var name = Find("Name", ControlType.Edit);
         SetText(name, "fire");                       // also an emoji shortcode: a warning
@@ -149,12 +157,12 @@ public sealed class SettingsTests : IDisposable
 
         // ---- Shorthands: add, switch an entry off, edit by clicking the card, exclude an app and remove it.
         Page("Shorthands");
-        Invoke(Find("Add your first replacement", ControlType.Button));
-        Dialog("Add replacement");
+        Invoke(Find("Add shorthand", ControlType.Button));
+        Dialog("Add shorthand");
         SetText(Find("Shorthand", ControlType.Edit), "c m q");   // an error while typing
-        Find("Abbreviations can't contain spaces.");
+        Find("Shorthands can't contain spaces");
         SetText(Find("Shorthand", ControlType.Edit), "cmq");
-        SetText(Find("Expansion", ControlType.Edit), "comunque");
+        SetText(Find("Expands to", ControlType.Edit), "comunque");
         Wait.Until(() => Find("Save", ControlType.Button).IsEnabled, s_wait, "Save to be enabled");
         Invoke(Find("Save", ControlType.Button));
         Wait.Until(() => Replacements().Count == 1, s_wait, "the replacement to be saved");
@@ -162,7 +170,7 @@ public sealed class SettingsTests : IDisposable
         Wait.Until(() => Replacements() is [var r] && (bool?)r["enabled"] == false, s_wait, "the entry to be switched off");
         Invoke(Find("More options for cmq", ControlType.Button));
         Invoke(Find("Edit", ControlType.MenuItem));
-        Dialog("Edit replacement");
+        Dialog("Edit shorthand");
         Toggle(Find("Match case exactly", ControlType.CheckBox));
         Invoke(Find("Save", ControlType.Button));
         Wait.Until(() => Replacements() is [var r] && (bool?)r["matchCase"] == true, s_wait, "the edit to be saved");
@@ -183,14 +191,24 @@ public sealed class SettingsTests : IDisposable
         Page("General");
         Toggle(Find("Start with Windows", ControlType.Button));
         Wait.Until(() => (bool?)Settings()["startAtLogin"] == true, s_wait, "Start with Windows to be switched on");
-        Find("Minimum characters", ControlType.Spinner).Patterns.RangeValue.Pattern.SetValue(3);
-        Wait.Until(() => (int?)Settings()["minimumCharacters"] == 3, s_wait, "the minimum to be saved");
         Toggle(Find("Notify me about Inlay updates", ControlType.Button));
         Wait.Until(() => (bool?)Settings()["notifyAppUpdates"] == false, s_wait, "update notifications to be switched off");
         var about = Find("About Inlay");
         (about.Patterns.ExpandCollapse.PatternOrDefault ?? about.FindFirstDescendant(c => c.ByControlType(ControlType.Button))!.Patterns.ExpandCollapse.Pattern).Expand();
         Find("Open logs folder", ControlType.Button);
         Find("Source code", ControlType.Button);
+        AssertNoCrash();
+
+        // ---- Quick Insert: the page builds, minimum characters saves.
+        Page("Quick Insert");
+        Find("Minimum characters", ControlType.Spinner).Patterns.RangeValue.Pattern.SetValue(3);
+        Wait.Until(() => (int?)Settings()["minimumCharacters"] == 3, s_wait, "the minimum to be saved");
+        Find("Keyboard shortcut");
+        AssertNoCrash();
+
+        // ---- Images: the page and its Add menu.
+        Page("Images");
+        Find("Add image…");
         AssertNoCrash();
 
         // ---- Emoji: the feature switch and the skin tone.

@@ -25,7 +25,7 @@
         <StackPanel>
             <TextBox
                 x:Name="ReplacementBox"
-                AutomationProperties.Name="Expansion"
+                AutomationProperties.Name="Expands to"
                 Header="Expands to"
                 TextChanged="OnChanged" />
             <TextBlock x:Name="ReplacementError" Style="{StaticResource CaptionTextBlockStyle}" Margin="{StaticResource SettingsFieldMessageMargin}" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" Visibility="Collapsed" />

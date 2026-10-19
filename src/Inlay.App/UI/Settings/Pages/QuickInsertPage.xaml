@@ -81,8 +81,7 @@
                                     SmallChange="100"
                                     StepFrequency="100"
                                     TickFrequency="300"
-                                    TickPlacement="Outside"
-                                    ValueChanged="OnDelayChanged" />
+                                    TickPlacement="Outside" />
                             </toolkit:SettingsCard>
                         </toolkit:SettingsExpander.Items>
                     </toolkit:SettingsExpander>
